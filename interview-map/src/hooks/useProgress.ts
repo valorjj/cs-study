@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { GraphNode, NodeStatus } from '../graph/types'
 import { useGraphStore } from '../store/graphStore'
 
@@ -29,6 +29,7 @@ export function domainProgress(
 export function useProgressPersistence(): void {
   const visited = useGraphStore((s) => s.visited)
   const trackingOn = useGraphStore((s) => s.trackingOn)
+  const hydrated = useRef(false)
   useEffect(() => {
     try {
       const raw = localStorage.getItem(KEY)
@@ -37,10 +38,12 @@ export function useProgressPersistence(): void {
         useGraphStore.setState({ visited: parsed.visited ?? {}, trackingOn: parsed.trackingOn ?? false })
       }
     } catch { /* ignore */ }
+    hydrated.current = true
     // hydrate once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
+    if (!hydrated.current) return
     try { localStorage.setItem(KEY, JSON.stringify({ visited, trackingOn })) } catch { /* ignore */ }
   }, [visited, trackingOn])
 }

@@ -24,17 +24,20 @@ export function NotePanel({ nodesById, neighbors }: {
   useEffect(() => {
     setMd(null)
     if (!node?.noteRef) return
+    let cancelled = false
     const { path, anchor } = parseNoteRef(node.noteRef)
     setLoading(true)
     fetch(path)
       .then((r) => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
       .then((text) => {
+        if (cancelled) return
         setMd(text)
         if (anchor) requestAnimationFrame(() =>
           document.getElementById(anchor)?.scrollIntoView({ behavior: 'smooth' }))
       })
-      .catch(() => setMd(null))
-      .finally(() => setLoading(false))
+      .catch(() => { if (!cancelled) setMd(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [node?.noteRef])
 
   if (!node) return null
