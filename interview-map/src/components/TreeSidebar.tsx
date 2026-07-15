@@ -80,8 +80,9 @@ export function TreeSidebar({ tree, edges }: { tree: TreeNode[]; edges: GraphEdg
     const anc = ancestorsOf(selectedId, edges)
     if (anc.length) setExpanded((prev) => new Set([...prev, ...anc]))
     // scroll after the expand has a chance to render
-    requestAnimationFrame(() =>
+    const raf = requestAnimationFrame(() =>
       rows.current.get(selectedId)?.scrollIntoView({ block: 'nearest' }))
+    return () => cancelAnimationFrame(raf)
   }, [selectedId, edges])
 
   return (

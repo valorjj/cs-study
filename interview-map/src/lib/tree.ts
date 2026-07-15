@@ -21,13 +21,19 @@ export function buildTree(nodes: GraphNode[], edges: GraphEdge[]): TreeNode[] {
   }
   // Preserve graph node order within each parent's child list.
   const order = new Map(nodes.map((n, i) => [n.id, i]))
-  const build = (id: string): TreeNode => ({
-    node: byId.get(id)!,
-    children: (childIds.get(id) ?? [])
-      .slice()
-      .sort((a, b) => (order.get(a)! - order.get(b)!))
-      .map(build),
-  })
+  // `seen` guards against cyclic/diamond hierarchy edges (bad data) recursing
+  // forever or duplicating a subtree; each node is placed at most once.
+  const seen = new Set<string>()
+  const build = (id: string): TreeNode => {
+    seen.add(id)
+    return {
+      node: byId.get(id)!,
+      children: (childIds.get(id) ?? [])
+        .filter((c) => !seen.has(c))
+        .sort((a, b) => (order.get(a)! - order.get(b)!))
+        .map(build),
+    }
+  }
   return nodes
     .filter((n) => !parentOf.has(n.id) && n.level === 0)
     .map((n) => build(n.id))

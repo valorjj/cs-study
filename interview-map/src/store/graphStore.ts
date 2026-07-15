@@ -17,7 +17,9 @@ interface GraphState {
 
 export const useGraphStore = create<GraphState>((set) => ({
   selectedId: null,
-  select: (id) => set({ selectedId: id }),
+  // Clear any pending camera-focus so a stale search target can't hijack the
+  // graph camera after the user picks a different node (e.g. in list mode).
+  select: (id) => set({ selectedId: id, focusRequestId: null }),
   focusRequestId: null,
   requestFocus: (id) => set({ focusRequestId: id, selectedId: id }),
   clearFocusRequest: () => set({ focusRequestId: null }),
