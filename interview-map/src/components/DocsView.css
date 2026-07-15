@@ -5,9 +5,6 @@
   background: var(--bg-panel); }
 .docs-back { display: none; }
 
-/* NoteView's np-top/np-note flex within docs-content (no fixed-panel chrome). */
-.docs-content .np-top { border-bottom: 1px solid var(--border); }
-
 .docs-empty { flex: 1; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: 14px; color: var(--text-dim); font-family: system-ui, sans-serif; }
 .docs-empty p { margin: 0; font-size: 14px; }
@@ -16,11 +13,15 @@
   .docs { padding-top: calc(72px + env(safe-area-inset-top)); }
   .docs-tree { width: 100vw; }
   .docs-content { display: none; }
-  /* When a topic is selected: swap tree for the note, full-screen. */
+  /* When a topic is selected: swap tree for the note, full-screen; the note
+     scrolls as one, with the back bar and section tabs pinned. */
   .docs[data-selected="true"] .docs-tree { display: none; }
-  .docs[data-selected="true"] .docs-content { display: flex; }
-  .docs-back { display: inline-flex; align-items: center; gap: 4px; flex: none;
+  .docs[data-selected="true"] .docs-content { display: flex; overflow-y: auto; }
+  .docs-back { display: flex; width: 100%; align-items: center; gap: 4px; flex: none;
+    position: sticky; top: 0; z-index: 6;
     background: var(--bg-elev); border: none; border-bottom: 1px solid var(--border);
     color: var(--text); font-size: 14px; font-weight: 600; padding: 12px 16px;
     cursor: pointer; font-family: system-ui, sans-serif; }
+  /* Tabs pin just below the sticky back bar (≈ its height). */
+  .docs .np-tabs { top: 45px; }
 }

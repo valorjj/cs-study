@@ -3,8 +3,8 @@
   display: flex; flex-direction: column; overflow: hidden; z-index: 10;
   font-family: system-ui, sans-serif; box-shadow: -12px 0 32px rgba(0,0,0,0.4); }
 
-/* Fixed top block: header, summary, keywords, related, tabs */
-.np-top { flex: none; position: relative; padding: 22px 26px 0; border-bottom: 1px solid var(--border); }
+/* Fixed top block: header, summary, keywords, related */
+.np-top { flex: none; position: relative; padding: 22px 26px 12px; }
 .np-close { position: absolute; top: 12px; right: 16px; background: none; border: none;
   color: var(--text-dim); font-size: 26px; cursor: pointer; line-height: 1; z-index: 2; }
 .np-close:hover { color: var(--text); }
@@ -20,9 +20,10 @@
   color: var(--text); cursor: pointer; font-size: 13px; transition: background 0.12s ease; }
 .np-chip:hover { background: var(--bg-elev); }
 
-/* Section tab bar — horizontal scroll, one row */
-.np-tabs { display: flex; gap: 6px; margin-top: 14px; padding-bottom: 0; overflow-x: auto;
-  scrollbar-width: thin; }
+/* Section tab bar — standalone strip (sibling of the note body so it can be
+   sticky over the scrolling content on mobile). */
+.np-tabs { flex: none; display: flex; gap: 6px; padding: 4px 26px 0; overflow-x: auto;
+  scrollbar-width: thin; background: var(--bg-panel); border-bottom: 1px solid var(--border); }
 .np-tabs::-webkit-scrollbar { height: 4px; }
 .np-tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 .np-tab { flex: none; background: none; border: none; border-bottom: 2px solid transparent;
@@ -62,15 +63,23 @@
   border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
 .np-note details blockquote { margin-top: 10px; border-left-color: var(--border-strong); }
 
-/* Mobile: full-screen sheet above all controls */
+/* Mobile: full-screen sheet. The header (title/summary/keywords/related)
+   scrolls away with the content so the body gets the full screen; only the
+   section tabs stay pinned. */
 @media (max-width: 768px) {
   .np-panel { width: 100vw; height: 100dvh; border-left: none; z-index: 40;
-    box-shadow: none; }
-  .np-top { padding: 16px 16px 0; }
-  .np-close { top: 10px; right: 12px; font-size: 30px; padding: 4px; }
-  .np-head { padding-right: 40px; }
+    box-shadow: none; overflow-y: auto; }
+  .np-top { padding: 16px 16px 10px; }
+  .np-head { padding-right: 44px; }
   .np-head h2 { font-size: 18px; }
   .np-summary { font-size: 13px; }
-  .np-note { padding: 16px 16px 80px; }
+  /* Close floats in the graph-mode overlay so it survives scrolling. */
+  .np-close { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 10px;
+    z-index: 60; width: 38px; height: 38px; display: flex; align-items: center;
+    justify-content: center; font-size: 24px; padding: 0; border-radius: 50%;
+    background: var(--bg-elev); box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+  .np-tabs { position: sticky; top: 0; z-index: 5; padding: 6px 16px 0; }
+  .np-panel .np-tabs { padding-right: 54px; } /* clear the floating close button */
   .np-tab { padding: 10px 12px; font-size: 13px; }
+  .np-note { flex: none; overflow: visible; padding: 16px 16px 90px; }
 }

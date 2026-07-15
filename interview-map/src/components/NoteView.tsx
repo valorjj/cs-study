@@ -77,22 +77,22 @@ export function NoteView({ node, nodesById, neighbors }: {
             </div>
           </div>
         )}
-        {sections.length > 1 && (
-          <nav className="np-tabs" aria-label="노트 섹션">
-            {sections.map((s) => (
-              <button
-                key={s.slug}
-                className="np-tab"
-                data-active={s.slug === active?.slug}
-                style={{ '--c': color } as CSSProperties}
-                onClick={() => setOverride({ id: node.id, slug: s.slug })}
-              >
-                {s.heading}
-              </button>
-            ))}
-          </nav>
-        )}
       </div>
+      {sections.length > 1 && (
+        <nav className="np-tabs" aria-label="노트 섹션">
+          {sections.map((s) => (
+            <button
+              key={s.slug}
+              className="np-tab"
+              data-active={s.slug === active?.slug}
+              style={{ '--c': color } as CSSProperties}
+              onClick={() => setOverride({ id: node.id, slug: s.slug })}
+            >
+              {s.heading}
+            </button>
+          ))}
+        </nav>
+      )}
       <div className="np-note" key={`${node.id}:${active?.slug ?? 'none'}`}>
         {loading && <p className="np-dim">노트 불러오는 중…</p>}
         {!loading && active && (
