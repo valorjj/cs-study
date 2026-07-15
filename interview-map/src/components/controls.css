@@ -1,0 +1,4 @@
+.react-flow__controls { box-shadow: 0 6px 18px rgba(0,0,0,0.3); border-radius: 8px; overflow: hidden; }
+.react-flow__controls-button { background: var(--bg-panel); border-bottom: 1px solid var(--border); color: var(--text); }
+.react-flow__controls-button:hover { background: var(--bg-elev); }
+.react-flow__controls-button svg { fill: var(--text); }

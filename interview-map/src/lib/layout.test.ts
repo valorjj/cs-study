@@ -21,4 +21,16 @@ describe('layoutNodes', () => {
 
     expect(jvm.position.y).toBeGreaterThan(java.position.y)
   })
+
+  it('places distinct level-0 domains in different grid columns', () => {
+    const domainNodes: GraphNode[] = [
+      { id: 'java', label: 'Java', domain: 'java', level: 0, icon: '☕', summary: '', keywords: [], status: 'learning', position: { x: 0, y: 0 } },
+      { id: 'os', label: 'OS', domain: 'os', level: 0, icon: '💻', summary: '', keywords: [], status: 'learning', position: { x: 0, y: 0 } },
+    ]
+    const result = layoutNodes(domainNodes, [])
+    const java = result.find((n) => n.id === 'java')!
+    const os = result.find((n) => n.id === 'os')!
+
+    expect(java.position.x).not.toBeCloseTo(os.position.x)
+  })
 })
