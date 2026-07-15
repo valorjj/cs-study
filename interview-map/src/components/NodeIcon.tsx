@@ -12,6 +12,7 @@ import {
   LuComponent, LuRepeat, LuAnchor, LuToggleLeft,
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
   LuBox, LuInfinity, LuActivity,
+  LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -26,6 +27,10 @@ const BY_ID: Record<string, IconType> = {
   'generics-stream': LuWaves,
   javascript: SiJavascript,
   'js-eventloop': LuRefreshCw,
+  'js-closure': LuBraces,
+  'js-prototype': LuGitBranch,
+  'js-types': LuType,
+  'js-modules': LuPackage2,
   react: SiReact,
   spring: SiSpring,
   'spring-ioc': LuContainer,

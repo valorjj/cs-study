@@ -84,7 +84,7 @@
         "비동기",
         "프로토타입"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 260,
         "y": -80
@@ -434,11 +434,12 @@
         "콜스택",
         "태스크큐"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 260,
         "y": 80
-      }
+      },
+      "noteRef": "notes/11-javascript/javascript-core.md#j1-event-loop-and-async"
     },
     {
       "id": "spring-tx",
@@ -565,7 +566,7 @@
         "캡슐화"
       ],
       "status": "learning",
-      "noteRef": "notes/03-network/network-core.md#n1-osi-and-tcp-ip-model",
+      "noteRef": "notes/03-network/network-core.md#n1-osi-and-tcpip-model",
       "position": {
         "x": -120,
         "y": -230
@@ -1117,7 +1118,7 @@
         "blue-green"
       ],
       "status": "learning",
-      "noteRef": "notes/07-devops/devops-core.md#do3-ci-cd",
+      "noteRef": "notes/07-devops/devops-core.md#do3-cicd",
       "position": {
         "x": 0,
         "y": 0
@@ -1136,6 +1137,82 @@
       ],
       "status": "learning",
       "noteRef": "notes/07-devops/devops-core.md#do4-observability",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-closure",
+      "label": "Closures & Scope",
+      "domain": "javascript",
+      "level": 1,
+      "icon": "braces",
+      "summary": "클로저, 호이스팅, TDZ",
+      "keywords": [
+        "클로저",
+        "호이스팅",
+        "TDZ"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j2-closures-and-scope",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-prototype",
+      "label": "Prototype & this",
+      "domain": "javascript",
+      "level": 1,
+      "icon": "branch",
+      "summary": "프로토타입 체인, this 바인딩",
+      "keywords": [
+        "프로토타입",
+        "this",
+        "화살표함수"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j3-prototype-and-this",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-types",
+      "label": "Types & Coercion",
+      "domain": "javascript",
+      "level": 1,
+      "icon": "type",
+      "summary": "원시/참조, ==vs===",
+      "keywords": [
+        "형변환",
+        "truthy",
+        "null/undefined"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j4-types-and-coercion",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-modules",
+      "label": "Modern JS (ES6+)",
+      "domain": "javascript",
+      "level": 1,
+      "icon": "module",
+      "summary": "let/const, async/await, 모듈",
+      "keywords": [
+        "ES6",
+        "async/await",
+        "모듈"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j5-modern-js-es6",
       "position": {
         "x": 0,
         "y": 0
@@ -1481,6 +1558,32 @@
       "source": "devops",
       "target": "devops-observability",
       "type": "hierarchy"
+    },
+    {
+      "source": "javascript",
+      "target": "js-closure",
+      "type": "hierarchy"
+    },
+    {
+      "source": "javascript",
+      "target": "js-prototype",
+      "type": "hierarchy"
+    },
+    {
+      "source": "javascript",
+      "target": "js-types",
+      "type": "hierarchy"
+    },
+    {
+      "source": "javascript",
+      "target": "js-modules",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react-hooks",
+      "target": "js-eventloop",
+      "type": "crosslink",
+      "label": "비동기 렌더"
     }
   ]
 }
