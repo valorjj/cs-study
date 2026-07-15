@@ -3,7 +3,7 @@
   font-family: system-ui, sans-serif; color: #e5e7eb; min-width: 96px; }
 .km-domain { padding: 18px 22px; font-size: 15px; font-weight: 700; }
 .km-concept { padding: 10px 14px; font-size: 13px; }
-.km-icon { font-size: 22px; }
+.km-icon { display: flex; align-items: center; justify-content: center; }
 .km-studied { background: var(--c); color: #0b1220; }
 .km-learning { background: transparent; }
 .km-todo { border-color: #475569; color: #94a3b8; opacity: 0.7; }

@@ -6,6 +6,7 @@ import { useGraphStore } from '../store/graphStore'
 import { parseNoteRef } from '../lib/notes'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
+import { NodeIcon } from './NodeIcon'
 import './NotePanel.css'
 
 export function NotePanel({ nodesById, neighbors }: {
@@ -48,7 +49,7 @@ export function NotePanel({ nodesById, neighbors }: {
     <aside className="np-panel">
       <button className="np-close" onClick={() => select(null)} aria-label="close">×</button>
       <header className="np-head" style={{ borderColor: color }}>
-        <span className="np-icon">{node.icon}</span>
+        <span className="np-icon"><NodeIcon id={node.id} domain={node.domain} size={22} /></span>
         <h2>{node.label}</h2>
         <span className="np-status" data-status={node.status}>{node.status}</span>
       </header>
@@ -71,7 +72,7 @@ export function NotePanel({ nodesById, neighbors }: {
           <div className="np-chips">
             {related.map((r) => (
               <button key={r.id} className="np-chip" style={{ borderColor: domainColor(r.domain) }}
-                onClick={() => select(r.id)}>{r.icon} {r.label}</button>
+                onClick={() => select(r.id)}><NodeIcon id={r.id} domain={r.domain} size={15} /> {r.label}</button>
             ))}
           </div>
         </div>

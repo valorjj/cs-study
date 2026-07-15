@@ -6,7 +6,7 @@
   color: #94a3b8; font-size: 26px; cursor: pointer; line-height: 1; }
 .np-head { display: flex; align-items: center; gap: 10px; border-left: 4px solid; padding-left: 12px; }
 .np-head h2 { margin: 0; font-size: 20px; }
-.np-icon { font-size: 24px; }
+.np-icon { display: flex; align-items: center; justify-content: center; }
 .np-status { margin-left: auto; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
   padding: 2px 8px; border-radius: 999px; background: #1e293b; color: #94a3b8; }
 .np-status[data-status="studied"] { background: #14532d; color: #bbf7d0; }
@@ -20,7 +20,7 @@
 .np-keywords span { font-size: 12px; background: #1e293b; padding: 3px 9px; border-radius: 6px; color: #cbd5e1; }
 .np-related h3, .np-note h3 { font-size: 13px; color: #94a3b8; margin: 20px 0 8px; }
 .np-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.np-chip { background: #0b1220; border: 1px solid; border-radius: 10px; padding: 6px 10px;
+.np-chip { display: inline-flex; align-items: center; gap: 6px; background: #0b1220; border: 1px solid; border-radius: 10px; padding: 6px 10px;
   color: #e2e8f0; cursor: pointer; font-size: 13px; }
 .np-chip:hover { background: #1e293b; }
 .np-note { margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 16px; line-height: 1.7; }
