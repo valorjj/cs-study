@@ -13,7 +13,7 @@
 .docs-empty p { margin: 0; font-size: 14px; }
 
 @media (max-width: 768px) {
-  .docs { padding-top: 54px; }
+  .docs { padding-top: calc(72px + env(safe-area-inset-top)); }
   .docs-tree { width: 100vw; }
   .docs-content { display: none; }
   /* When a topic is selected: swap tree for the note, full-screen. */

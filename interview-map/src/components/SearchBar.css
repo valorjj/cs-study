@@ -12,6 +12,7 @@
 .sb-results small { color: var(--text-dim); }
 
 @media (max-width: 768px) {
-  .sb { top: 12px; left: 12px; width: calc(100vw - 150px); max-width: 320px; }
-  .sb-input { padding: 9px 12px; font-size: 13px; }
+  .sb { top: calc(14px + env(safe-area-inset-top)); left: 14px;
+    width: calc(100vw - 28px - 124px); max-width: none; }
+  .sb-input { padding: 11px 14px; font-size: 14px; border-radius: 12px; }
 }
