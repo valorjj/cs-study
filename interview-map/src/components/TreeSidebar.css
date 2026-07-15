@@ -1,0 +1,18 @@
+.tsb { display: flex; flex-direction: column; height: 100%; overflow-y: auto;
+  padding: 12px 8px 40px; font-family: system-ui, sans-serif; background: var(--bg-panel);
+  border-right: 1px solid var(--border); }
+.tsb-row { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); cursor: pointer; border-radius: 8px;
+  padding: 7px 8px; font-size: 13px; line-height: 1.3;
+  padding-left: calc(8px + var(--depth) * 16px);
+  border-left: 2px solid transparent; transition: background 0.1s ease; }
+.tsb-row:hover { background: var(--bg-elev); }
+.tsb-row[data-domain="true"] { font-weight: 700; font-size: 14px; color: var(--text-strong); margin-top: 4px; }
+.tsb-row[data-selected="true"] { background: color-mix(in srgb, var(--c) 22%, var(--bg-panel));
+  border-left-color: var(--c); color: var(--text-strong); }
+.tsb-caret { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px;
+  color: var(--text-dim); flex: none; transition: transform 0.12s ease; }
+.tsb-caret[data-open="true"] { transform: rotate(90deg); }
+.tsb-caret[data-has="false"] { visibility: hidden; }
+.tsb-icon { display: inline-flex; align-items: center; color: var(--c); flex: none; }
+.tsb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
