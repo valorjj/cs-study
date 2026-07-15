@@ -1,5 +1,5 @@
 import type { IconType } from 'react-icons'
-import { SiOpenjdk, SiJavascript, SiReact, SiSpring, SiDocker } from 'react-icons/si'
+import { SiOpenjdk, SiJavascript, SiReact, SiSpring, SiDocker, SiKubernetes } from 'react-icons/si'
 import {
   LuSettings, LuTrash2, LuFlame, LuPackage, LuBrain, LuLibrary, LuShuffle, LuWaves,
   LuRefreshCw, LuReceipt, LuDatabase, LuLock, LuMonitor, LuMemoryStick, LuLockKeyhole,
@@ -7,6 +7,11 @@ import {
   LuGitFork, LuCalendarClock, LuLayers, LuArrowRightLeft, LuShieldCheck, LuServer,
   LuListTree, LuKeyRound, LuTable2, LuBoxes,
   LuContainer, LuLeaf, LuScissors, LuRoute,
+  LuGauge, LuLayoutGrid, LuHardDrive,
+  LuTrendingUp, LuList, LuHash, LuNetwork, LuArrowDownWideNarrow,
+  LuComponent, LuRepeat, LuAnchor, LuToggleLeft,
+  LuArchive, LuSplit, LuMessageSquare, LuTriangle,
+  LuBox, LuInfinity, LuActivity,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -47,11 +52,31 @@ const BY_ID: Record<string, IconType> = {
   'net-https': LuShieldCheck,
   'net-dns': LuServer,
   hw: LuCpu,
+  'hw-cpu': LuGauge,
   'hw-cache': LuZap,
+  'hw-locality': LuLayoutGrid,
+  'hw-storage': LuHardDrive,
   dsa: LuBinary,
+  'dsa-bigo': LuTrendingUp,
+  'dsa-array': LuList,
+  'dsa-hash': LuHash,
+  'dsa-tree': LuNetwork,
+  'dsa-sort': LuArrowDownWideNarrow,
   systemdesign: LuBuilding2,
   'sd-lb': LuScale,
+  'sd-cache': LuArchive,
+  'sd-dbscale': LuSplit,
+  'sd-mq': LuMessageSquare,
+  'sd-cap': LuTriangle,
+  'react-vdom': LuComponent,
+  'react-render': LuRepeat,
+  'react-hooks': LuAnchor,
+  'react-state': LuToggleLeft,
   devops: SiDocker,
+  'devops-docker': LuBox,
+  'devops-k8s': SiKubernetes,
+  'devops-cicd': LuInfinity,
+  'devops-observability': LuActivity,
 }
 
 const BY_DOMAIN: Record<string, IconType> = {

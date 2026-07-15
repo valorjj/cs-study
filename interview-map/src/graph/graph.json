@@ -12,7 +12,7 @@
         "캐시",
         "파이프라인"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": -820,
         "y": -360
@@ -138,7 +138,7 @@
         "훅",
         "가상DOM"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 440,
         "y": 320
@@ -174,7 +174,7 @@
         "가용성",
         "분산처리"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 560,
         "y": -380
@@ -192,7 +192,7 @@
         "CI/CD",
         "오케스트레이션"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 860,
         "y": 120
@@ -416,11 +416,12 @@
         "캐시라인",
         "지역성"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": -820,
         "y": -200
-      }
+      },
+      "noteRef": "notes/08-hardware/hardware-core.md#h2-memory-hierarchy-and-cache"
     },
     {
       "id": "js-eventloop",
@@ -505,11 +506,12 @@
         "라운드로빈",
         "헬스체크"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 560,
         "y": -230
-      }
+      },
+      "noteRef": "notes/06-system-design/system-design-core.md#sd1-scalability-and-load-balancing"
     },
     {
       "id": "os-process",
@@ -777,6 +779,367 @@
         "x": -300,
         "y": 700
       }
+    },
+    {
+      "id": "hw-cpu",
+      "label": "CPU & Pipeline",
+      "domain": "hw",
+      "level": 1,
+      "icon": "gauge",
+      "summary": "fetch-decode-execute, 파이프라이닝",
+      "keywords": [
+        "파이프라인",
+        "클럭"
+      ],
+      "status": "learning",
+      "noteRef": "notes/08-hardware/hardware-core.md#h1-cpu-and-pipeline",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hw-locality",
+      "label": "Cache Locality",
+      "domain": "hw",
+      "level": 1,
+      "icon": "grid",
+      "summary": "시간·공간 지역성, 캐시 히트",
+      "keywords": [
+        "지역성",
+        "캐시미스"
+      ],
+      "status": "learning",
+      "noteRef": "notes/08-hardware/hardware-core.md#h3-cache-locality-and-performance",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hw-storage",
+      "label": "Storage (HDD/SSD)",
+      "domain": "hw",
+      "level": 1,
+      "icon": "disk",
+      "summary": "HDD vs SSD, 순차/랜덤",
+      "keywords": [
+        "SSD",
+        "순차접근"
+      ],
+      "status": "learning",
+      "noteRef": "notes/08-hardware/hardware-core.md#h4-storage-hdd-and-ssd",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-bigo",
+      "label": "Big-O",
+      "domain": "dsa",
+      "level": 1,
+      "icon": "trend",
+      "summary": "시간·공간 복잡도",
+      "keywords": [
+        "O(log n)",
+        "최악/평균"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a1-big-o-complexity",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-array",
+      "label": "Array & List",
+      "domain": "dsa",
+      "level": 1,
+      "icon": "list",
+      "summary": "배열 vs 연결리스트",
+      "keywords": [
+        "복잡도",
+        "캐시지역성"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a2-array-and-linked-list",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-hash",
+      "label": "Hash Table",
+      "domain": "dsa",
+      "level": 1,
+      "icon": "hash",
+      "summary": "해시, 충돌 처리, 평균 O(1)",
+      "keywords": [
+        "체이닝",
+        "로드팩터"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a3-hash-table",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-tree",
+      "label": "Tree & BST",
+      "domain": "dsa",
+      "level": 1,
+      "icon": "tree",
+      "summary": "BST, 균형트리(AVL/RB)",
+      "keywords": [
+        "BST",
+        "RB Tree"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a4-tree-and-bst",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-sort",
+      "label": "Sorting",
+      "domain": "dsa",
+      "level": 1,
+      "icon": "sort",
+      "summary": "정렬 알고리즘 비교",
+      "keywords": [
+        "퀵정렬",
+        "병합",
+        "안정성"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a5-sorting",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-vdom",
+      "label": "Virtual DOM",
+      "domain": "react",
+      "level": 1,
+      "icon": "component",
+      "summary": "VDOM, reconciliation, key",
+      "keywords": [
+        "diffing",
+        "key"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r1-virtual-dom-and-reconciliation",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-render",
+      "label": "Rendering",
+      "domain": "react",
+      "level": 1,
+      "icon": "repeat",
+      "summary": "리렌더 조건, memo",
+      "keywords": [
+        "리렌더",
+        "memo"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r2-rendering-and-re-render",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-hooks",
+      "label": "Hooks",
+      "domain": "react",
+      "level": 1,
+      "icon": "anchor",
+      "summary": "useState/useEffect, 규칙",
+      "keywords": [
+        "훅 규칙",
+        "의존성배열"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r3-hooks",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-state",
+      "label": "State Management",
+      "domain": "react",
+      "level": 1,
+      "icon": "toggle",
+      "summary": "로컬 vs 전역, Context/Redux",
+      "keywords": [
+        "Context",
+        "전역상태"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r4-state-management",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-cache",
+      "label": "Caching",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "archive",
+      "summary": "캐시 계층, 무효화, TTL",
+      "keywords": [
+        "Look-Aside",
+        "무효화"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd2-caching",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-dbscale",
+      "label": "DB Scaling",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "split",
+      "summary": "Replication, Sharding",
+      "keywords": [
+        "복제",
+        "샤딩"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd3-database-scaling",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-mq",
+      "label": "Message Queue",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "mq",
+      "summary": "비동기, decoupling, 버퍼링",
+      "keywords": [
+        "Kafka",
+        "비동기"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd4-message-queue",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-cap",
+      "label": "CAP Theorem",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "cap",
+      "summary": "C/A/P 트레이드오프",
+      "keywords": [
+        "CAP",
+        "결과적일관성"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd5-cap-theorem",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-docker",
+      "label": "Docker",
+      "domain": "devops",
+      "level": 1,
+      "icon": "box",
+      "summary": "컨테이너 vs VM, 이미지",
+      "keywords": [
+        "컨테이너",
+        "이미지"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do1-docker-and-containers",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-k8s",
+      "label": "Kubernetes",
+      "domain": "devops",
+      "level": 1,
+      "icon": "k8s",
+      "summary": "오케스트레이션, 자가복구",
+      "keywords": [
+        "Pod",
+        "오케스트레이션"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do2-kubernetes",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-cicd",
+      "label": "CI/CD",
+      "domain": "devops",
+      "level": 1,
+      "icon": "infinity",
+      "summary": "빌드·테스트·배포 자동화",
+      "keywords": [
+        "파이프라인",
+        "blue-green"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do3-ci-cd",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-observability",
+      "label": "Observability",
+      "domain": "devops",
+      "level": 1,
+      "icon": "activity",
+      "summary": "로그·메트릭·트레이싱",
+      "keywords": [
+        "모니터링",
+        "트레이싱"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do4-observability",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
     }
   ],
   "edges": [
@@ -994,6 +1357,130 @@
       "target": "concurrency",
       "type": "crosslink",
       "label": "싱글톤 스레드안전"
+    },
+    {
+      "source": "hw",
+      "target": "hw-cpu",
+      "type": "hierarchy"
+    },
+    {
+      "source": "hw",
+      "target": "hw-locality",
+      "type": "hierarchy"
+    },
+    {
+      "source": "hw",
+      "target": "hw-storage",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa",
+      "target": "dsa-bigo",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa",
+      "target": "dsa-array",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa",
+      "target": "dsa-hash",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa",
+      "target": "dsa-tree",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa",
+      "target": "dsa-sort",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-hash",
+      "target": "collections",
+      "type": "crosslink",
+      "label": "HashMap 구조"
+    },
+    {
+      "source": "dsa-tree",
+      "target": "db-index",
+      "type": "crosslink",
+      "label": "B-Tree 인덱스"
+    },
+    {
+      "source": "react",
+      "target": "react-vdom",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react",
+      "target": "react-render",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react",
+      "target": "react-hooks",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react",
+      "target": "react-state",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-cache",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-dbscale",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-mq",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-cap",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sd-cache",
+      "target": "db-nosql",
+      "type": "crosslink",
+      "label": "Redis 캐시"
+    },
+    {
+      "source": "sd-cap",
+      "target": "db-nosql",
+      "type": "crosslink",
+      "label": "일관성(BASE)"
+    },
+    {
+      "source": "devops",
+      "target": "devops-docker",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops",
+      "target": "devops-k8s",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops",
+      "target": "devops-cicd",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops",
+      "target": "devops-observability",
+      "type": "hierarchy"
     }
   ]
 }
