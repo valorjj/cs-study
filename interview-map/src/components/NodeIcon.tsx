@@ -6,6 +6,7 @@ import {
   LuArrowDownUp, LuGlobe, LuRadio, LuCpu, LuZap, LuBinary, LuBuilding2, LuScale, LuCircle,
   LuGitFork, LuCalendarClock, LuLayers, LuArrowRightLeft, LuShieldCheck, LuServer,
   LuListTree, LuKeyRound, LuTable2, LuBoxes,
+  LuContainer, LuLeaf, LuScissors, LuRoute,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -22,7 +23,11 @@ const BY_ID: Record<string, IconType> = {
   'js-eventloop': LuRefreshCw,
   react: SiReact,
   spring: SiSpring,
+  'spring-ioc': LuContainer,
+  'spring-bean': LuLeaf,
+  'spring-aop': LuScissors,
   'spring-tx': LuReceipt,
+  'spring-mvc': LuRoute,
   database: LuDatabase,
   'db-index': LuListTree,
   'db-tx': LuLock,

@@ -120,7 +120,7 @@
         "AOP",
         "트랜잭션"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": -420,
         "y": 560
@@ -450,11 +450,12 @@
         "전파속성",
         "롤백"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": -420,
         "y": 700
-      }
+      },
+      "noteRef": "notes/05-spring/spring-core.md#s4-transaction-management"
     },
     {
       "id": "db-tx",
@@ -700,6 +701,82 @@
         "x": 280,
         "y": 700
       }
+    },
+    {
+      "id": "spring-ioc",
+      "label": "IoC / DI",
+      "domain": "spring",
+      "level": 1,
+      "icon": "📦",
+      "summary": "제어의 역전, 의존성 주입",
+      "keywords": [
+        "IoC",
+        "DI",
+        "생성자주입"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s1-ioc-and-di",
+      "position": {
+        "x": -560,
+        "y": 700
+      }
+    },
+    {
+      "id": "spring-bean",
+      "label": "Bean & Scope",
+      "domain": "spring",
+      "level": 1,
+      "icon": "🌿",
+      "summary": "싱글톤, 스코프, 생명주기",
+      "keywords": [
+        "싱글톤",
+        "스코프",
+        "생명주기"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s2-bean-scope-and-lifecycle",
+      "position": {
+        "x": -480,
+        "y": 700
+      }
+    },
+    {
+      "id": "spring-aop",
+      "label": "AOP / Proxy",
+      "domain": "spring",
+      "level": 1,
+      "icon": "✂️",
+      "summary": "관점 지향, 프록시 동작",
+      "keywords": [
+        "AOP",
+        "프록시",
+        "self-invocation"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s3-aop-and-proxy",
+      "position": {
+        "x": -360,
+        "y": 700
+      }
+    },
+    {
+      "id": "spring-mvc",
+      "label": "Spring MVC",
+      "domain": "spring",
+      "level": 1,
+      "icon": "🧭",
+      "summary": "DispatcherServlet 요청 흐름",
+      "keywords": [
+        "DispatcherServlet",
+        "MVC",
+        "Front Controller"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s5-spring-mvc-request-flow",
+      "position": {
+        "x": -300,
+        "y": 700
+      }
     }
   ],
   "edges": [
@@ -885,6 +962,38 @@
       "target": "os-sync",
       "type": "crosslink",
       "label": "동시성 제어"
+    },
+    {
+      "source": "spring",
+      "target": "spring-ioc",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring",
+      "target": "spring-bean",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring",
+      "target": "spring-aop",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring",
+      "target": "spring-mvc",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-mvc",
+      "target": "net-http",
+      "type": "crosslink",
+      "label": "HTTP 요청 처리"
+    },
+    {
+      "source": "spring-bean",
+      "target": "concurrency",
+      "type": "crosslink",
+      "label": "싱글톤 스레드안전"
     }
   ]
 }
