@@ -7,15 +7,7 @@
 .np-head { display: flex; align-items: center; gap: 10px; border-left: 4px solid; padding-left: 12px; }
 .np-head h2 { margin: 0; font-size: 20px; }
 .np-icon { display: flex; align-items: center; justify-content: center; }
-.np-status { margin-left: auto; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: 999px; background: var(--bg-elev); color: var(--text-dim); }
-.np-status[data-status="studied"] { background: #14532d; color: #bbf7d0; }
-.np-status[data-status="learning"] { background: #1e3a8a; color: #bfdbfe; }
 .np-summary { color: var(--text); margin: 14px 0; }
-.np-study-toggle { display: inline-block; margin-bottom: 12px; padding: 6px 12px;
-  border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text);
-  cursor: pointer; font-size: 13px; }
-.np-study-toggle[data-visited="true"] { background: #14532d; border-color: #22c55e; color: #bbf7d0; }
 .np-keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .np-keywords span { font-size: 12px; background: var(--bg-elev); padding: 3px 9px; border-radius: 6px; color: var(--text); }
 .np-related h3, .np-note h3 { font-size: 13px; color: var(--text-dim); margin: 20px 0 8px; }
