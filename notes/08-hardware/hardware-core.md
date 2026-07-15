@@ -398,4 +398,88 @@ HDD                                    SSD
 **Q3. "SSD로 옮기면 DB 성능이 무조건 좋아지나요?"**
 > 랜덤 I/O가 많은 워크로드(인덱스 탐색 등)에서는 크게 좋아짐. 다만 순차 접근이 여전히 상대적으로 유리하고, SSD 고유의 쓰기 제한(wear leveling)도 고려 대상이라 무조건이라 단정하긴 어려움.
 
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. CPU가 명령어를 실행하는 과정을 설명해주세요.</summary>
+
+- Fetch(가져오기) → Decode(해독) → Execute(연산) → (Memory Access) → (Write Back)
+- 이 사이클이 클럭(clock) 신호에 맞춰 반복됨
+- 클럭 속도(GHz)가 높다고 무조건 빠른 건 아님 — IPC, 코어 수, 캐시 구조가 함께 성능 결정
+
+</details>
+
+<details>
+<summary>Q2. 파이프라이닝이 뭐고 왜 빠른가요?</summary>
+
+- 여러 명령어의 FDE 단계를 겹쳐(overlap) 처리하는 기법
+- 컨베이어 벨트 비유 — 한 명령어 끝나길 기다리지 않고 단계별로 동시 처리
+- 개별 명령어의 지연시간(latency)은 그대로거나 오히려 늘 수 있지만, 사이클마다 명령어 하나씩 완료 → 전체 처리량(throughput)은 대폭 상승
+
+</details>
+
+<details>
+<summary>Q3. 분기 예측(branch prediction) 실패는 왜 성능에 큰 손해를 주나요?</summary>
+
+- 분기 결과는 Execute 단계 즈음에야 확정되는데 Fetch는 그보다 먼저 다음 명령어를 가져와야 함 → CPU가 분기 방향을 미리 예측(speculative execution)
+- 예측 실패 시 잘못 fetch한 명령어들을 전부 버리고(flush), 정확한 target부터 파이프라인을 다시 채워야 함 → 파이프라인 깊이만큼 사이클 손실
+- 결과 자체는 항상 정확함(틀린 speculative 실행분은 커밋 전에 버림) — 손해는 성능(사이클 손실)뿐
+- 파이프라인이 깊을수록(10~20단계) 처리량 이득도 크지만 misprediction penalty도 커지는 트레이드오프
+
+</details>
+
+<details>
+<summary>Q4. 메모리 계층 구조(Memory Hierarchy)를 설명해주세요.</summary>
+
+- Register(가장 빠름·최소 용량) → L1/L2/L3 Cache → RAM → SSD → HDD(가장 느림·최대 용량)
+- 아래로 갈수록 느려지지만 용량이 커지고 비트당 비용은 저렴해짐
+- 빠른 저장소는 비싸서 소량만 둘 수 있으니, 계층을 쌓아 평균적으로 빠르면서 저렴한 시스템을 구성
+- 계층이 존재하는 근본 이유 = 속도와 용량/비용을 동시에 가질 수 없다는 물리적 한계
+
+</details>
+
+<details>
+<summary>Q5. 캐시가 왜 필요한가요?</summary>
+
+- CPU 속도에 비해 RAM 접근이 훨씬 느림(메모리 병목, memory wall)
+- 최근/자주 쓰는 데이터를 CPU에 더 가까운 빠른 저장소(캐시)에 미리 둬 평균 접근 시간을 줄임
+- 같은 발상이 소프트웨어에도 반복됨: JVM JIT의 code cache(hot spot 컴파일 저장), OS의 페이지 캐시/TLB(최근 페이지·주소 변환 결과 저장)
+
+</details>
+
+<details>
+<summary>Q6. 배열 순회가 연결리스트 순회보다 빠른 이유는?</summary>
+
+- 배열: 메모리에 연속 저장 → 공간 지역성(spatial locality) 좋음 → 캐시 라인(보통 64byte) 하나로 여러 원소가 함께 적재 → 순차 접근 시 미스가 드묾
+- 연결리스트: 노드가 heap 여기저기 흩어짐(포인터로 연결) → 노드 이동마다 새 캐시 라인을 가져와야 할 확률 높음 → 미스 빈발
+- Big-O가 같아도 캐시 친화성(cache-friendliness) 차이로 실제 성능은 몇 배씩 차이 날 수 있음
+
+</details>
+
+<details>
+<summary>Q7. false sharing이 뭔가요?</summary>
+
+- 서로 다른 스레드가 각자 다른(독립적인) 변수를 쓰는데, 그 변수들이 우연히 같은 캐시 라인에 있어서 발생
+- 한 스레드가 쓸 때마다 다른 코어의 캐시 라인이 무효화(invalidate)되어 성능 저하
+- 논리적 공유가 아니라 물리적(메모리 레이아웃) 근접이 원인 — 결과는 맞지만 느려지는 "성능 문제"이지 동시성 정확성(버그) 문제가 아님
+- 해결책: 변수 사이에 padding을 넣어 캐시 라인을 분리 (Java `@Contended`, `LongAdder` 내부 구현 등)
+
+</details>
+
+<details>
+<summary>Q8. HDD와 SSD의 차이는 무엇이고, 왜 DB 성능에서 중요한가요?</summary>
+
+| 항목 | HDD | SSD |
+|------|-----|-----|
+| 구조 | 회전 플래터 + 기계식 헤드 | 플래시 메모리(전기적) |
+| 랜덤 접근 | 느림(매번 seek + 회전 대기) | 순차 대비 느려질 수 있으나 HDD보다 훨씬 빠름 |
+| 순차 vs 랜덤 속도 차 | 매우 큼 | 상대적으로 작음 |
+
+- HDD는 랜덤 접근마다 seek time·rotational latency가 커서, DB가 순차 쓰기(append-only, WAL)·순차 스캔 친화적 구조(B-Tree)를 채택해온 배경이 됨
+- SSD는 이 격차가 작아졌지만 완전히 사라지진 않음 — "SSD니까 접근 패턴 신경 안 써도 된다"는 과장된 결론
+
+</details>
+
 ---

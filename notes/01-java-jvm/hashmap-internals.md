@@ -476,3 +476,106 @@ Java RB 선택 이유: HashMap/TreeMap은 write 빈도 높음 → 회전 적은 
 - "N번째 입사자" 같은 rank 쿼리는 Map 종류가 아니라 `ArrayList` 또는 Order Statistic Tree 영역.
 
 ---
+
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. HashMap은 언제 쓰고, 언제 안 쓰나요?</summary>
+
+- **쓸 때**: ID lookup(`Map<UserId, User>`), 중복 체크(`HashSet`), 카운팅, 그룹핑, 양방향 매핑 — 모두 "순서 무관, 존재/값 빨리 찾기"가 핵심일 때
+- **안 쓸 때**:
+  - 정렬 순회/범위 검색 필요 → `TreeMap` (Red-Black Tree, `subMap`/`floorKey`)
+  - 삽입·접근 순서 유지 → `LinkedHashMap` (LRU 캐시 등)
+  - 키가 0~N 정수 → **배열** (Node overhead 없음)
+  - Thread-safe 필요 → `ConcurrentHashMap`
+- 흔한 오해: "HashMap은 항상 O(1)" → 평균 O(1)이고, worst case는 Java 7=O(N), Java 8+=O(log N)
+
+</details>
+
+<details>
+<summary>Q2. key 하나가 어떻게 bucket index로 변환되나요?</summary>
+
+3단계 압축 과정:
+
+1. `hashCode()` → 32비트 정수 h
+2. spread: `h ^ (h >>> 16)` → 상위 16비트를 하위 비트에 섞음
+3. `(n - 1) & hash` → 0~n-1 범위의 bucket index (n = capacity)
+
+- spread를 하는 이유: capacity가 작으면 하위 비트만 index에 반영되는데, spread 없이는 상위 비트만 다른 객체들이 전부 같은 bucket에 몰림
+
+</details>
+
+<details>
+<summary>Q3. capacity가 왜 항상 2의 거듭제곱인가요?</summary>
+
+- bucket index 계산에 `hash % n` 대신 `(n - 1) & hash`를 쓰기 위해서 (division보다 빠른 bit AND)
+- 이 트릭은 **n이 2의 거듭제곱일 때만** `hash % n`과 동일한 결과를 보장 (n=15처럼 2의 거듭제곱이 아니면 특정 인덱스가 아예 안 나옴)
+- HashMap은 생성 시 요청 capacity를 `tableSizeFor`로 올려서 강제로 2의 거듭제곱으로 맞춤
+
+</details>
+
+<details>
+<summary>Q4. HashMap의 충돌(collision)은 어떻게 처리되나요?</summary>
+
+- 기본: **Separate Chaining** — 같은 bucket에 LinkedList로 연결
+- Java 8+: bucket 길이가 특정 조건을 넘으면 LinkedList → Red-Black Tree로 전환(treeify)
+  - `TREEIFY_THRESHOLD = 8` (이상이면 트리화), `MIN_TREEIFY_CAPACITY = 64` (미만이면 treeify 대신 resize 먼저)
+  - `UNTREEIFY_THRESHOLD = 6` (이하면 다시 리스트로, 6/8 갭은 oscillation 방지)
+- 결과: worst case search가 Java 7 O(N) → Java 8+ O(log N)으로 개선
+- 충돌 자체를 줄이는 건 별개: 좋은 hashCode 분포 + load factor 관리 + resize
+
+</details>
+
+<details>
+<summary>Q5. equals/hashCode 계약을 설명해주세요. 위반하면 어떻게 되나요?</summary>
+
+3가지 규칙:
+
+- `equals(a, b) == true` → `hashCode(a) == hashCode(b)` (필수)
+- `equals`가 false면 hashCode가 달라도 되고 같아도 됨 (단, 분산을 위해 다른 게 권장)
+- 객체가 변하지 않으면 여러 번 호출해도 같은 hashCode (consistent)
+
+위반 사고 사례:
+
+| 실수 | 결과 |
+|------|------|
+| equals만 override, hashCode 기본(Object) | 같은 의미 객체 2개가 HashSet에 모두 들어감 |
+| 가변 필드를 hashCode에 포함 + put 후 값 변경 | bucket 위치가 바뀌어 영원히 못 찾음 |
+
+- 원칙: key는 **immutable**로. JPA Entity는 ID 기반 equals/hashCode 권장(단, ID가 generate 전 null인 점 주의)
+
+</details>
+
+<details>
+<summary>Q6. load factor가 왜 0.75이고, resize는 어떻게 동작하나요?</summary>
+
+- `threshold = capacity × loadFactor`, 기본 loadFactor = 0.75 → capacity 16이면 12개 찰 때 resize
+- 낮추면 충돌↓ 메모리↑, 높이면 반대 — 0.75는 Knuth 분석 기준 시간/공간 trade-off의 균형점
+- resize는 capacity를 **2배**로 늘리고 전체 entry를 재배치(rehash)
+- Java 8 최적화: capacity 2배 = 비트 1개 추가이므로, 매 entry마다 `hash & oldCap`이 0인지만 보면 됨
+  - 0이면 같은 bucket 유지, 아니면 `newBucket = oldBucket + oldCap` → modulo 재계산 없이 두 그룹으로 분리
+
+</details>
+
+<details>
+<summary>Q7. HashMap의 worst case가 왜 O(log N)인가요? (Java 7과 비교)</summary>
+
+- 최악의 경우: N개 entry가 전부 같은 bucket에 몰림 (예: `hashCode()=0`, 또는 collision attack)
+- Java 7: bucket이 LinkedList라 이 경우 search가 O(N)
+- Java 8+: bucket 길이가 8 이상 & capacity 64 이상이면 LinkedList → Red-Black Tree로 treeify
+- RB Tree는 self-balancing BST: 5가지 색깔 규칙(root는 Black, red 연속 금지, 모든 경로의 black 수 동일 등)으로 height가 항상 `≤ 2·log₂(n+1)` 보장
+- 따라서 어떤 삽입 순서든 worst case lookup/insert = O(log N)
+
+</details>
+
+<details>
+<summary>Q8. HashMap과 ConcurrentHashMap의 차이는 무엇인가요?</summary>
+
+- HashMap은 동시성을 전혀 고려하지 않음 — Java 7에서는 resize 중 무한루프까지 발생 가능
+- ConcurrentHashMap은 bucket 단위로 락을 걺 (Java 8+: CAS + synchronized on bucket)
+- 레거시 `HashTable`은 전체(map 전체)에 lock을 거는 방식이라 처리량이 훨씬 낮음
+- 순서: 처리량 기준 `ConcurrentHashMap` > `HashTable`, 안전성 기준 `HashMap` < 나머지 둘
+
+</details>

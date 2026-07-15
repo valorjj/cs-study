@@ -380,4 +380,95 @@ Client
 - Controller가 호출하는 Service 메서드 레벨에서는 AOP(트랜잭션 등)가 개입합니다(빈 내부 레벨).
 - 세 가지 모두 "공통 로직을 어디서 가로챌 것인가"의 답이며, 실행 위치·용도 비교표는 **S3 §7**을 참고.
 
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. IoC와 DI를 설명해주세요.</summary>
+
+- **IoC(제어의 역전)**: 객체 생성·생명주기 제어권을 개발자가 아닌 컨테이너가 가짐
+- **DI(의존성 주입)**: IoC의 구현 방법 — 필요한 의존 객체를 직접 `new` 하지 않고 외부(컨테이너)에서 주입
+- 효과: 결합도 낮아짐, 테스트·구현 교체가 쉬워짐
+
+</details>
+
+<details>
+<summary>Q2. 생성자 주입을 왜 권장하나요?</summary>
+
+- `final`로 **불변** 보장
+- **필수 의존성 누락**을 컨테이너 기동 시점에 발견
+- **순환참조**를 조기(기동 시점)에 발견
+- 스프링 없이도 객체를 직접 생성해 **테스트**하기 쉬움
+- 비교: 필드 주입(간결하나 테스트·불변 어려움), Setter 주입(선택적 의존성용)
+
+</details>
+
+<details>
+<summary>Q3. 순환참조는 왜 생성자 주입에서만 특히 문제가 되나요?</summary>
+
+- 필드/setter 주입: 빈을 **빈 껍데기로 먼저 등록**(3단계 캐시)하고 나중에 의존성을 채워 넣어 순환이 있어도 일단 완성됨 — 문제를 늦게(런타임 NPE 등) 발견
+- 생성자 주입: 객체 생성 = **의존성 100% 조립 완료**를 의미 → A→B→A 순환이면 누구도 먼저 완성될 수 없어 `BeanCurrentlyInCreationException` 즉시 발생
+- Spring Boot 2.6+부터는 `allow-circular-references=false`가 기본값이라 필드 주입이어도 기본적으로 순환참조가 막힘
+- 근본 해결책: 공통 로직을 제3의 클래스로 추출하거나 이벤트로 결합 끊기 (`@Lazy`는 임시방편일 뿐)
+
+</details>
+
+<details>
+<summary>Q4. 스프링 빈은 싱글톤인데 멀티스레드에서 안전한가요?</summary>
+
+- 기본 스코프는 **싱글톤** → 여러 스레드가 **같은 인스턴스**를 공유
+- 빈에 **가변 상태(mutable field)** 를 두면 race condition 위험
+- 해결: 서비스 빈은 **무상태(stateless)** 로 설계, 상태는 지역변수/파라미터로 다룸
+- 스코프 종류: singleton(기본), prototype(요청마다 새 인스턴스), request/session(웹 스코프)
+
+</details>
+
+<details>
+<summary>Q5. 스프링 AOP는 어떻게 동작하나요?</summary>
+
+- 대상 빈을 감싼 **프록시 객체**를 만들어 메서드 호출 전후에 부가기능(트랜잭션·로깅 등) 삽입
+- 인터페이스가 있으면 **JDK 동적 프록시**, 없으면 **CGLIB**(상속 기반) 사용
+- 흐름: 호출자 → [프록시] → (부가기능 시작) → 실제 빈 메서드 → (부가기능 종료) → 반환
+- 용어: Aspect(관점), Advice(무엇을), Pointcut(어디에), JoinPoint(적용 지점)
+
+</details>
+
+<details>
+<summary>Q6. @Transactional이 안 먹는 경우를 겪어봤나요?</summary>
+
+- **self-invocation**: 같은 클래스 내부에서 자기 메서드를 `this.method()`로 호출하면 프록시를 안 거침 → AOP(트랜잭션) 미적용
+  - 이유: 내부 호출은 프록시가 아니라 실제 객체(`this`)를 직접 호출
+  - 해결: 메서드를 다른 빈으로 분리하거나 self-injection
+- **private 메서드**엔 AOP 적용 안 됨 — 프록시가 오버라이드할 수 없기 때문
+- **final 클래스/메서드**도 CGLIB(상속 기반)가 오버라이드 못 해 프록시 생성 자체가 실패하거나 그 메서드만 부가기능 미적용
+
+</details>
+
+<details>
+<summary>Q7. @Transactional의 전파 레벨을 설명해주세요.</summary>
+
+| 전파 | 동작 |
+|------|------|
+| REQUIRED(기본) | 기존 트랜잭션이 있으면 참여, 없으면 새로 시작 |
+| REQUIRES_NEW | 항상 새 트랜잭션(기존은 잠시 중단) |
+| NESTED | 중첩(savepoint), 부분 롤백 |
+| SUPPORTS | 있으면 참여, 없으면 없이 실행 |
+
+- 롤백 규칙: 기본적으로 **unchecked(RuntimeException)·Error만 롤백**, checked 예외는 롤백 안 함(`rollbackFor`로 확장 가능)
+- REQUIRES_NEW는 커넥션을 하나 더 사용하므로 커넥션 풀 고갈·데드락 가능성을 고려해 남발 금지, 반드시 다른 빈으로 분리해야 함(self-invocation 주의)
+
+</details>
+
+<details>
+<summary>Q8. 스프링 MVC의 요청 처리 흐름을 설명해주세요.</summary>
+
+- 모든 요청이 **Front Controller**인 `DispatcherServlet`으로 먼저 들어옴
+- `HandlerMapping`이 URL에 맞는 컨트롤러를 찾고 `HandlerAdapter`가 실행
+- 컨트롤러가 Service → Repository를 거쳐 결과 반환
+- REST(`@RestController`)는 `HttpMessageConverter`로 JSON 직렬화, 뷰는 `ViewResolver`로 렌더
+- Filter는 DispatcherServlet **앞뒤**(서블릿 컨테이너 단계), Interceptor는 DispatcherServlet이 컨트롤러를 찾은 **다음, 실행 전후**에 개입
+
+</details>
+
 ---

@@ -614,3 +614,85 @@ function App() {
 > ① 값이 거의 안 바뀌고(테마, 인증 유저) 구독자가 적으면 Context로 충분 ② 값이 자주 바뀌고 트리 전역에서 부분 구독이 필요하거나, 복잡한 비동기 액션 흐름·디버깅 도구가 필요하면 selector 기반 외부 라이브러리로 전환. 판단 순서는 "로컬 state → Context → 그래도 리렌더/복잡도가 감당 안 되면 외부 라이브러리".
 
 ---
+
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. Virtual DOM이 뭐고 왜 쓰나요?</summary>
+
+- 실제 DOM 조작은 reflow/repaint 비용이 큼
+- React는 state 변경 시 메모리상의 JS 객체 트리(VDOM)를 새로 만들고 이전 것과 diff
+- 실제로 달라진 부분만 실제 DOM에 반영(reconciliation)
+- 목적은 "무조건 빠름"이 아니라 **불필요한 DOM 조작 최소화**
+
+</details>
+
+<details>
+<summary>Q2. 리스트 렌더링에서 인덱스를 key로 쓰면 왜 안 되나요?</summary>
+
+- 리스트 순서가 바뀌면 같은 index가 다른 데이터를 가리키게 됨
+- React는 key만 보고 "같은 컴포넌트"라 판단해 재사용
+- input 값, 체크박스 상태 등 컴포넌트 내부 state가 엉뚱한 항목에 남는 버그 발생
+- 그래서 데이터의 고유 id를 key로 써야 함
+
+</details>
+
+<details>
+<summary>Q3. 컴포넌트는 언제 리렌더되나요?</summary>
+
+- ① 자신의 state 변경
+- ② props 변경
+- ③ 부모 리렌더(자식 props가 불변이어도 기본적으로 같이 리렌더)
+- 세 번째가 실무에서 "왜 이렇게 자주 리렌더되지?"의 주 원인
+
+</details>
+
+<details>
+<summary>Q4. 불필요한 리렌더를 어떻게 막나요?</summary>
+
+- ① `React.memo`로 컴포넌트를 감싸 props 얕은 비교 후 스킵
+- ② 무거운 계산은 `useMemo`로 캐싱
+- ③ memo 자식에 넘기는 함수는 `useCallback`으로 참조 고정
+- 단, 남용하면 비교 비용이 더 커질 수 있어 프로파일링 후 적용
+
+</details>
+
+<details>
+<summary>Q5. Hooks 규칙이 뭐고 왜 지켜야 하나요?</summary>
+
+- ① 최상위(top-level)에서만 호출 — 조건문/반복문/중첩 함수 안에서 호출 금지
+- ② React 함수 컴포넌트 또는 커스텀 Hook에서만 호출
+- React는 Hook을 **호출 순서(index)** 로 각 state 슬롯을 식별하므로, 조건부 호출로 순서가 달라지면 엉뚱한 state가 매핑되는 버그 발생
+
+</details>
+
+<details>
+<summary>Q6. useEffect 의존성 배열을 잘못 쓰면 어떤 문제가 생기나요?</summary>
+
+- 누락 시 — effect 안 값이 옛 값(stale closure)에 갇혀 최신 상태 반영 안 됨
+- 매번 새로 생성되는 참조형(객체/배열/함수)을 의존성에 넣으면 — 매 렌더 재실행되거나 무한 루프
+- 해결: `useMemo`/`useCallback`으로 참조 고정하거나 원시값으로 좁혀서 해결
+
+</details>
+
+<details>
+<summary>Q7. Context API와 Redux의 차이는?</summary>
+
+| | Context | Redux |
+|--|---------|-------|
+| 성격 | React 내장, prop drilling 해결 도구 | 외부 상태관리 라이브러리 |
+| 업데이트 방식 | value 변경 → 구독 컴포넌트 전부 리렌더 | action → reducer → selector로 필요한 부분만 리렌더 |
+| 규모 | 소~중규모, 자주 안 바뀌는 값(테마, 인증 유저) | 대규모, 복잡한 상태 흐름·비동기 로직 |
+
+</details>
+
+<details>
+<summary>Q8. Context를 쓰면 왜 성능 문제가 생길 수 있나요?</summary>
+
+- Context는 selector 없이 값 하나 단위로 구독되기 때문에, `value`가 바뀌면 그 값의 일부만 쓰는 컴포넌트까지 전부 리렌더됨
+- Provider의 `value`를 `useMemo` 없이 매 렌더 새로 만들면 실제 값이 안 바뀌었어도 리렌더 발생
+- 대응책: 변경 빈도가 다른 값은 별도 Context로 분리 + `value`는 `useMemo`로 참조 고정
+
+</details>

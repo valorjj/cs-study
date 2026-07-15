@@ -582,3 +582,90 @@ Client → LB(SD1) → API 서버(stateless) ─┬─ 캐시(Redis, Look-Aside,
 **꼬리 질문**: "읽기:쓰기 비율이 1:100인데 왜 Write-Through가 아니라 Look-Aside를 쓰나요?" → Write-Through는 쓰기 시점마다 캐시까지 동기로 채우는 방식이라 쓰기 비용이 늘어나는데, 이 서비스는 쓰기가 매우 적으므로 그 이점이 작다. 반대로 Look-Aside는 구현이 단순하고 캐시 장애 시 DB로 우회 가능해(SD2-4) 읽기 폭주 서비스에 더 적합하다.
 
 ---
+
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. 수직 확장(Scale-up)과 수평 확장(Scale-out)의 차이는?</summary>
+
+- 수직 확장 = 서버 1대의 스펙(CPU/RAM) 증강 — 간단하지만 물리적 한계와 SPOF(단일 장애점) 존재
+- 수평 확장 = 서버 대수를 늘려 분산 — LB로 트래픽 분배, 이론상 무제한 확장 가능
+- 단, 수평 확장은 서버가 **stateless**여야 한다는 전제 조건이 붙음
+
+</details>
+
+<details>
+<summary>Q2. 서버를 왜 stateless로 만들어야 하나요?</summary>
+
+- HTTP 자체가 stateless 프로토콜이라, 요청마다 어느 서버가 처리해도 동일하게 동작해야 수평 확장의 이점을 살릴 수 있음
+- 세션을 서버 로컬 메모리에 두면 특정 서버에 고정(sticky session)돼야 하고, 그 서버 장애 시 세션 유실
+- 세션을 Redis 등 외부 공유 저장소로 분리하면 로드밸런서가 어떤 서버로 보내도 동일하게 처리 가능
+
+</details>
+
+<details>
+<summary>Q3. 캐싱 전략(Look-Aside vs Write-Through)을 설명해주세요.</summary>
+
+| | Look-Aside | Write-Through |
+|--|-------------|----------------|
+| 읽기 | 캐시 먼저 확인, miss 시 DB 조회 후 캐시에 채움 | 캐시가 항상 최신 상태 유지 |
+| 쓰기 | DB만 갱신(캐시는 무효화/방치) | 캐시·DB 동시(동기) 기록 |
+| 특징 | 구현 단순, 캐시 장애 시 DB로 우회 가능, 첫 요청은 miss | 항상 최신이지만 쓰기 지연 증가 |
+
+- 실무에서는 Redis + Look-Aside가 가장 흔한 조합
+
+</details>
+
+<details>
+<summary>Q4. Cache Stampede(Thundering Herd)가 뭐고 어떻게 막나요?</summary>
+
+- 원인: 인기 키가 만료되는 순간 대량 요청이 동시에 캐시 miss를 겪고 전부 DB로 몰림 → DB 순간 과부하
+- 해결책
+  - Mutex/Lock: 첫 요청만 DB 조회 + 캐시 채움, 나머지는 대기 후 캐시에서 읽음
+  - 확률적 조기 갱신: TTL 임박 시 일부 요청이 미리 갱신
+  - 논리적 만료: 실제 삭제 대신 "만료" 플래그만 두고 백그라운드 갱신, stale 데이터라도 반환(가용성 우선)
+
+</details>
+
+<details>
+<summary>Q5. Replication과 Sharding의 차이는?</summary>
+
+- Replication: 같은 데이터를 여러 인스턴스에 복제해 **읽기**를 분산 (쓰기는 여전히 Master 1대 병목)
+- Sharding: 데이터 자체를 쪼개 여러 인스턴스에 나눠 담아 **쓰기 + 저장 용량**을 분산
+- 목적이 다르며, 실무에서는 두 방법을 함께 쓰는 경우도 흔함(shard마다 replica)
+
+</details>
+
+<details>
+<summary>Q6. 메시지 큐를 왜 쓰나요?</summary>
+
+- 동기 직접 호출은 수신 서비스가 느리거나 다운되면 발신 서비스까지 영향을 받음(강결합)
+- 메시지 큐를 두면
+  - 비동기 처리: Producer는 응답을 기다리지 않고 즉시 리턴
+  - Decoupling: Producer/Consumer가 서로의 존재·스펙을 몰라도 됨
+  - 버퍼링: 트래픽 급증 시 큐에 쌓이고 Consumer는 자기 속도로 처리해 부하 완충
+
+</details>
+
+<details>
+<summary>Q7. At-least-once가 뭐고 왜 문제가 되나요?</summary>
+
+- ack 실패 시 재전송하는 방식이라 메시지가 유실되지는 않지만 **중복 전달**될 수 있음
+- Consumer가 멱등하게(같은 메시지를 여러 번 처리해도 결과가 같도록) 설계되어 있지 않으면 중복 처리(예: 중복 결제)로 이어질 수 있음
+- 대응: 주문ID 등으로 이미 처리했는지 체크 후 처리(멱등성 보장), 또는 Idempotency Key 패턴 적용
+
+</details>
+
+<details>
+<summary>Q8. CAP 이론이 뭔가요? 왜 셋 다 만족할 수 없나요?</summary>
+
+- CAP = Consistency(모든 노드가 항상 같은 데이터를 봄), Availability(모든 요청이 항상 응답을 받음), Partition Tolerance(노드 간 통신 장애가 있어도 시스템이 계속 동작) — 이 셋을 동시에 만족할 수 없고 2개만 선택 가능
+- 왜 안 되는가: 노드 간 통신이 끊긴 상황(Partition)에서, 정합성을 지키려면 통신 복구 전까지 응답을 거부해야 하고(Availability 포기), 항상 응답하려면 오래된 데이터를 줄 수밖에 없음(Consistency 포기) — 둘 다 동시에는 불가능
+- 분산 시스템에서는 네트워크 파티션이 필연적으로 발생하므로 P는 전제 조건, 실제 선택은 **CP vs AP**
+  - CP 예: 계좌 이체, 재고 차감 (ZooKeeper, HBase)
+  - AP 예: SNS 좋아요 수, 조회수 (Cassandra, DynamoDB)
+
+</details>
+

@@ -570,3 +570,93 @@ import * as math from './math.js';   // 전체를 네임스페이스로
 
 **Q5. "여러 비동기 작업을 병렬로 처리하려면?"**
 > 서로 의존하지 않는 작업이면 `await`를 순차로 걸지 말고 `Promise.all([...])`로 동시에 시작해 묶어서 기다린다. 순차로 걸면 총 대기시간이 각 작업 시간의 합이 되어 불필요하게 느려진다.
+
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. JS는 싱글 스레드인데 어떻게 비동기 처리를 하나요?</summary>
+
+- JS 엔진 자체는 콜 스택 하나뿐인 싱글 스레드
+- 타이머·네트워크·파일 I/O 같은 오래 걸리는 작업은 브라우저/Node의 Web API(또는 libuv)에 위임
+- 완료되면 콜백이 큐(마이크로태스크/매크로태스크)에 쌓임
+- 콜 스택이 빌 때마다 이벤트 루프가 큐에서 꺼내 실행
+- 핵심: "JS 실행은 싱글, I/O는 별도"
+
+</details>
+
+<details>
+<summary>Q2. setTimeout(0)과 Promise.then 중 뭐가 먼저 실행되나요?</summary>
+
+- Promise.then이 먼저 실행됨
+- `setTimeout` → 매크로태스크 큐, `Promise.then` → 마이크로태스크 큐
+- 이벤트 루프는 콜 스택이 빈 뒤 **마이크로태스크 큐를 전부 비우고 나서야** 매크로태스크를 1개 꺼냄
+- `setTimeout(fn, 0)`도 즉시 실행이 아니라 매크로태스크 큐에 줄서기일 뿐
+
+</details>
+
+<details>
+<summary>Q3. 클로저가 뭐고 왜 쓰나요?</summary>
+
+- 클로저 = 함수 + 그 함수가 선언될 당시의 렉시컬 환경(주변 스코프)의 조합
+- 외부 함수 실행이 끝나도 내부 함수가 외부 변수를 참조 중이면 그 변수는 GC되지 않고 살아남음
+- 활용
+  - private 상태 유지 (카운터, 모듈 패턴 — 예: `createBankAccount`의 `balance`)
+  - 콜백에 데이터를 캡처해 넘길 때
+
+</details>
+
+<details>
+<summary>Q4. var와 let/const 스코프 차이는?</summary>
+
+- `var`: 함수 스코프 → 블록({}) 무시, 재선언 가능, 호이스팅 시 `undefined`로 초기화됨
+- `let`/`const`: 블록 스코프 → {} 단위로 유효범위 제한, 재선언 불가, 호이스팅되지만 초기화 전까지 TDZ
+- 반복문에서 클로저 캡처 시 차이가 드러남
+  - `var`: 전체 반복이 같은 변수 공유 → 클로저는 최종값만 캡처 (예: 3,3,3)
+  - `let`: 매 반복마다 새 바인딩 생성 → 각 클로저가 자기 값 캡처 (예: 0,1,2)
+
+</details>
+
+<details>
+<summary>Q5. this 바인딩 규칙 4가지를 설명해주세요.</summary>
+
+- 우선순위 순: `new` > 명시적(`bind` > `call`/`apply`) > 암시적 > 기본
+- ① 기본 바인딩: 그냥 호출 `fn()` → strict면 `undefined`, 아니면 전역 객체
+- ② 암시적 바인딩: `obj.fn()` → `obj`
+- ③ 명시적 바인딩: `call`/`apply`(즉시 호출, 인자 콤마/배열) / `bind`(새 함수 반환, 영구 고정)
+- ④ new 바인딩: `new Fn()` → 새로 생성된 객체
+- 화살표 함수는 이 규칙과 무관 — 정의 시점의 상위 스코프 this를 그대로 씀
+
+</details>
+
+<details>
+<summary>Q6. 화살표 함수의 this는 왜 다른가요?</summary>
+
+- 화살표 함수는 자체 `this`를 바인딩하지 않음 — 정의된 위치의 렉시컬 스코프 this를 그대로 캡처
+- `call`/`apply`/`bind`로도 화살표 함수의 this는 못 바꿈
+- 활용: 콜백 안에서 바깥(클래스 인스턴스 등)의 this를 유지하고 싶을 때 유용 (예: `setInterval` 콜백에서 `this.seconds++`)
+- 주의: 객체 리터럴의 메서드로 화살표 함수를 쓰면 대개 버그 — 메서드는 일반 함수로, 콜백만 화살표로
+
+</details>
+
+<details>
+<summary>Q7. == 와 === 차이는?</summary>
+
+- `==` (loose equality): 타입이 다르면 암묵적 형변환(coercion) 후 비교 → 예측하기 어려운 결과 다수 (`1 == '1'` → true, `null == undefined` → true)
+- `===` (strict equality): 타입까지 같아야 true — 다르면 바로 false
+- 실무 기본값은 항상 `===`, `==`는 `null == undefined` 체크 같은 의도적인 경우만 제한적으로 사용
+
+</details>
+
+<details>
+<summary>Q8. async/await은 Promise와 어떤 관계인가요?</summary>
+
+- async/await은 Promise 위에 얹힌 문법 설탕
+- `async` 함수는 항상 Promise를 반환(반환값이 Promise가 아니어도 자동으로 감싸짐)
+- `await`는 그 Promise가 처리(resolve/reject)될 때까지 **해당 함수 실행만** 일시정지 (다른 코드/스레드는 안 막힘)
+- `await` 이후 코드는 사실상 `.then()` 콜백 → 마이크로태스크로 스케줄
+- 에러 처리는 `try/catch`로 자연스럽게 표현
+- 서로 의존하지 않는 비동기 작업은 순차 `await` 대신 `Promise.all([...])`로 병렬 처리
+
+</details>
