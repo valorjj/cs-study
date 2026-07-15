@@ -3,6 +3,7 @@ import { searchNodes } from '../lib/search'
 import { useGraphStore } from '../store/graphStore'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
+import { NodeIcon } from './NodeIcon'
 import './SearchBar.css'
 
 export function SearchBar({ nodes }: { nodes: GraphNode[] }) {
@@ -19,7 +20,7 @@ export function SearchBar({ nodes }: { nodes: GraphNode[] }) {
             <li key={r.id}>
               <button onClick={() => { requestFocus(r.id); setQ('') }}
                 style={{ borderLeftColor: domainColor(r.domain) }}>
-                <span>{r.icon} {r.label}</span>
+                <span><NodeIcon id={r.id} domain={r.domain} size={15} /> {r.label}</span>
                 <small>{r.domain}</small>
               </button>
             </li>

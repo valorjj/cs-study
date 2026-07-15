@@ -11,13 +11,20 @@ export function toFlowNodes(nodes: GraphNode[]): Node[] {
 }
 
 export function toFlowEdges(edges: GraphEdge[]): Edge[] {
-  return edges.map((e) => ({
-    id: `${e.source}-${e.target}`,
-    source: e.source,
-    target: e.target,
-    data: { type: e.type, label: e.label },
-    animated: e.type === 'crosslink',
-  }))
+  return edges.map((e) => {
+    const isCross = e.type === 'crosslink'
+    return {
+      id: `${e.source}-${e.target}`,
+      source: e.source,
+      target: e.target,
+      data: { type: e.type, label: e.label },
+      type: isCross ? 'straight' : 'smoothstep',
+      animated: false,
+      style: isCross
+        ? { stroke: '#475569', strokeDasharray: '6 5', strokeWidth: 1 }
+        : { stroke: '#334155', strokeWidth: 1.5 },
+    }
+  })
 }
 
 export function buildAdjacency(edges: GraphEdge[]): Map<string, string[]> {

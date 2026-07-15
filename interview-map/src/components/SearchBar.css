@@ -8,4 +8,5 @@
   gap: 8px; background: none; border: none; border-left: 3px solid; padding: 8px 10px;
   color: #e2e8f0; cursor: pointer; text-align: left; border-radius: 4px; }
 .sb-results button:hover { background: #1e293b; }
+.sb-results button span { display: inline-flex; align-items: center; gap: 6px; }
 .sb-results small { color: #64748b; }
