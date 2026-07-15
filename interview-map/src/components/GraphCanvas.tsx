@@ -12,11 +12,11 @@ const nodeTypes = { domain: DomainNode, concept: ConceptNode }
 
 function Inner({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) {
   const { zoom } = useViewport()
-  const levels = visibleLevels(zoom)
-  const visibleNodes = useMemo(
-    () => nodes.filter((n) => levels.includes((n.data as { node: GraphNode }).node.level)),
-    [nodes, levels],
-  )
+  const levelKey = visibleLevels(zoom).join(',')
+  const visibleNodes = useMemo(() => {
+    const lv = levelKey.split(',').map(Number)
+    return nodes.filter((n) => lv.includes((n.data as { node: GraphNode }).node.level))
+  }, [nodes, levelKey])
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(
     () => edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target)),
