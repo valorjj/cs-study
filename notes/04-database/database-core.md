@@ -358,3 +358,109 @@ UPDATE accounts SET ... WHERE id=2;   UPDATE accounts SET ... WHERE id=1;
 > 파티셔닝은 한 DB 인스턴스 안에서 행(수평) 또는 컬럼(수직) 기준으로 테이블을 나누는 것이고, 샤딩은 데이터를 여러 개의 독립된 DB 서버로 분산하는 것입니다. 샤딩은 확장성은 훨씬 크지만 샤드 간 조인·트랜잭션이 어려워 설계 복잡도가 큽니다.
 
 ---
+
+# 핵심 질문 (Quiz)
+
+> 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
+
+<details>
+<summary>Q1. 인덱스는 왜 빠르고, 단점은 무엇인가요?</summary>
+
+- 정렬된 **B-Tree(B+Tree)** 자료구조로 저장 → 검색이 O(N) → O(log N)로 줄어듦
+- 단점: **쓰기(INSERT/UPDATE/DELETE)마다 인덱스도 같이 갱신**되어야 해서 쓰기 성능↓, 저장공간↑
+- 결론: 조회가 잦은 컬럼에 **선별적으로** 걸어야 함 (읽기-쓰기 균형)
+
+</details>
+
+<details>
+<summary>Q2. 쿼리가 인덱스를 타는지 어떻게 확인하고, 안 타는 경우는 언제인가요?</summary>
+
+- 확인: `EXPLAIN`으로 실행 계획 확인
+  - `type`: `ALL`(Full Scan, 경고) vs `ref`/`range`/`const`(인덱스 사용)
+  - `key`: 실제 사용된 인덱스 (NULL이면 미사용)
+  - `Extra`: `Using index`(커버링 인덱스) vs `Using filesort`/`Using temporary`(튜닝 필요)
+- 인덱스를 안 타는 경우
+  - 인덱스 컬럼에 **함수/연산** 적용 (`WHERE YEAR(created)=2024`)
+  - 복합 인덱스에서 **왼쪽 접두사 규칙**을 건너뜀
+  - **카디널리티가 너무 낮음** (예: 성별)
+  - 조건에 맞는 행 비율이 커서 옵티마이저가 Full Scan이 더 싸다고 판단
+  - 통계 정보가 오래됨, 암묵적 형변환
+
+</details>
+
+<details>
+<summary>Q3. ACID를 설명해주세요.</summary>
+
+| 속성 | 의미 |
+|------|------|
+| Atomicity(원자성) | 전부 성공 or 전부 실패(롤백) |
+| Consistency(일관성) | 트랜잭션 전후 무결성 규칙 유지 |
+| Isolation(격리성) | 동시 트랜잭션이 서로 간섭 안 함 |
+| Durability(지속성) | 커밋되면 장애에도 보존(로그) |
+
+- 계좌 이체처럼 여러 작업을 하나로 묶어 안전하게 처리하기 위한 성질
+
+</details>
+
+<details>
+<summary>Q4. 격리수준과 이상현상(Dirty/Non-Repeatable/Phantom Read)의 관계는?</summary>
+
+- 격리수준을 **낮출수록 성능↑, 이상현상↑**
+- Dirty Read: 커밋 안 된 값을 읽음
+- Non-Repeatable Read: 같은 행 재조회 시 값이 바뀜
+- Phantom Read: 같은 조건 재조회 시 행 개수가 바뀜
+
+| 격리수준 | Dirty | Non-Repeatable | Phantom |
+|----------|-------|----------------|---------|
+| READ UNCOMMITTED | 발생 | 발생 | 발생 |
+| READ COMMITTED | 방지 | 발생 | 발생 |
+| REPEATABLE READ (MySQL 기본) | 방지 | 방지 | 발생* |
+| SERIALIZABLE | 방지 | 방지 | 방지 |
+
+- 무조건 SERIALIZABLE은 성능 최악 → 성능 vs 정확성 트레이드오프
+
+</details>
+
+<details>
+<summary>Q5. 낙관적 락과 비관적 락의 차이는?</summary>
+
+- **비관적 락**: 미리 DB 락을 걸어 충돌을 원천 차단 → 충돌이 잦을 때 적합, 데드락 위험
+- **낙관적 락**: `version` 컬럼으로 저장 시점에 충돌 감지 후 재시도 → 충돌이 드문 웹서비스에 유리
+- JPA: 비관 = `@Lock(PESSIMISTIC_WRITE)`, 낙관 = `@Version`
+
+</details>
+
+<details>
+<summary>Q6. MVCC는 실제로 어떻게 구현되나요? (InnoDB 기준)</summary>
+
+- `UPDATE` 시 원본 행을 덮어쓰기 전에 **변경 전 이미지를 undo log에 기록**하고 새 행이 그 로그를 가리키게 함 → 여러 버전이 **버전 체인**으로 연결
+- 읽기 트랜잭션은 시작 시점의 **read view(스냅샷)** 기준으로 체인을 따라가며 자신의 스냅샷에 맞는 버전을 찾음 → Non-Repeatable Read 방지
+- 오래된 버전은 참조하는 트랜잭션이 없어지면 **purge 스레드**가 정리 (장시간 트랜잭션 금지의 이유)
+- 단, 쓰기가 섞인 범위 조회(`SELECT ... FOR UPDATE` 등)는 MVCC만으로 부족해 **갭락/Next-Key Lock**으로 팬텀을 추가 방지
+
+</details>
+
+<details>
+<summary>Q7. 정규화의 목적과 반정규화하는 이유는?</summary>
+
+- 정규화: 중복 제거 → **갱신 이상 방지**, 무결성 유지 (1NF 원자값 → 2NF 부분 함수 종속 제거 → 3NF 이행 종속 제거)
+- 부작용: 조인이 많아져 읽기 성능↓
+- 반정규화: **읽기 병목이 실측으로 확인된 경우에만** 선택적으로 중복 허용해 조인↓, 조회 성능↑
+- 주의: 조인이 많다고 바로 반정규화 X — 인덱스/쿼리 튜닝이 먼저
+
+</details>
+
+<details>
+<summary>Q8. 파티셔닝과 샤딩의 차이는?</summary>
+
+| | 파티셔닝 | 샤딩 |
+|--|---------|------|
+| 범위 | 한 DB 인스턴스 내부 | 여러 개의 독립 DB 서버 |
+| 애플리케이션 인지 | 대체로 투명 | 샤드 키 라우팅 로직 필요 |
+| 조인/트랜잭션 | 그대로 가능 | 샤드 간 조인·트랜잭션 어려움 |
+| 확장성 | 제한적(단일 서버 리소스 한계) | 이론상 무제한(서버 추가) |
+
+- 파티셔닝: 행 기준(수평, 예: 월별) 또는 컬럼 기준(수직, 예: TEXT/BLOB 분리)
+- 샤딩: 샤드 키(예: `user_id % N`)로 저장 서버 결정, 확장성은 크지만 설계 복잡도 크게 증가
+
+</details>

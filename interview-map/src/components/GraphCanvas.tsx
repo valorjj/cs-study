@@ -10,7 +10,6 @@ import { visibleLevels } from '../hooks/useSemanticZoom'
 import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
-import { mergeStatus } from '../hooks/useProgress'
 import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
 import './controls.css'
@@ -26,8 +25,6 @@ function Inner({ nodes, edges, adjacency }: {
   const select = useGraphStore((s) => s.select)
   const focusRequestId = useGraphStore((s) => s.focusRequestId)
   const clearFocusRequest = useGraphStore((s) => s.clearFocusRequest)
-  const visited = useGraphStore((s) => s.visited)
-  const trackingOn = useGraphStore((s) => s.trackingOn)
   const themeId = useGraphStore((s) => s.themeId)
   const grid = tokensOf(themeId).grid
   const { focused, isActive } = useMemo(
@@ -48,16 +45,11 @@ function Inner({ nodes, edges, adjacency }: {
     const lv = levelKey.split(',').map(Number)
     return nodes
       .filter((n) => lv.includes((n.data as { node: GraphNode }).node.level))
-      .map((n) => {
-        const gn = (n.data as { node: GraphNode }).node
-        const eff = trackingOn ? mergeStatus(gn.status, !!visited[gn.id]) : gn.status
-        return {
-          ...n,
-          data: { ...n.data, node: { ...gn, status: eff } },
-          style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
-        }
-      })
-  }, [nodes, levelKey, isActive, focused, trackingOn, visited])
+      .map((n) => ({
+        ...n,
+        style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
+      }))
+  }, [nodes, levelKey, isActive, focused])
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges
@@ -77,13 +69,17 @@ function Inner({ nodes, edges, adjacency }: {
       }
     }), [edges, visibleIds, isActive, focused])
 
+  // Touch devices have no reliable right-click; long-press is unreliable, so
+  // skip the related-concepts menu there and rely on tap → panel.
+  const isTouch = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
   const onNodeClick: NodeMouseHandler = (_, node) => { select(node.id); setMenu(null) }
   return (
     <>
       <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
         minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick}
         onPaneClick={() => { select(null); setMenu(null) }}
-        onNodeContextMenu={(e, node) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
+        onNodeContextMenu={(e, node) => { e.preventDefault(); if (isTouch) return; setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
         onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
         <Background color={grid} gap={24} />
         <Controls position="bottom-right" />

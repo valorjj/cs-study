@@ -10,3 +10,8 @@
 .sb-results button:hover { background: var(--bg-elev); }
 .sb-results button span { display: inline-flex; align-items: center; gap: 6px; }
 .sb-results small { color: var(--text-dim); }
+
+@media (max-width: 768px) {
+  .sb { top: 12px; left: 12px; width: calc(100vw - 150px); max-width: 320px; }
+  .sb-input { padding: 9px 12px; font-size: 13px; }
+}
