@@ -12,6 +12,10 @@
 .np-status[data-status="studied"] { background: #14532d; color: #bbf7d0; }
 .np-status[data-status="learning"] { background: #1e3a8a; color: #bfdbfe; }
 .np-summary { color: #cbd5e1; margin: 14px 0; }
+.np-study-toggle { display: inline-block; margin-bottom: 12px; padding: 6px 12px;
+  border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+  cursor: pointer; font-size: 13px; }
+.np-study-toggle[data-visited="true"] { background: #14532d; border-color: #22c55e; color: #bbf7d0; }
 .np-keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .np-keywords span { font-size: 12px; background: #1e293b; padding: 3px 9px; border-radius: 6px; color: #cbd5e1; }
 .np-related h3, .np-note h3 { font-size: 13px; color: #94a3b8; margin: 20px 0 8px; }

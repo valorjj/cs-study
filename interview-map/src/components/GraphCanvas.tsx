@@ -9,6 +9,7 @@ import { visibleLevels } from '../hooks/useSemanticZoom'
 import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
+import { mergeStatus } from '../hooks/useProgress'
 import type { GraphNode } from '../graph/types'
 
 const nodeTypes = { domain: DomainNode, concept: ConceptNode }
@@ -22,6 +23,8 @@ function Inner({ nodes, edges, adjacency }: {
   const select = useGraphStore((s) => s.select)
   const focusRequestId = useGraphStore((s) => s.focusRequestId)
   const clearFocusRequest = useGraphStore((s) => s.clearFocusRequest)
+  const visited = useGraphStore((s) => s.visited)
+  const trackingOn = useGraphStore((s) => s.trackingOn)
   const { focused, isActive } = useMemo(
     () => computeFocus(selectedId, adjacency), [selectedId, adjacency])
 
@@ -37,11 +40,16 @@ function Inner({ nodes, edges, adjacency }: {
     const lv = levelKey.split(',').map(Number)
     return nodes
       .filter((n) => lv.includes((n.data as { node: GraphNode }).node.level))
-      .map((n) => ({
-        ...n,
-        style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
-      }))
-  }, [nodes, levelKey, isActive, focused])
+      .map((n) => {
+        const gn = (n.data as { node: GraphNode }).node
+        const eff = trackingOn ? mergeStatus(gn.status, !!visited[gn.id]) : gn.status
+        return {
+          ...n,
+          data: { ...n.data, node: { ...gn, status: eff } },
+          style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
+        }
+      })
+  }, [nodes, levelKey, isActive, focused, trackingOn, visited])
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges

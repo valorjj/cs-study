@@ -14,6 +14,9 @@ export function NotePanel({ nodesById, neighbors }: {
 }) {
   const selectedId = useGraphStore((s) => s.selectedId)
   const select = useGraphStore((s) => s.select)
+  const trackingOn = useGraphStore((s) => s.trackingOn)
+  const visited = useGraphStore((s) => s.visited)
+  const toggleVisited = useGraphStore((s) => s.toggleVisited)
   const node = selectedId ? nodesById.get(selectedId) : undefined
   const [md, setMd] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -47,6 +50,15 @@ export function NotePanel({ nodesById, neighbors }: {
         <span className="np-status" data-status={node.status}>{node.status}</span>
       </header>
       <p className="np-summary">{node.summary}</p>
+      {trackingOn && (
+        <button
+          className="np-study-toggle"
+          data-visited={!!visited[node.id]}
+          onClick={() => toggleVisited(node.id)}
+        >
+          {visited[node.id] ? '공부함 (해제)' : '공부함으로 표시'}
+        </button>
+      )}
       {node.keywords.length > 0 && (
         <div className="np-keywords">{node.keywords.map((k) => <span key={k}>{k}</span>)}</div>
       )}
