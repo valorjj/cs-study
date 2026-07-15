@@ -57,3 +57,16 @@
 .np-note summary:hover { color: var(--accent); }
 .np-note details > :not(summary) { margin-left: 14px; margin-right: 14px; }
 .np-note details > :last-child { margin-bottom: 12px; }
+
+/* Mobile: full-screen sheet above all controls */
+@media (max-width: 768px) {
+  .np-panel { width: 100vw; height: 100dvh; border-left: none; z-index: 40;
+    box-shadow: none; }
+  .np-top { padding: 16px 16px 0; }
+  .np-close { top: 10px; right: 12px; font-size: 30px; padding: 4px; }
+  .np-head { padding-right: 40px; }
+  .np-head h2 { font-size: 18px; }
+  .np-summary { font-size: 13px; }
+  .np-note { padding: 16px 16px 80px; }
+  .np-tab { padding: 10px 12px; font-size: 13px; }
+}

@@ -3,3 +3,9 @@
 .ts-label { font-size: 12px; color: var(--text-dim); }
 .ts-select { background: var(--bg-panel); color: var(--text); border: 1px solid var(--border);
   border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+
+@media (max-width: 768px) {
+  .ts { top: 14px; right: 12px; }
+  .ts-label { display: none; }
+  .ts-select { padding: 7px 8px; }
+}

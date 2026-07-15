@@ -69,13 +69,17 @@ function Inner({ nodes, edges, adjacency }: {
       }
     }), [edges, visibleIds, isActive, focused])
 
+  // Touch devices have no reliable right-click; long-press is unreliable, so
+  // skip the related-concepts menu there and rely on tap → panel.
+  const isTouch = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
   const onNodeClick: NodeMouseHandler = (_, node) => { select(node.id); setMenu(null) }
   return (
     <>
       <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
         minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick}
         onPaneClick={() => { select(null); setMenu(null) }}
-        onNodeContextMenu={(e, node) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
+        onNodeContextMenu={(e, node) => { e.preventDefault(); if (isTouch) return; setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
         onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
         <Background color={grid} gap={24} />
         <Controls position="bottom-right" />
