@@ -20,11 +20,13 @@ export function NotePanel({ nodesById, neighbors }: {
   const node = selectedId ? nodesById.get(selectedId) : undefined
   const [md, setMd] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [activeSlug, setActiveSlug] = useState<string | null>(null)
+  // User-picked tab, scoped to a node id so it never bleeds across notes
+  // (all notes share the "핵심-질문-quiz" slug). null → follow the default.
+  const [override, setOverride] = useState<{ id: string; slug: string } | null>(null)
 
   useEffect(() => {
     setMd(null)
-    if (!node?.noteRef) return
+    if (!node?.noteRef) { setLoading(false); return }
     let cancelled = false
     const { path } = parseNoteRef(node.noteRef)
     setLoading(true)
@@ -38,18 +40,17 @@ export function NotePanel({ nodesById, neighbors }: {
 
   const parsed = useMemo(() => (md ? parseSections(md) : null), [md])
 
-  // Default tab: the noteRef anchor's section if it matches, else the first.
-  useEffect(() => {
-    if (!parsed || parsed.sections.length === 0) { setActiveSlug(null); return }
-    const anchor = node?.noteRef ? parseNoteRef(node.noteRef).anchor : null
-    const match = anchor ? parsed.sections.find((s) => s.slug === anchor) : undefined
-    setActiveSlug(match ? match.slug : parsed.sections[0].slug)
-  }, [parsed, node?.noteRef])
-
   if (!node) return null
   const color = domainColor(node.domain)
   const related = (neighbors.get(node.id) ?? []).map((id) => nodesById.get(id)).filter(Boolean) as GraphNode[]
   const sections = parsed?.sections ?? []
+
+  // Default tab (derived synchronously — no post-paint flash): the noteRef
+  // anchor's section if it matches, else the first section.
+  const anchor = node.noteRef ? parseNoteRef(node.noteRef).anchor : null
+  const defaultSlug = (anchor && sections.find((s) => s.slug === anchor)?.slug) || sections[0]?.slug || null
+  const activeSlug = (override && override.id === node.id && sections.some((s) => s.slug === override.slug))
+    ? override.slug : defaultSlug
   const active = sections.find((s) => s.slug === activeSlug) ?? sections[0]
 
   return (
@@ -83,7 +84,7 @@ export function NotePanel({ nodesById, neighbors }: {
                 className="np-tab"
                 data-active={s.slug === active?.slug}
                 style={{ '--c': color } as CSSProperties}
-                onClick={() => setActiveSlug(s.slug)}
+                onClick={() => setOverride({ id: node.id, slug: s.slug })}
               >
                 {s.heading}
               </button>
@@ -91,7 +92,7 @@ export function NotePanel({ nodesById, neighbors }: {
           </nav>
         )}
       </div>
-      <div className="np-note" key={active?.slug ?? 'none'}>
+      <div className="np-note" key={`${node.id}:${active?.slug ?? 'none'}`}>
         {loading && <p className="np-dim">노트 불러오는 중…</p>}
         {!loading && active && (
           <>
@@ -99,8 +100,11 @@ export function NotePanel({ nodesById, neighbors }: {
             <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSlug]}>{active.body}</Markdown>
           </>
         )}
+        {!loading && md && sections.length === 0 && (
+          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSlug]}>{md}</Markdown>
+        )}
         {!loading && !md && node.noteRef && <p className="np-dim">노트를 불러오지 못했습니다.</p>}
-        {!node.noteRef && <p className="np-dim">아직 노트가 없는 개념입니다.</p>}
+        {!loading && !node.noteRef && <p className="np-dim">아직 노트가 없는 개념입니다.</p>}
       </div>
     </aside>
   )

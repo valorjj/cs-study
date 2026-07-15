@@ -58,4 +58,26 @@ describe('parseSections', () => {
     expect(sections.map((s) => s.heading)).toEqual(['Real'])
     expect(sections[0].body).toBe('y')
   })
+
+  it('does not treat "# " comment lines inside code fences as sections', () => {
+    const md = [
+      '# 제목',
+      '',
+      '# DO1. Docker',
+      '',
+      '```dockerfile',
+      '# 나쁜 예 — 주석',
+      'COPY . .',
+      '# 좋은 예',
+      'RUN build',
+      '```',
+      '',
+      '설명 문장',
+    ].join('\n')
+    const { sections } = parseSections(md)
+    expect(sections.map((s) => s.heading)).toEqual(['DO1. Docker'])
+    expect(sections[0].body).toContain('# 나쁜 예 — 주석')
+    expect(sections[0].body).toContain('```dockerfile')
+    expect(sections[0].body.match(/```/g)).toHaveLength(2) // fence stays balanced
+  })
 })

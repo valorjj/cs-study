@@ -24,6 +24,8 @@ export interface ParsedNote {
 export function parseSections(md: string): ParsedNote {
   const lines = md.split('\n')
   const h1 = /^# (?!#)(.*)$/ // exactly one '#' then a space
+  const fence = /^\s*(```|~~~)/ // fenced code block delimiter
+  let inFence = false
   let title = ''
   let started = false
   const sections: NoteSection[] = []
@@ -40,7 +42,9 @@ export function parseSections(md: string): ParsedNote {
   }
 
   for (const line of lines) {
-    const m = h1.exec(line)
+    if (fence.test(line)) inFence = !inFence
+    // '#' comment lines inside code fences (e.g. Dockerfile/shell) are not headings
+    const m = inFence ? null : h1.exec(line)
     if (m) {
       const heading = m[1].trim()
       if (!started) {
