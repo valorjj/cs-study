@@ -6,6 +6,7 @@ import rehypeSlug from 'rehype-slug'
 import rehypeRaw from 'rehype-raw'
 import { useGraphStore } from '../store/graphStore'
 import { parseNoteRef, parseSections } from '../lib/notes'
+import { rehypeFoldQA } from '../lib/rehypeFoldQA'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
 import { NodeIcon } from './NodeIcon'
@@ -97,11 +98,11 @@ export function NoteView({ node, nodesById, neighbors }: {
         {!loading && active && (
           <>
             <h2 className="np-section-title">{active.heading}</h2>
-            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSlug]}>{active.body}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeFoldQA, rehypeSlug]}>{active.body}</Markdown>
           </>
         )}
         {!loading && md && sections.length === 0 && (
-          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSlug]}>{md}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeFoldQA, rehypeSlug]}>{md}</Markdown>
         )}
         {!loading && !md && node.noteRef && <p className="np-dim">노트를 불러오지 못했습니다.</p>}
         {!loading && !node.noteRef && <p className="np-dim">아직 노트가 없는 개념입니다.</p>}

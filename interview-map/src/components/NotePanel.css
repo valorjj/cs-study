@@ -57,6 +57,10 @@
 .np-note summary:hover { color: var(--accent); }
 .np-note details > :not(summary) { margin-left: 14px; margin-right: 14px; }
 .np-note details > :last-child { margin-bottom: 12px; }
+/* Answer blockquotes (used by inline Q&A folds) */
+.np-note blockquote { margin: 10px 0; padding: 2px 0 2px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
+.np-note details blockquote { margin-top: 10px; border-left-color: var(--border-strong); }
 
 /* Mobile: full-screen sheet above all controls */
 @media (max-width: 768px) {
