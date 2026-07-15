@@ -2,9 +2,10 @@ import {
   ReactFlow, ReactFlowProvider, Background, Controls, useViewport, useReactFlow,
   type Node, type Edge, type NodeMouseHandler,
 } from '@xyflow/react'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { DomainNode } from './DomainNode'
 import { ConceptNode } from './ConceptNode'
+import { ContextMenu, type MenuState } from './ContextMenu'
 import { visibleLevels } from '../hooks/useSemanticZoom'
 import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
@@ -12,6 +13,7 @@ import { buildAdjacency } from '../lib/graphUtils'
 import { mergeStatus } from '../hooks/useProgress'
 import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
+import './controls.css'
 
 const nodeTypes = { domain: DomainNode, concept: ConceptNode }
 
@@ -30,6 +32,9 @@ function Inner({ nodes, edges, adjacency }: {
   const grid = tokensOf(themeId).grid
   const { focused, isActive } = useMemo(
     () => computeFocus(selectedId, adjacency), [selectedId, adjacency])
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  const nodesById = useMemo(
+    () => new Map(nodes.map((n) => [n.id, (n.data as { node: GraphNode }).node])), [nodes])
 
   useEffect(() => {
     if (!focusRequestId) return
@@ -72,13 +77,19 @@ function Inner({ nodes, edges, adjacency }: {
       }
     }), [edges, visibleIds, isActive, focused])
 
-  const onNodeClick: NodeMouseHandler = (_, node) => select(node.id)
+  const onNodeClick: NodeMouseHandler = (_, node) => { select(node.id); setMenu(null) }
   return (
-    <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
-      minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick} onPaneClick={() => select(null)}>
-      <Background color={grid} gap={24} />
-      <Controls />
-    </ReactFlow>
+    <>
+      <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
+        minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick}
+        onPaneClick={() => { select(null); setMenu(null) }}
+        onNodeContextMenu={(e, node) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
+        onPaneContextMenu={(e) => { e.preventDefault(); setMenu(null) }}>
+        <Background color={grid} gap={24} />
+        <Controls position="bottom-right" />
+      </ReactFlow>
+      <ContextMenu menu={menu} nodesById={nodesById} neighbors={adjacency} onClose={() => setMenu(null)} />
+    </>
   )
 }
 
