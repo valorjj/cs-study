@@ -89,6 +89,93 @@ FROM openjdk:11         ──►    │ Layer: openjdk   │  (base)
 **Q4. "Dockerfile 레이어 캐싱을 어떻게 활용하나요?"**
 > ① 자주 안 바뀌는 명령(FROM, 의존성 설치)을 위쪽에, 자주 바뀌는 것(소스 COPY)을 아래쪽에 배치 → ② 변경 없는 레이어는 캐시 재사용 → ③ 빌드 시간 단축.
 
+## 9. Dockerfile 최적화 — 레이어 캐시 · 멀티스테이지 빌드 · .dockerignore
+
+**비유 — 택배 포장 순서**: 택배 박스를 쌀 때 자주 안 바뀌는 물건(무거운 책)을 맨 아래에, 자주 꺼내 쓰는 물건(오늘 필요한 서류)을 맨 위에 넣어야 다시 쌀 때 위쪽만 갈아 끼우면 됨. Dockerfile도 마찬가지 — **잘 안 바뀌는 명령을 위쪽, 자주 바뀌는 명령을 아래쪽**에 둬야 캐시가 최대한 살아남는다.
+
+Docker는 Dockerfile의 각 명령을 레이어로 캐싱하는데, **한 레이어가 무효화되면 그 아래(이후) 레이어는 전부 재빌드**된다. 그래서 순서가 중요하다.
+
+```dockerfile
+# ❌ 나쁜 예 — 소스 COPY가 위에 있어서 코드 한 줄만 바뀌어도 의존성까지 재설치
+FROM node:18
+COPY . .
+RUN npm install
+CMD ["node", "server.js"]
+
+# ✅ 좋은 예 — 의존성 선언 파일만 먼저 COPY → 의존성 안 바뀌면 npm install 레이어 캐시 재사용
+FROM node:18
+COPY package.json package-lock.json ./
+RUN npm install
+COPY . .
+CMD ["node", "server.js"]
+```
+
+**멀티스테이지 빌드**로 최종 이미지에서 빌드 도구(JDK 풀버전, Gradle, node_modules devDependencies 등)를 제거해 이미지를 경량화한다.
+
+```dockerfile
+# 1단계: 빌드 전용 (무거운 JDK + Gradle 포함, 최종 이미지엔 안 남음)
+FROM gradle:7-jdk11 AS build
+WORKDIR /app
+COPY build.gradle settings.gradle ./
+RUN gradle dependencies --no-daemon
+COPY src ./src
+RUN gradle build --no-daemon -x test
+
+# 2단계: 실행 전용 (JRE-slim만, 결과물 jar만 복사)
+FROM openjdk:11-jre-slim
+WORKDIR /app
+COPY --from=build /app/build/libs/*.jar app.jar
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+→ 1단계 이미지(빌드 도구 포함, 수백 MB~GB)는 버려지고, 2단계 이미지(JRE + jar만)만 최종 결과물로 남아 **수백 MB → 수십 MB**로 줄어드는 경우가 흔함.
+
+**.dockerignore**: `.git`, `node_modules`, `target`, `*.log` 등을 제외해야 빌드 컨텍스트(Docker 데몬에 전송되는 파일 묶음) 크기가 줄고, 불필요한 파일 변경으로 인한 캐시 무효화도 막을 수 있음.
+```
+.git
+node_modules
+target
+*.log
+.env
+```
+
+**핵심 포인트**
+- 🔴 "레이어 순서는 캐시에 영향 없다" ❌ — 순서가 곧 캐시 무효화 범위를 결정. 위쪽 레이어가 바뀌면 아래쪽은 전부 재빌드.
+- 🔴 "멀티스테이지 안 쓰면 기능은 똑같다" — 기능은 같지만 **이미지 크기 · 공격 표면(빌드 도구 취약점 포함)** 이 커짐.
+- 🟡 .dockerignore 없으면 `.git` 히스토리 전체가 빌드 컨텍스트로 전송돼 빌드가 느려지고, 무관한 파일 변경에도 캐시가 깨질 수 있음.
+
+**꼬리 질문**
+- "COPY package.json을 먼저 하고 COPY . .를 나중에 하는 이유는?"
+- "멀티스테이지 빌드를 안 쓰면 이미지에 어떤 문제가 남나요?"
+
+## 10. 컨테이너 네트워킹 · 볼륨 (데이터 영속성)
+
+**비유**: 컨테이너는 기본적으로 "일회용 원룸"이라 방을 빼면(컨테이너 삭제) 안에 있던 짐(데이터)도 같이 사라진다. **볼륨**은 원룸 밖 별도 창고에 짐을 보관하는 것 — 방을 빼도 창고의 짐은 그대로 남아 다음 세입자(새 컨테이너)가 다시 꺼내 쓸 수 있음. **네트워킹**은 건물의 내선 전화망(브리지 네트워크) — 같은 건물(호스트) 안의 방(컨테이너)끼리는 내선으로 통신하고, 외부에서 걸려온 전화(포트 매핑)는 대표번호(호스트 포트)를 거쳐 특정 방 내선(컨테이너 포트)으로 연결된다.
+
+```
+호스트                                컨테이너
+┌──────────────────────────┐
+│  포트 매핑: -p 8080:80     │   호스트:8080 ──► 컨테이너:80 (Nginx)
+│  ┌──────────────────────┐ │
+│  │  bridge network        │ │   컨테이너 A ──내부 IP로── 컨테이너 B 통신 가능
+│  │  (기본 네트워크 드라이버) │ │
+│  └──────────────────────┘ │
+│  Volume (호스트 디렉터리 or  │ ◄── 컨테이너 삭제돼도 여기 데이터는 유지
+│  Docker 관리 영역)          │
+└──────────────────────────┘
+```
+
+- **네트워크 드라이버**: `bridge`(기본, 격리된 가상 네트워크 안에서 컨테이너끼리 통신) / `host`(호스트 네트워크 그대로 사용, 격리 없음, 포트 충돌 위험) / `none`(네트워크 없음).
+- **포트 매핑**: `-p <호스트포트>:<컨테이너포트>` — 외부에서 호스트 포트로 들어온 요청을 컨테이너 포트로 전달.
+- **볼륨 종류**: `named volume`(Docker가 관리하는 영역, 이식성 좋음) vs `bind mount`(호스트의 특정 디렉터리를 직접 마운트, 개발 중 코드 반영에 유용).
+
+**핵심 포인트**
+- 🔴 "컨테이너를 재시작하면 데이터가 남아있을 것" ❌ — 볼륨을 마운트하지 않았다면 컨테이너 **삭제(재시작 아님)** 시 쓰기 레이어의 데이터는 사라짐. DB 컨테이너는 반드시 볼륨 마운트 필수.
+- 🟡 `host` 네트워크는 격리가 없어 성능은 좋지만 포트 충돌·보안 격리 약화 위험 — 특수한 경우가 아니면 기본 `bridge` 사용.
+
+**꼬리 질문**
+- "같은 브리지 네트워크에 있는 두 컨테이너는 어떻게 서로를 찾나요?" (컨테이너 이름을 DNS처럼 사용)
+- "named volume과 bind mount 중 프로덕션에서는 보통 뭘 쓰나요?"
+
 ---
 
 # DO2. Kubernetes
@@ -167,6 +254,104 @@ ReplicaSet (실제 Pod 개수를 감시 → 부족하면 채움)
 **Q4. "선언적 구성이 명령형과 뭐가 다른가요?"**
 > ① 명령형="Pod를 3개 만들어라"(일회성 명령) → ② 선언형="Pod가 3개 있는 상태를 유지해라"(목표 상태 기술) → ③ Control Loop가 현재-목표 차이를 지속 감시·조정(reconciliation) → 장애 시에도 자동 복구.
 
+## 10. Ingress — 클러스터 진입점의 트래픽 라우팅
+
+**비유**: Service가 각 매장의 내선번호라면, **Ingress는 건물 정문 안내데스크** — 방문객이 "어디로 가야 하죠?"라고 물으면 방문 목적(도메인/URL 경로)을 보고 적절한 매장(Service)으로 안내한다. Service만 있으면 매장마다 대표번호가 따로 필요하지만, Ingress가 있으면 정문 안내데스크 하나(진입점 하나)로 여러 매장을 다 연결할 수 있다.
+
+```
+Client ──► Ingress (host/path 규칙)
+              │  host: api.example.com, path: /users  → Service A
+              │  host: api.example.com, path: /orders → Service B
+              ▼
+        Service A          Service B
+           │                   │
+         Pod들               Pod들
+```
+
+- Ingress는 **규칙(리소스) 정의**일 뿐이고, 실제 라우팅은 **Ingress Controller**(Nginx Ingress, Traefik 등)가 수행한다. Controller가 없으면 Ingress 리소스를 만들어도 아무 일도 안 일어남.
+- L7(HTTP/HTTPS) 라우팅, TLS 종료, 경로 기반/도메인 기반 라우팅을 클러스터 진입점 한 곳에서 처리 → Service를 매번 LoadBalancer 타입으로 만들 필요가 없어짐(비용 절감).
+
+**핵심 포인트**
+- 🔴 "Ingress = LoadBalancer" ❌ — Ingress는 **L7 라우팅 규칙**, Service의 `LoadBalancer` 타입은 **L4 외부 노출** 방식. 실무에서는 Ingress Controller 앞에 LoadBalancer Service 하나만 두고, 그 뒤로 여러 서비스를 Ingress 규칙으로 분기하는 구조가 흔함.
+
+**꼬리 질문**
+- "Ingress와 Service(LoadBalancer 타입)의 차이는?"
+
+## 11. ConfigMap과 Secret — 설정과 민감정보 분리
+
+**비유**: 앱 코드(이미지)는 그대로 두고, **환경별 설정값 카드만 바꿔 끼우는 것**. 개발/스테이징/운영 환경마다 DB 주소, 로그 레벨 등이 다른데, 이걸 이미지에 하드코딩하면 환경마다 이미지를 새로 빌드해야 함 — ConfigMap/Secret으로 분리하면 **같은 이미지를 그대로 두고 설정만 주입**할 수 있다.
+
+- **ConfigMap**: 민감하지 않은 설정값(로그 레벨, feature flag, 외부 API URL 등)을 key-value로 저장 → 환경변수 또는 볼륨 파일로 Pod에 주입.
+- **Secret**: 비밀번호, API 키, 인증서 등 민감정보 저장. 형식은 ConfigMap과 비슷하지만 **base64 인코딩**되어 저장됨(암호화 아님에 주의).
+
+**핵심 포인트**
+- 🔴 "Secret은 암호화되어 있어 안전하다" ❌ — 기본 Secret은 **base64 인코딩일 뿐 암호화가 아님**(누구나 디코딩 가능). 실제 보안을 위해서는 etcd 암호화 활성화, RBAC으로 접근 제한, 또는 Vault 같은 외부 시크릿 매니저 연동이 필요.
+- 🟡 ConfigMap/Secret을 환경변수로 주입하면 **Pod를 재시작해야 반영**되지만, 볼륨 파일로 마운트하면 일정 시간 후 자동 갱신되는 경우가 있음(단, 앱이 파일 변경을 감지하도록 구현돼 있어야 실제 반영됨).
+
+**꼬리 질문**
+- "ConfigMap을 수정하면 이미 떠 있는 Pod에 바로 반영되나요?"
+- "Secret이 base64 인코딩만 되어 있다면 어떻게 더 안전하게 관리하나요?"
+
+## 12. HPA — Horizontal Pod Autoscaler 오토스케일 심화
+
+CPU/메모리/커스텀 메트릭을 감시하다가 임계값을 넘으면 Pod 개수를 자동으로 늘리고(scale-out), 부하가 줄면 다시 줄인다(scale-in). 대략적인 계산 방식:
+
+```
+desiredReplicas = ceil( currentReplicas × (currentMetricValue / targetMetricValue) )
+
+예) target CPU 50%, 현재 CPU 사용률 80%, 현재 replica 4개
+desiredReplicas = ceil(4 × (80/50)) = ceil(6.4) = 7개로 증설
+```
+
+**핵심 포인트**
+- 🟡 스케일 아웃/인에는 **쿨다운(안정화 시간)** 이 있어 순간적인 트래픽 스파이크에는 반응이 늦을 수 있음 — 예측 가능한 트래픽이면 사전에 미리 replica를 늘려두는 스케줄 기반 스케일링도 병행 고려.
+- 🟡 HPA는 **Horizontal**(Pod 개수 조절)이고, **VPA(Vertical Pod Autoscaler)**는 개별 Pod의 CPU/메모리 **할당량 자체**를 조절 — 둘은 목적이 다름(VPA는 재시작이 필요해 무중단성이 떨어짐).
+
+**꼬리 질문**
+- "HPA와 VPA의 차이는?"
+- "HPA가 스케일 아웃했는데 트래픽이 이미 빠졌다면 어떻게 되나요?"
+
+## 13. Liveness Probe vs Readiness Probe
+
+**비유**: **Liveness probe** = "심장이 뛰고 있나?"를 확인하는 것 — 실패하면 이미 고장난 것으로 보고 **컨테이너를 재시작**. **Readiness probe** = "손님을 받을 준비가 됐나?"를 확인하는 것 — 아직 준비가 안 됐으면(예: DB 커넥션 맺는 중) **재시작하지 않고 트래픽만 잠깐 안 보냄**(Service의 엔드포인트에서 제외).
+
+| 구분 | Liveness Probe | Readiness Probe |
+|------|-----------------|-------------------|
+| 목적 | 컨테이너가 "살아있는지" 확인 | 컨테이너가 "트래픽 받을 준비" 됐는지 확인 |
+| 실패 시 동작 | 컨테이너 **재시작** | Service 엔드포인트에서 **제외**(재시작 X) |
+| 대표 사용처 | 데드락/행(hang) 상태 감지 | 초기 구동 시간이 긴 앱, 일시적 과부하 |
+
+**핵심 포인트**
+- 🔴 "둘 다 실패하면 똑같이 재시작된다" ❌ — Readiness 실패는 재시작이 아니라 **트래픽 차단**. 이 둘을 혼동해서 readiness 설정을 liveness에 넣으면, 앱이 DB 연결을 잠깐 재시도하는 중에도 liveness가 실패해 **계속 재시작되는 크래시 루프**가 생길 수 있음.
+- 🟡 초기 구동이 느린 앱은 `initialDelaySeconds` 또는 `startupProbe`를 함께 써서 준비 전에 liveness가 죽이지 않도록 해야 함.
+
+**꼬리 질문**
+- "readiness probe가 실패하면 사용자 요청은 어떻게 되나요?"
+- "liveness probe 설정을 잘못 하면 왜 크래시 루프가 생기나요?"
+
+## 14. 무중단 배포 상세 (K8s Rolling / Blue-Green / Canary)과 롤백
+
+Deployment의 기본 배포 전략은 **RollingUpdate**이며, 두 파라미터로 세밀하게 조절한다.
+- `maxUnavailable`: 배포 중 동시에 내려도 되는 Pod 비율/개수(가용성 하한).
+- `maxSurge`: 배포 중 원래 개수보다 몇 개까지 더 띄워도 되는지(리소스 여유 필요).
+
+```
+Deployment (replicas=4, maxUnavailable=1, maxSurge=1)
+[v1 v1 v1 v1] → [v1 v1 v1 v2] → [v1 v1 v2 v2] → ... → [v2 v2 v2 v2]
+```
+
+K8s에서 **Blue-Green**과 **Canary**는 기본 오브젝트만으론 지원 안 되고, 보통 **두 개의 Deployment(v1/v2) + Service의 selector 전환** 또는 Istio/Argo Rollouts 같은 서비스 메시·전용 컨트롤러로 구현한다.
+
+**롤백**: `kubectl rollout undo deployment/<이름>` — Deployment는 이전 리비전(ReplicaSet 히스토리)을 보관하고 있어 문제가 생기면 즉시 이전 버전으로 되돌릴 수 있음. `kubectl rollout history`로 리비전 목록 확인 가능.
+
+**핵심 포인트**
+- 🟡 `maxUnavailable=0`으로 하면 배포 중 가용 Pod가 절대 줄지 않아 확실한 무중단이지만, 그만큼 **여유 리소스(`maxSurge`)** 가 필요.
+- 🟡 롤백은 이미지 버전만 되돌리는 것 — DB 마이그레이션처럼 **되돌릴 수 없는 변경**이 함께 배포됐다면 롤백만으로 완전히 복구되지 않을 수 있음(하위 호환 마이그레이션 전략 필요).
+
+**꼬리 질문**
+- "`kubectl rollout undo`는 이전 상태를 어떻게 기억하고 있나요?"
+- "K8s에서 blue-green이나 canary를 하려면 기본 오브젝트만으로 충분한가요?"
+
 ---
 
 # DO3. CI/CD
@@ -234,6 +419,51 @@ Canary:  트래픽 100% → v1
 
 **Q4. "Continuous Delivery와 Continuous Deployment의 차이는?"**
 > ① Delivery=배포 "가능한" 상태까지 자동화, 실제 운영 배포는 사람이 승인 → ② Deployment=승인 없이 통과하면 바로 운영까지 자동 배포 → ③ 조직의 리스크 허용도에 따라 선택.
+
+## 8. IaC (Infrastructure as Code) — Terraform 개념
+
+**비유**: 인프라를 콘솔에 매번 손으로 클릭해서 만드는 건 "말로 설명해서 집을 짓는 것" — 사람마다 다르게 짓고, 재현이 안 됨. **IaC** = 인프라를 **코드(설계도)로 선언**해두고, 그 코드로 항상 동일하게 인프라를 생성/변경하는 방식.
+
+- **Terraform**: 클라우드 리소스(서버, 네트워크, DB 등)를 `.tf` 파일에 선언 → `terraform plan`(변경 예정 사항 미리 보기) → `terraform apply`(실제 반영). 현재 인프라 상태를 **state 파일**에 기록해두고, 다음 실행 때 코드와 state를 비교해 **무엇이 달라졌는지(diff)** 만 적용.
+- 장점: 코드 리뷰 대상이 됨, 버전 관리(Git)로 이력 추적, 동일 환경(스테이징/운영)을 코드 재사용으로 동일하게 재현 가능.
+
+**핵심 포인트**
+- 🔴 "콘솔에서 수동으로 리소스를 하나 바꿔도 문제없다" ❌ — Terraform이 관리하는 리소스를 콘솔에서 직접 바꾸면 **state와 실제 인프라가 어긋나는 drift**가 발생 → 다음 `apply` 때 의도치 않은 변경이 일어날 수 있음. 관리 대상 리소스는 반드시 코드로만 변경.
+
+**꼬리 질문**
+- "Terraform state가 실제 인프라 상태와 달라지면(drift) 어떻게 되나요?"
+
+## 9. GitOps
+
+**비유**: Git 저장소가 "우리 시스템이 어떤 상태여야 하는가"에 대한 **단 하나의 진실 공급원(source of truth)**이 되는 방식. K8s의 "선언적 구성 + Control Loop" 개념을 배포 파이프라인에도 그대로 적용한 것 — Git에 원하는 상태를 커밋하면, 클러스터 안의 컨트롤러(ArgoCD, Flux 등)가 **스스로 클러스터를 그 상태로 계속 동기화**한다(pull 방식). 기존 CI/CD는 파이프라인이 클러스터에 직접 `kubectl apply`를 밀어넣는(push) 방식인 것과 대조적.
+
+**핵심 포인트**
+- 🟡 배포 이력이 곧 **Git 커밋 이력**이 되어 감사(audit)가 쉬움 — 롤백도 `git revert` 한 번으로 가능.
+- 🟡 클러스터에 대한 직접 `kubectl` 접근 권한을 좁히고, 모든 변경을 Git PR을 거치게 강제할 수 있어 보안 측면에서도 유리.
+
+**꼬리 질문**
+- "GitOps(pull 방식)와 기존 CI/CD의 push 기반 배포는 뭐가 다른가요?"
+
+## 10. 12-Factor App 핵심 원칙 (일부)
+
+클라우드 네이티브 앱을 만들 때 지켜야 할 원칙 모음. 그중 면접에서 자주 언급되는 몇 가지:
+
+| Factor | 핵심 내용 |
+|--------|-----------|
+| **Config** | 환경마다 달라지는 설정(DB 주소, API 키 등)은 코드에 하드코딩하지 않고 **환경변수**로 분리 |
+| **Backing services** | DB, 캐시, 메시지 큐 등은 **교체 가능한 외부 리소스**로 취급(코드에서 특정 구현에 강결합 X) |
+| **Build, release, run 분리** | 빌드(코드→아티팩트) → 릴리스(아티팩트+설정 결합) → 실행 단계를 명확히 분리해 **같은 빌드를 여러 환경에 재사용** |
+| **Stateless processes** | 프로세스는 상태를 갖지 않음(세션 등은 외부 저장소로) → 어느 인스턴스가 죽어도, 어느 인스턴스가 처리해도 무관 → 수평 확장 용이 |
+| **Disposability** | 빠른 시작 + graceful shutdown(진행 중인 요청 마무리 후 종료) → 오토스케일링/롤링 업데이트와 궁합 |
+| **Logs** | 로그 파일을 직접 관리하지 않고 **stdout으로 스트림** → 외부 로그 수집기(ELK 등)가 처리 |
+
+**핵심 포인트**
+- 🔴 "설정값을 코드에 상수로 박아두고 환경별로 빌드를 따로 한다" ❌ — 12-factor 위반. 같은 빌드 산출물이 환경변수만 다르게 주입돼 여러 환경에서 그대로 돌아가야 함.
+- 🟡 Stateless 원칙을 어기고 세션을 인스턴스 로컬 메모리에 저장하면, 로드밸런서가 다른 인스턴스로 요청을 보내는 순간 세션이 끊김 → K8s 오토스케일링/롤링 업데이트와도 상성이 나쁨.
+
+**꼬리 질문**
+- "Config를 환경변수로 분리해야 하는 이유는?"
+- "Stateless 원칙이 K8s의 오토스케일링/롤링 업데이트와 왜 잘 맞나요?"
 
 ---
 
