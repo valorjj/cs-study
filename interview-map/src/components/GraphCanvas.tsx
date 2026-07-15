@@ -77,6 +77,7 @@ function Inner({ nodes, edges, adjacency }: {
   return (
     <>
       <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
+        proOptions={{ hideAttribution: true }}
         minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick}
         onPaneClick={() => { select(null); setMenu(null) }}
         onNodeContextMenu={(e, node) => { e.preventDefault(); if (isTouch) return; setMenu({ x: e.clientX, y: e.clientY, nodeId: node.id }) }}
