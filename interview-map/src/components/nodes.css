@@ -1,9 +1,10 @@
 .km-node { display: flex; flex-direction: column; align-items: center; gap: 4px;
   border-radius: 14px; padding: 12px 16px; border: 2px solid var(--c);
   font-family: system-ui, sans-serif; color: var(--text); min-width: 96px; }
-.km-domain { padding: 18px 22px; font-size: 15px; font-weight: 700; }
+.km-domain { padding: 20px 26px; font-size: 16px; font-weight: 700; min-width: 180px; }
 .km-concept { padding: 10px 14px; font-size: 13px; }
 .km-icon { display: flex; align-items: center; justify-content: center; }
+.km-domain .km-icon { font-size: 30px; }
 .km-studied { background: var(--c); color: var(--node-studied-text); }
 .km-learning { background: transparent; }
 .km-todo { border-color: var(--border-strong); color: var(--text-dim); opacity: 0.7; }
