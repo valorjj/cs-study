@@ -1,8 +1,8 @@
 import {
-  ReactFlow, ReactFlowProvider, Background, Controls, useViewport,
+  ReactFlow, ReactFlowProvider, Background, Controls, useViewport, useReactFlow,
   type Node, type Edge, type NodeMouseHandler,
 } from '@xyflow/react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { DomainNode } from './DomainNode'
 import { ConceptNode } from './ConceptNode'
 import { visibleLevels } from '../hooks/useSemanticZoom'
@@ -17,10 +17,20 @@ function Inner({ nodes, edges, adjacency }: {
   nodes: Node[]; edges: Edge[]; adjacency: Map<string, string[]>
 }) {
   const { zoom } = useViewport()
+  const { setCenter } = useReactFlow()
   const selectedId = useGraphStore((s) => s.selectedId)
   const select = useGraphStore((s) => s.select)
+  const focusRequestId = useGraphStore((s) => s.focusRequestId)
+  const clearFocusRequest = useGraphStore((s) => s.clearFocusRequest)
   const { focused, isActive } = useMemo(
     () => computeFocus(selectedId, adjacency), [selectedId, adjacency])
+
+  useEffect(() => {
+    if (!focusRequestId) return
+    const target = nodes.find((n) => n.id === focusRequestId)
+    if (target) setCenter(target.position.x, target.position.y, { zoom: 1.5, duration: 600 })
+    clearFocusRequest()
+  }, [focusRequestId, nodes, setCenter, clearFocusRequest])
 
   const levelKey = visibleLevels(zoom).join(',')
   const visibleNodes = useMemo(() => {

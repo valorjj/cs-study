@@ -5,6 +5,7 @@ import type { GraphData } from './graph/types'
 import { toFlowNodes, toFlowEdges, buildAdjacency } from './lib/graphUtils'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
+import { SearchBar } from './components/SearchBar'
 
 const data = graphData as GraphData
 
@@ -17,6 +18,7 @@ export default function App() {
     <>
       <GraphCanvas nodes={nodes} edges={edges} />
       <NotePanel nodesById={nodesById} neighbors={neighbors} />
+      <SearchBar nodes={data.nodes} />
     </>
   )
 }
