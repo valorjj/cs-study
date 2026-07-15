@@ -156,7 +156,7 @@
         "트랜잭션",
         "정규화"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 120,
         "y": 560
@@ -467,11 +467,12 @@
         "ACID",
         "격리수준"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 120,
         "y": 700
-      }
+      },
+      "noteRef": "notes/04-database/database-core.md#d2-transaction-and-acid"
     },
     {
       "id": "net-http",
@@ -622,6 +623,82 @@
       "position": {
         "x": 200,
         "y": -230
+      }
+    },
+    {
+      "id": "db-index",
+      "label": "Index",
+      "domain": "database",
+      "level": 1,
+      "icon": "🔎",
+      "summary": "B-Tree 인덱스, 클러스터드",
+      "keywords": [
+        "B-Tree",
+        "커버링",
+        "복합인덱스"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d1-database-index",
+      "position": {
+        "x": -40,
+        "y": 700
+      }
+    },
+    {
+      "id": "db-lock",
+      "label": "Lock & MVCC",
+      "domain": "database",
+      "level": 1,
+      "icon": "🗝️",
+      "summary": "공유/배타 락, 낙관/비관, MVCC",
+      "keywords": [
+        "MVCC",
+        "낙관적락",
+        "비관적락"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d3-lock-and-mvcc",
+      "position": {
+        "x": 60,
+        "y": 700
+      }
+    },
+    {
+      "id": "db-normalization",
+      "label": "Normalization",
+      "domain": "database",
+      "level": 1,
+      "icon": "🧮",
+      "summary": "정규화 1~3NF, 반정규화",
+      "keywords": [
+        "정규화",
+        "3NF",
+        "반정규화"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d4-normalization",
+      "position": {
+        "x": 200,
+        "y": 700
+      }
+    },
+    {
+      "id": "db-nosql",
+      "label": "SQL vs NoSQL / Redis",
+      "domain": "database",
+      "level": 1,
+      "icon": "🧱",
+      "summary": "RDB vs NoSQL, Redis 캐시",
+      "keywords": [
+        "NoSQL",
+        "Redis",
+        "캐시"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d5-sql-vs-nosql-and-redis",
+      "position": {
+        "x": 280,
+        "y": 700
       }
     }
   ],
@@ -782,6 +859,32 @@
       "target": "os-io",
       "type": "crosslink",
       "label": "소켓 I/O"
+    },
+    {
+      "source": "database",
+      "target": "db-index",
+      "type": "hierarchy"
+    },
+    {
+      "source": "database",
+      "target": "db-lock",
+      "type": "hierarchy"
+    },
+    {
+      "source": "database",
+      "target": "db-normalization",
+      "type": "hierarchy"
+    },
+    {
+      "source": "database",
+      "target": "db-nosql",
+      "type": "hierarchy"
+    },
+    {
+      "source": "db-lock",
+      "target": "os-sync",
+      "type": "crosslink",
+      "label": "동시성 제어"
     }
   ]
 }

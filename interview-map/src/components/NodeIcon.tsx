@@ -5,6 +5,7 @@ import {
   LuRefreshCw, LuReceipt, LuDatabase, LuLock, LuMonitor, LuMemoryStick, LuLockKeyhole,
   LuArrowDownUp, LuGlobe, LuRadio, LuCpu, LuZap, LuBinary, LuBuilding2, LuScale, LuCircle,
   LuGitFork, LuCalendarClock, LuLayers, LuArrowRightLeft, LuShieldCheck, LuServer,
+  LuListTree, LuKeyRound, LuTable2, LuBoxes,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -23,7 +24,11 @@ const BY_ID: Record<string, IconType> = {
   spring: SiSpring,
   'spring-tx': LuReceipt,
   database: LuDatabase,
+  'db-index': LuListTree,
   'db-tx': LuLock,
+  'db-lock': LuKeyRound,
+  'db-normalization': LuTable2,
+  'db-nosql': LuBoxes,
   os: LuMonitor,
   'os-process': LuGitFork,
   'os-scheduling': LuCalendarClock,
