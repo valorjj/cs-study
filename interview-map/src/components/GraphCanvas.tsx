@@ -53,14 +53,19 @@ function Inner({ nodes, edges, adjacency }: {
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges
-    .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+    .filter((e) => {
+      if (!visibleIds.has(e.source) || !visibleIds.has(e.target)) return false
+      const isCross = (e.data as { type?: string } | undefined)?.type === 'crosslink'
+      if (isCross) return isActive && focused.has(e.source) && focused.has(e.target)
+      return true
+    })
     .map((e) => {
       const onFocus = isActive && focused.has(e.source) && focused.has(e.target)
       const isCross = (e.data as { type?: string } | undefined)?.type === 'crosslink'
       return {
         ...e,
         label: onFocus && isCross ? (e.data as { label?: string }).label : undefined,
-        style: { opacity: isActive && !onFocus ? 0.1 : 1 },
+        style: { ...(e.style ?? {}), opacity: isActive && !onFocus ? 0.12 : 1 },
       }
     }), [edges, visibleIds, isActive, focused])
 
