@@ -4,6 +4,7 @@ import {
   LuSettings, LuTrash2, LuFlame, LuPackage, LuBrain, LuLibrary, LuShuffle, LuWaves,
   LuRefreshCw, LuReceipt, LuDatabase, LuLock, LuMonitor, LuMemoryStick, LuLockKeyhole,
   LuArrowDownUp, LuGlobe, LuRadio, LuCpu, LuZap, LuBinary, LuBuilding2, LuScale, LuCircle,
+  LuGitFork, LuCalendarClock,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -24,6 +25,8 @@ const BY_ID: Record<string, IconType> = {
   database: LuDatabase,
   'db-tx': LuLock,
   os: LuMonitor,
+  'os-process': LuGitFork,
+  'os-scheduling': LuCalendarClock,
   'os-memory': LuMemoryStick,
   'os-sync': LuLockKeyhole,
   'os-io': LuArrowDownUp,
