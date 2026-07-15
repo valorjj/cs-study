@@ -1,34 +1,35 @@
 .np-panel { position: fixed; top: 0; right: 0; width: min(520px, 92vw); height: 100vh;
-  background: #0f172a; border-left: 1px solid #1e293b; color: #e2e8f0;
+  background: var(--bg-panel); border-left: 1px solid var(--border); color: var(--text);
   overflow-y: auto; padding: 24px 28px 60px; z-index: 10; font-family: system-ui, sans-serif;
   box-shadow: -12px 0 32px rgba(0,0,0,0.4); }
 .np-close { position: absolute; top: 14px; right: 18px; background: none; border: none;
-  color: #94a3b8; font-size: 26px; cursor: pointer; line-height: 1; }
+  color: var(--text-dim); font-size: 26px; cursor: pointer; line-height: 1; }
 .np-head { display: flex; align-items: center; gap: 10px; border-left: 4px solid; padding-left: 12px; }
 .np-head h2 { margin: 0; font-size: 20px; }
 .np-icon { display: flex; align-items: center; justify-content: center; }
 .np-status { margin-left: auto; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
-  padding: 2px 8px; border-radius: 999px; background: #1e293b; color: #94a3b8; }
+  padding: 2px 8px; border-radius: 999px; background: var(--bg-elev); color: var(--text-dim); }
 .np-status[data-status="studied"] { background: #14532d; color: #bbf7d0; }
 .np-status[data-status="learning"] { background: #1e3a8a; color: #bfdbfe; }
-.np-summary { color: #cbd5e1; margin: 14px 0; }
+.np-summary { color: var(--text); margin: 14px 0; }
 .np-study-toggle { display: inline-block; margin-bottom: 12px; padding: 6px 12px;
-  border-radius: 8px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--bg-elev); color: var(--text);
   cursor: pointer; font-size: 13px; }
 .np-study-toggle[data-visited="true"] { background: #14532d; border-color: #22c55e; color: #bbf7d0; }
 .np-keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.np-keywords span { font-size: 12px; background: #1e293b; padding: 3px 9px; border-radius: 6px; color: #cbd5e1; }
-.np-related h3, .np-note h3 { font-size: 13px; color: #94a3b8; margin: 20px 0 8px; }
+.np-keywords span { font-size: 12px; background: var(--bg-elev); padding: 3px 9px; border-radius: 6px; color: var(--text); }
+.np-related h3, .np-note h3 { font-size: 13px; color: var(--text-dim); margin: 20px 0 8px; }
 .np-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.np-chip { display: inline-flex; align-items: center; gap: 6px; background: #0b1220; border: 1px solid; border-radius: 10px; padding: 6px 10px;
-  color: #e2e8f0; cursor: pointer; font-size: 13px; }
-.np-chip:hover { background: #1e293b; }
-.np-note { margin-top: 20px; border-top: 1px solid #1e293b; padding-top: 16px; line-height: 1.7; }
-.np-note h1, .np-note h2 { font-size: 17px; margin: 18px 0 8px; scroll-margin-top: 16px; }
-.np-note h3 { color: #e2e8f0; }
+.np-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid; border-radius: 10px; padding: 6px 10px;
+  color: var(--text); cursor: pointer; font-size: 13px; }
+.np-chip:hover { background: var(--bg-elev); }
+.np-note { margin-top: 20px; border-top: 1px solid var(--border); padding-top: 16px; line-height: 1.7; color: var(--text); }
+.np-note h1, .np-note h2 { font-size: 17px; margin: 18px 0 8px; scroll-margin-top: 16px; color: var(--text-strong); }
+.np-note h3 { color: var(--text-strong); }
+.np-note p, .np-note li { color: var(--text); }
 .np-note table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; display: block; overflow-x: auto; }
-.np-note th, .np-note td { border: 1px solid #334155; padding: 6px 10px; }
-.np-note code { background: #1e293b; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
-.np-note pre { background: #1e293b; padding: 12px; border-radius: 8px; overflow-x: auto; }
+.np-note th, .np-note td { border: 1px solid var(--border); padding: 6px 10px; }
+.np-note code { background: var(--bg-elev); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+.np-note pre { background: var(--bg-elev); padding: 12px; border-radius: 8px; overflow-x: auto; }
 .np-note pre code { background: none; padding: 0; }
-.np-dim { color: #64748b; }
+.np-dim { color: var(--text-dim); }

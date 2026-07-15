@@ -10,6 +10,7 @@ import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
 import { mergeStatus } from '../hooks/useProgress'
+import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
 
 const nodeTypes = { domain: DomainNode, concept: ConceptNode }
@@ -25,6 +26,8 @@ function Inner({ nodes, edges, adjacency }: {
   const clearFocusRequest = useGraphStore((s) => s.clearFocusRequest)
   const visited = useGraphStore((s) => s.visited)
   const trackingOn = useGraphStore((s) => s.trackingOn)
+  const themeId = useGraphStore((s) => s.themeId)
+  const grid = tokensOf(themeId).grid
   const { focused, isActive } = useMemo(
     () => computeFocus(selectedId, adjacency), [selectedId, adjacency])
 
@@ -73,7 +76,7 @@ function Inner({ nodes, edges, adjacency }: {
   return (
     <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
       minZoom={0.2} maxZoom={2.5} onNodeClick={onNodeClick} onPaneClick={() => select(null)}>
-      <Background color="#1e293b" gap={24} />
+      <Background color={grid} gap={24} />
       <Controls />
     </ReactFlow>
   )
@@ -85,7 +88,7 @@ export function GraphCanvas({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) 
     return buildAdjacency(edges.map((e) => ({ source: e.source, target: e.target, type: 'hierarchy' as const })))
   }, [edges])
   return (
-    <div style={{ width: '100vw', height: '100vh', background: '#0b1220' }}>
+    <div style={{ width: '100vw', height: '100vh', background: 'var(--bg)' }}>
       <ReactFlowProvider>
         <Inner nodes={nodes} edges={edges} adjacency={adjacency} />
       </ReactFlowProvider>

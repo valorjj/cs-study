@@ -8,11 +8,14 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { SearchBar } from './components/SearchBar'
 import { ProgressLegend } from './components/ProgressLegend'
+import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { useProgressPersistence } from './hooks/useProgress'
+import { useThemeEffect } from './hooks/useTheme'
 
 const data = graphData as GraphData
 
 export default function App() {
+  useThemeEffect()
   useProgressPersistence()
   const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])
   const edges = useMemo(() => toFlowEdges(data.edges), [])
@@ -24,6 +27,7 @@ export default function App() {
       <NotePanel nodesById={nodesById} neighbors={neighbors} />
       <SearchBar nodes={data.nodes} />
       <ProgressLegend nodes={data.nodes} />
+      <ThemeSwitcher />
     </>
   )
 }
