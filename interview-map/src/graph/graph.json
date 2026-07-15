@@ -271,7 +271,8 @@
       "position": {
         "x": -260,
         "y": 20
-      }
+      },
+      "noteRef": "notes/01-java-jvm/generics-stream.md"
     },
     {
       "id": "jvm-classloader",
@@ -1217,6 +1218,462 @@
         "x": 0,
         "y": 0
       }
+    },
+    {
+      "id": "os-deadlock",
+      "label": "데드락",
+      "domain": "os",
+      "level": 2,
+      "icon": "LuLock",
+      "summary": "교착상태 4조건과 예방·회피·탐지",
+      "keywords": [
+        "교착상태",
+        "4조건",
+        "은행원 알고리즘"
+      ],
+      "status": "learning",
+      "noteRef": "notes/02-os/os-core.md#o6-데드락-deadlock",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "os-mutex-sem",
+      "label": "뮤텍스·세마포어",
+      "domain": "os",
+      "level": 2,
+      "icon": "LuLockKeyhole",
+      "summary": "상호배제 도구 비교",
+      "keywords": [
+        "mutex",
+        "semaphore",
+        "monitor"
+      ],
+      "status": "learning",
+      "noteRef": "notes/02-os/os-core.md#o7-뮤텍스--세마포어--모니터",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "os-paging",
+      "label": "페이징·페이지교체",
+      "domain": "os",
+      "level": 2,
+      "icon": "LuLayers",
+      "summary": "페이지 폴트와 교체 알고리즘",
+      "keywords": [
+        "페이징",
+        "LRU",
+        "page fault"
+      ],
+      "status": "learning",
+      "noteRef": "notes/02-os/os-core.md#o8-페이징과-페이지-교체",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "net-handshake",
+      "label": "핸드셰이크",
+      "domain": "network",
+      "level": 2,
+      "icon": "LuArrowRightLeft",
+      "summary": "연결 수립·해제 과정",
+      "keywords": [
+        "3-way",
+        "4-way",
+        "TIME_WAIT"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n6-tcp-핸드셰이크-3-way--4-way",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "net-flowcc",
+      "label": "흐름·혼잡 제어",
+      "domain": "network",
+      "level": 2,
+      "icon": "LuWaves",
+      "summary": "슬라이딩 윈도우와 혼잡 제어",
+      "keywords": [
+        "흐름제어",
+        "혼잡제어",
+        "AIMD"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n7-흐름-제어와-혼잡-제어",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "net-httpver",
+      "label": "HTTP 버전 발전",
+      "domain": "network",
+      "level": 2,
+      "icon": "LuRadio",
+      "summary": "HTTP/1.1→2→3 진화",
+      "keywords": [
+        "HTTP/2",
+        "멀티플렉싱",
+        "QUIC"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n8-http-버전-발전-11--2--3",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "db-btree",
+      "label": "B+Tree 구조",
+      "domain": "database",
+      "level": 2,
+      "icon": "LuListTree",
+      "summary": "인덱스 자료구조 원리",
+      "keywords": [
+        "B-Tree",
+        "B+Tree",
+        "리프노드"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d6-b-tree--btree-인덱스-구조",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "db-clustered",
+      "label": "클러스터드 인덱스",
+      "domain": "database",
+      "level": 2,
+      "icon": "LuTable2",
+      "summary": "물리 정렬과 보조 인덱스",
+      "keywords": [
+        "클러스터드",
+        "논클러스터드",
+        "PK"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d7-클러스터드-vs-논클러스터드-인덱스",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "db-isolation",
+      "label": "격리수준·이상현상",
+      "domain": "database",
+      "level": 2,
+      "icon": "LuLock",
+      "summary": "격리수준별 이상현상",
+      "keywords": [
+        "격리수준",
+        "팬텀리드",
+        "더티리드"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d8-트랜잭션-격리수준과-이상현상",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "db-mvcc",
+      "label": "MVCC",
+      "domain": "database",
+      "level": 2,
+      "icon": "LuLayers",
+      "summary": "다중버전 동시성 제어",
+      "keywords": [
+        "MVCC",
+        "스냅샷",
+        "언두로그"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#d9-mvcc와-잠금",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spring-tx-propagation",
+      "label": "트랜잭션 전파",
+      "domain": "spring",
+      "level": 2,
+      "icon": "LuReceipt",
+      "summary": "전파 옵션과 롤백 규칙",
+      "keywords": [
+        "propagation",
+        "REQUIRES_NEW",
+        "롤백"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s6-트랜잭션-전파와-롤백",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spring-proxy",
+      "label": "프록시·self-invocation",
+      "domain": "spring",
+      "level": 2,
+      "icon": "LuScissors",
+      "summary": "프록시 방식과 내부호출 함정",
+      "keywords": [
+        "JDK 프록시",
+        "CGLIB",
+        "self-invocation"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s7-aop-프록시-jdkcglib와-self-invocation",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-microtask",
+      "label": "태스크 vs 마이크로태스크",
+      "domain": "javascript",
+      "level": 2,
+      "icon": "LuRefreshCw",
+      "summary": "큐 우선순위와 실행 순서",
+      "keywords": [
+        "microtask",
+        "Promise",
+        "setTimeout"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j6-태스크-큐-vs-마이크로태스크-큐",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "js-this",
+      "label": "this 바인딩",
+      "domain": "javascript",
+      "level": 2,
+      "icon": "LuGitBranch",
+      "summary": "호출 방식별 this 결정",
+      "keywords": [
+        "this",
+        "bind",
+        "화살표함수"
+      ],
+      "status": "learning",
+      "noteRef": "notes/11-javascript/javascript-core.md#j7-this-바인딩-규칙",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-bst",
+      "label": "BST·균형트리",
+      "domain": "dsa",
+      "level": 2,
+      "icon": "LuNetwork",
+      "summary": "BST와 자가균형 트리",
+      "keywords": [
+        "BST",
+        "AVL",
+        "레드블랙"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a6-이진탐색트리와-균형-트리",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-heap",
+      "label": "힙",
+      "domain": "dsa",
+      "level": 2,
+      "icon": "LuTriangle",
+      "summary": "우선순위 큐와 힙",
+      "keywords": [
+        "힙",
+        "우선순위큐",
+        "heapify"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a7-힙-heap",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "dsa-compare-sort",
+      "label": "비교 정렬",
+      "domain": "dsa",
+      "level": 2,
+      "icon": "LuArrowDownWideNarrow",
+      "summary": "대표 비교 정렬 비교",
+      "keywords": [
+        "퀵정렬",
+        "머지정렬",
+        "안정성"
+      ],
+      "status": "learning",
+      "noteRef": "notes/09-dsa/dsa-core.md#a8-비교-정렬-퀵--머지--힙",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-reconciliation",
+      "label": "Reconciliation",
+      "domain": "react",
+      "level": 2,
+      "icon": "LuRepeat",
+      "summary": "재조정과 diff 알고리즘",
+      "keywords": [
+        "reconciliation",
+        "key",
+        "diffing"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r5-reconciliation과-diffing",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "react-useeffect",
+      "label": "useEffect 의존성",
+      "domain": "react",
+      "level": 2,
+      "icon": "LuAnchor",
+      "summary": "의존성 배열과 stale closure",
+      "keywords": [
+        "useEffect",
+        "의존성배열",
+        "클로저"
+      ],
+      "status": "learning",
+      "noteRef": "notes/10-react/react-core.md#r6-useeffect-의존성과-클로저-함정",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-cache-strategy",
+      "label": "캐시 전략",
+      "domain": "systemdesign",
+      "level": 2,
+      "icon": "LuArchive",
+      "summary": "캐시 패턴과 스탬피드 방지",
+      "keywords": [
+        "look-aside",
+        "write-through",
+        "스탬피드"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd6-캐시-전략과-스탬피드",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-replication",
+      "label": "복제 vs 샤딩",
+      "domain": "systemdesign",
+      "level": 2,
+      "icon": "LuServer",
+      "summary": "읽기 확장과 쓰기 확장",
+      "keywords": [
+        "replication",
+        "sharding",
+        "복제지연"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd7-복제replication-vs-샤딩sharding",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hw-coherence",
+      "label": "캐시 일관성",
+      "domain": "hw",
+      "level": 2,
+      "icon": "LuZap",
+      "summary": "멀티코어 캐시 일관성",
+      "keywords": [
+        "MESI",
+        "캐시일관성",
+        "false sharing"
+      ],
+      "status": "learning",
+      "noteRef": "notes/08-hardware/hardware-core.md#h5-캐시-일관성-mesi",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-k8s-objects",
+      "label": "K8s 오브젝트",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuBoxes",
+      "summary": "Pod/Deployment/Service",
+      "keywords": [
+        "Pod",
+        "Deployment",
+        "Service"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do5-k8s-오브젝트-pod--deployment--service",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-probe",
+      "label": "프로브·오토스케일",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuActivity",
+      "summary": "프로브와 HPA",
+      "keywords": [
+        "liveness",
+        "readiness",
+        "HPA"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do6-헬스-프로브와-오토스케일링hpa",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
     }
   ],
   "edges": [
@@ -1584,6 +2041,141 @@
       "target": "js-eventloop",
       "type": "crosslink",
       "label": "비동기 렌더"
+    },
+    {
+      "source": "os-sync",
+      "target": "os-deadlock",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-sync",
+      "target": "os-mutex-sem",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-memory",
+      "target": "os-paging",
+      "type": "hierarchy"
+    },
+    {
+      "source": "net-tcp",
+      "target": "net-handshake",
+      "type": "hierarchy"
+    },
+    {
+      "source": "net-tcp",
+      "target": "net-flowcc",
+      "type": "hierarchy"
+    },
+    {
+      "source": "net-http",
+      "target": "net-httpver",
+      "type": "hierarchy"
+    },
+    {
+      "source": "db-index",
+      "target": "db-btree",
+      "type": "hierarchy"
+    },
+    {
+      "source": "db-index",
+      "target": "db-clustered",
+      "type": "hierarchy"
+    },
+    {
+      "source": "db-tx",
+      "target": "db-isolation",
+      "type": "hierarchy"
+    },
+    {
+      "source": "db-tx",
+      "target": "db-mvcc",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-tx",
+      "target": "spring-tx-propagation",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-aop",
+      "target": "spring-proxy",
+      "type": "hierarchy"
+    },
+    {
+      "source": "js-eventloop",
+      "target": "js-microtask",
+      "type": "hierarchy"
+    },
+    {
+      "source": "js-prototype",
+      "target": "js-this",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-tree",
+      "target": "dsa-bst",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-tree",
+      "target": "dsa-heap",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-sort",
+      "target": "dsa-compare-sort",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react-render",
+      "target": "react-reconciliation",
+      "type": "hierarchy"
+    },
+    {
+      "source": "react-hooks",
+      "target": "react-useeffect",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sd-cache",
+      "target": "sd-cache-strategy",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sd-dbscale",
+      "target": "sd-replication",
+      "type": "hierarchy"
+    },
+    {
+      "source": "hw-cache",
+      "target": "hw-coherence",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-k8s-objects",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-probe",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-mutex-sem",
+      "target": "concurrency",
+      "type": "crosslink"
+    },
+    {
+      "source": "spring-tx-propagation",
+      "target": "db-isolation",
+      "type": "crosslink"
+    },
+    {
+      "source": "react-useeffect",
+      "target": "js-closure",
+      "type": "crosslink"
     }
   ]
 }
