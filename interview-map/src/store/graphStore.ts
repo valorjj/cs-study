@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DEFAULT_THEME } from '../styles/themes'
 
 interface GraphState {
   selectedId: string | null
@@ -10,6 +11,8 @@ interface GraphState {
   toggleVisited: (id: string) => void
   trackingOn: boolean
   setTracking: (b: boolean) => void
+  themeId: string
+  setTheme: (id: string) => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -22,4 +25,6 @@ export const useGraphStore = create<GraphState>((set) => ({
   toggleVisited: (id) => set((s) => ({ visited: { ...s.visited, [id]: !s.visited[id] } })),
   trackingOn: false,
   setTracking: (b) => set({ trackingOn: b }),
+  themeId: DEFAULT_THEME,
+  setTheme: (id) => set({ themeId: id }),
 }))

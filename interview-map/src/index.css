@@ -1,4 +1,12 @@
 :root {
+  --bg:#0b1220; --bg-panel:#0f172a; --bg-elev:#1e293b;
+  --text:#e6edf6; --text-dim:#94a3b8; --text-strong:#f8fafc;
+  --border:#2b3a4f; --border-strong:#475569;
+  --edge:#3a4a63; --edge-cross:#7c8aa5; --grid:#1c2738;
+  --accent:#3b82f6; --node-studied-text:#0b1220;
+}
+
+:root {
   --text: #6b6375;
   --text-h: #08060d;
   --bg: #fff;
@@ -50,10 +58,13 @@
   }
 }
 
-#root { width: 100%; height: 100vh; margin: 0; padding: 0; }
+#root { width: 100%; height: 100vh; margin: 0; padding: 0; background: var(--bg); color: var(--text); }
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  transition: background-color 0.2s;
 }
 
 h1,
