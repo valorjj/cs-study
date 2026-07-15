@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 import graphData from './graph/graph.json'
 import type { GraphData } from './graph/types'
 import { toFlowNodes, toFlowEdges, buildAdjacency } from './lib/graphUtils'
+import { layoutNodes } from './lib/layout'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { SearchBar } from './components/SearchBar'
@@ -13,7 +14,7 @@ const data = graphData as GraphData
 
 export default function App() {
   useProgressPersistence()
-  const nodes = useMemo(() => toFlowNodes(data.nodes), [])
+  const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])
   const edges = useMemo(() => toFlowEdges(data.edges), [])
   const nodesById = useMemo(() => new Map(data.nodes.map((n) => [n.id, n])), [])
   const neighbors = useMemo(() => buildAdjacency(data.edges), [])

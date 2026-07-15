@@ -19,10 +19,12 @@ describe('graphUtils', () => {
     expect(flow[1].position).toEqual({ x: 10, y: 20 })
     expect((flow[0].data as any).node.id).toBe('java')
   })
-  it('toFlowEdges marks crosslink as animated', () => {
+  it('toFlowEdges styles hierarchy as smoothstep and crosslink as straight dashed', () => {
     const flow = toFlowEdges(edges)
     expect(flow[0].animated).toBe(false)
-    expect(flow[1].animated).toBe(true)
+    expect(flow[1].animated).toBe(false)
+    expect(flow[0].type).toBe('smoothstep')
+    expect(flow[1].type).toBe('straight')
     expect(flow[1].id).toBe('jvm-os-memory')
   })
   it('buildAdjacency is bidirectional', () => {
