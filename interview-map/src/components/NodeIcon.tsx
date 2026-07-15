@@ -4,7 +4,7 @@ import {
   LuSettings, LuTrash2, LuFlame, LuPackage, LuBrain, LuLibrary, LuShuffle, LuWaves,
   LuRefreshCw, LuReceipt, LuDatabase, LuLock, LuMonitor, LuMemoryStick, LuLockKeyhole,
   LuArrowDownUp, LuGlobe, LuRadio, LuCpu, LuZap, LuBinary, LuBuilding2, LuScale, LuCircle,
-  LuGitFork, LuCalendarClock,
+  LuGitFork, LuCalendarClock, LuLayers, LuArrowRightLeft, LuShieldCheck, LuServer,
 } from 'react-icons/lu'
 
 const BY_ID: Record<string, IconType> = {
@@ -31,7 +31,11 @@ const BY_ID: Record<string, IconType> = {
   'os-sync': LuLockKeyhole,
   'os-io': LuArrowDownUp,
   network: LuGlobe,
+  'net-osi': LuLayers,
+  'net-tcp': LuArrowRightLeft,
   'net-http': LuRadio,
+  'net-https': LuShieldCheck,
+  'net-dns': LuServer,
   hw: LuCpu,
   'hw-cache': LuZap,
   dsa: LuBinary,

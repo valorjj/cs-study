@@ -48,7 +48,7 @@
         "HTTP",
         "소켓"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 40,
         "y": -380
@@ -485,11 +485,12 @@
         "요청",
         "응답"
       ],
-      "status": "todo",
+      "status": "learning",
       "position": {
         "x": 40,
         "y": -230
-      }
+      },
+      "noteRef": "notes/03-network/network-core.md#n3-http"
     },
     {
       "id": "sd-lb",
@@ -545,6 +546,82 @@
       "position": {
         "x": -140,
         "y": -250
+      }
+    },
+    {
+      "id": "net-osi",
+      "label": "OSI / TCP-IP",
+      "domain": "network",
+      "level": 1,
+      "icon": "🗂️",
+      "summary": "7계층·4계층 모델, 캡슐화",
+      "keywords": [
+        "OSI",
+        "TCP/IP",
+        "캡슐화"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n1-osi-and-tcp-ip-model",
+      "position": {
+        "x": -120,
+        "y": -230
+      }
+    },
+    {
+      "id": "net-tcp",
+      "label": "TCP / UDP",
+      "domain": "network",
+      "level": 1,
+      "icon": "🔀",
+      "summary": "연결/신뢰성, 3-way handshake",
+      "keywords": [
+        "TCP",
+        "UDP",
+        "handshake"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n2-tcp-and-udp",
+      "position": {
+        "x": -40,
+        "y": -230
+      }
+    },
+    {
+      "id": "net-https",
+      "label": "HTTPS / TLS",
+      "domain": "network",
+      "level": 1,
+      "icon": "🔐",
+      "summary": "대칭·비대칭 혼합, 핸드셰이크",
+      "keywords": [
+        "TLS",
+        "대칭키",
+        "인증서"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n4-https-and-tls",
+      "position": {
+        "x": 120,
+        "y": -230
+      }
+    },
+    {
+      "id": "net-dns",
+      "label": "DNS / Request Journey",
+      "domain": "network",
+      "level": 1,
+      "icon": "🧭",
+      "summary": "도메인→IP, 요청 전 과정",
+      "keywords": [
+        "DNS",
+        "TTL",
+        "요청 여정"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#n5-dns-and-the-web-request-journey",
+      "position": {
+        "x": 200,
+        "y": -230
       }
     }
   ],
@@ -679,6 +756,32 @@
       "source": "os",
       "target": "os-scheduling",
       "type": "hierarchy"
+    },
+    {
+      "source": "network",
+      "target": "net-osi",
+      "type": "hierarchy"
+    },
+    {
+      "source": "network",
+      "target": "net-tcp",
+      "type": "hierarchy"
+    },
+    {
+      "source": "network",
+      "target": "net-https",
+      "type": "hierarchy"
+    },
+    {
+      "source": "network",
+      "target": "net-dns",
+      "type": "hierarchy"
+    },
+    {
+      "source": "net-tcp",
+      "target": "os-io",
+      "type": "crosslink",
+      "label": "소켓 I/O"
     }
   ]
 }
