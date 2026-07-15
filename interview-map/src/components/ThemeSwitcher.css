@@ -1,11 +1,21 @@
-.ts { position: fixed; top: 16px; right: 16px; z-index: 20; display: flex; align-items: center;
-  gap: 8px; font-family: system-ui, sans-serif; }
-.ts-label { font-size: 12px; color: var(--text-dim); }
-.ts-select { background: var(--bg-panel); color: var(--text); border: 1px solid var(--border);
-  border-radius: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+.ts { position: fixed; top: 16px; right: 16px; z-index: 20; font-family: system-ui, sans-serif; }
+.ts-btn { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px;
+  border-radius: 10px; border: 1px solid var(--border); background: var(--bg-panel);
+  color: var(--text); cursor: pointer; transition: background 0.12s ease, color 0.12s ease; }
+.ts-btn:hover { background: var(--bg-elev); color: var(--text-strong); }
+.ts-menu { list-style: none; margin: 8px 0 0; padding: 6px; position: absolute; right: 0; top: 100%;
+  min-width: 168px; background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.42); }
+.ts-menu button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: none; border: none; color: var(--text); padding: 8px 10px; border-radius: 8px;
+  cursor: pointer; font-size: 13px; }
+.ts-menu button:hover { background: var(--bg-elev); }
+.ts-menu button[data-active="true"] { color: var(--text-strong); font-weight: 600; }
+.ts-swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid; flex: none; }
+.ts-name { flex: 1; }
+.ts-check { color: var(--accent); flex: none; }
 
 @media (max-width: 768px) {
-  .ts { top: calc(17px + env(safe-area-inset-top)); right: 14px; }
-  .ts-label { display: none; }
-  .ts-select { padding: 9px 10px; font-size: 14px; border-radius: 10px; max-width: 108px; }
+  .ts { top: calc(14px + env(safe-area-inset-top)); right: 14px; }
+  .ts-btn { width: 42px; height: 42px; }
 }
