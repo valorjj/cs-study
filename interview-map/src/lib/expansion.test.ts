@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { visibleL2Ids } from './expansion'
+import { visibleL2Ids, activeParentId, parentIdsWithChildren } from './expansion'
 
 const nodes = [
   { id: 'dsa', level: 0 as const },
@@ -37,5 +37,29 @@ describe('visibleL2Ids', () => {
   })
   it('L0(도메인) 선택 시 빈 집합', () => {
     expect(visibleL2Ids('dsa', nodes, edges)).toEqual(new Set())
+  })
+})
+
+describe('activeParentId', () => {
+  it('null 선택 → null', () => {
+    expect(activeParentId(null, nodes, edges)).toBeNull()
+  })
+  it('L1 선택 → 자기 자신', () => {
+    expect(activeParentId('dsa-tree', nodes, edges)).toBe('dsa-tree')
+  })
+  it('L2 선택 → 그 부모', () => {
+    expect(activeParentId('dsa-bst', nodes, edges)).toBe('dsa-tree')
+  })
+  it('L0 선택 → null', () => {
+    expect(activeParentId('dsa', nodes, edges)).toBeNull()
+  })
+})
+
+describe('parentIdsWithChildren', () => {
+  it('L2 자식을 가진 L1만 포함', () => {
+    expect(parentIdsWithChildren(nodes, edges)).toEqual(new Set(['dsa-tree', 'dsa-sort']))
+  })
+  it('L2 자식이 없는 L1(dsa-bigo)은 제외', () => {
+    expect(parentIdsWithChildren(nodes, edges).has('dsa-bigo')).toBe(false)
   })
 })

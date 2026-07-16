@@ -14,3 +14,9 @@
 .km-icon { display: flex; align-items: center; justify-content: center; }
 .km-domain .km-icon { font-size: 30px; }
 .km-handle { opacity: 0; }
+/* Chevron hint on L1 nodes that have collapsible L2 children */
+.km-chevron { display: flex; align-items: center; justify-content: center;
+  margin-top: 2px; color: var(--c); opacity: 0.7;
+  transition: transform 0.16s ease, opacity 0.12s ease; }
+.km-node:hover .km-chevron { opacity: 1; }
+.km-chevron.is-open { transform: rotate(180deg); opacity: 1; }

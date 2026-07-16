@@ -10,7 +10,7 @@ import { visibleLevels } from '../hooks/useSemanticZoom'
 import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
-import { visibleL2Ids } from '../lib/expansion'
+import { visibleL2Ids, activeParentId, parentIdsWithChildren } from '../lib/expansion'
 import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
 import './controls.css'
@@ -47,9 +47,16 @@ function Inner({ nodes, edges, adjacency }: {
       .filter((e) => (e.data as { type?: string } | undefined)?.type === 'hierarchy')
       .map((e) => ({ source: e.source, target: e.target })),
     [edges])
+  const allNodesList = useMemo(() => [...nodesById.values()], [nodesById])
   const l2Visible = useMemo(
-    () => visibleL2Ids(selectedId, [...nodesById.values()], hierarchyEdges),
-    [selectedId, nodesById, hierarchyEdges])
+    () => visibleL2Ids(selectedId, allNodesList, hierarchyEdges),
+    [selectedId, allNodesList, hierarchyEdges])
+  const parentSet = useMemo(
+    () => parentIdsWithChildren(allNodesList, hierarchyEdges),
+    [allNodesList, hierarchyEdges])
+  const activeParent = useMemo(
+    () => activeParentId(selectedId, allNodesList, hierarchyEdges),
+    [selectedId, allNodesList, hierarchyEdges])
   const visibleNodes = useMemo(() => {
     const lv = levelKey.split(',').map(Number)
     return nodes
@@ -60,9 +67,10 @@ function Inner({ nodes, edges, adjacency }: {
       })
       .map((n) => ({
         ...n,
+        data: { ...n.data, hasChildren: parentSet.has(n.id), expanded: n.id === activeParent },
         style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
       }))
-  }, [nodes, levelKey, isActive, focused, l2Visible])
+  }, [nodes, levelKey, isActive, focused, l2Visible, parentSet, activeParent])
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges
