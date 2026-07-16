@@ -10,6 +10,7 @@ import { visibleLevels } from '../hooks/useSemanticZoom'
 import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
+import { visibleL2Ids } from '../lib/expansion'
 import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
 import './controls.css'
@@ -41,15 +42,27 @@ function Inner({ nodes, edges, adjacency }: {
   }, [focusRequestId, nodes, setCenter, clearFocusRequest])
 
   const levelKey = visibleLevels(zoom).join(',')
+  const hierarchyEdges = useMemo(
+    () => edges
+      .filter((e) => (e.data as { type?: string } | undefined)?.type === 'hierarchy')
+      .map((e) => ({ source: e.source, target: e.target })),
+    [edges])
+  const l2Visible = useMemo(
+    () => visibleL2Ids(selectedId, [...nodesById.values()], hierarchyEdges),
+    [selectedId, nodesById, hierarchyEdges])
   const visibleNodes = useMemo(() => {
     const lv = levelKey.split(',').map(Number)
     return nodes
-      .filter((n) => lv.includes((n.data as { node: GraphNode }).node.level))
+      .filter((n) => {
+        const node = (n.data as { node: GraphNode }).node
+        if (node.level === 2) return l2Visible.has(n.id)
+        return lv.includes(node.level)
+      })
       .map((n) => ({
         ...n,
         style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
       }))
-  }, [nodes, levelKey, isActive, focused])
+  }, [nodes, levelKey, isActive, focused, l2Visible])
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges
@@ -73,7 +86,12 @@ function Inner({ nodes, edges, adjacency }: {
   // skip the related-concepts menu there and rely on tap → panel.
   const isTouch = useMemo(
     () => typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches, [])
-  const onNodeClick: NodeMouseHandler = (_, node) => { select(node.id); setMenu(null) }
+  const onNodeClick: NodeMouseHandler = (_, node) => {
+    const n = nodesById.get(node.id)
+    if (selectedId === node.id && n?.level === 1) select(null)
+    else select(node.id)
+    setMenu(null)
+  }
   return (
     <>
       <ReactFlow nodes={visibleNodes} edges={visibleEdges} nodeTypes={nodeTypes} fitView
