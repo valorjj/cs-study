@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
 
-export type ViewMode = 'graph' | 'list'
+export type ViewMode = 'graph' | 'list' | 'quiz'
 
 interface GraphState {
   selectedId: string | null

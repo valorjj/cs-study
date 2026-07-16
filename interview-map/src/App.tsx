@@ -8,6 +8,7 @@ import { buildTree } from './lib/tree'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { DocsView } from './components/DocsView'
+import { QuizView } from './components/QuizView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { ViewToggle } from './components/ViewToggle'
@@ -28,15 +29,17 @@ export default function App() {
 
   return (
     <>
-      {viewMode === 'graph' ? (
+      {viewMode === 'graph' && (
         <>
           <GraphCanvas nodes={nodes} edges={edges} />
           <NotePanel nodesById={nodesById} neighbors={neighbors} />
         </>
-      ) : (
+      )}
+      {viewMode === 'list' && (
         <DocsView tree={tree} edges={data.edges} nodesById={nodesById} neighbors={neighbors} />
       )}
-      <SearchBar nodes={data.nodes} />
+      {viewMode === 'quiz' && <QuizView nodes={data.nodes} />}
+      {viewMode !== 'quiz' && <SearchBar nodes={data.nodes} />}
       <ThemeSwitcher />
       <ViewToggle />
     </>

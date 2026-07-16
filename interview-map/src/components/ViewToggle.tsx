@@ -1,4 +1,4 @@
-import { LuMap, LuList } from 'react-icons/lu'
+import { LuMap, LuList, LuBrain } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import './ViewToggle.css'
 
@@ -22,6 +22,14 @@ export function ViewToggle() {
         onClick={() => setViewMode('list')}
       >
         <LuList size={15} /> 목록
+      </button>
+      <button
+        role="tab"
+        aria-selected={viewMode === 'quiz'}
+        data-active={viewMode === 'quiz'}
+        onClick={() => setViewMode('quiz')}
+      >
+        <LuBrain size={15} /> 퀴즈
       </button>
     </div>
   )
