@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSlug from 'rehype-slug'
 import rehypeRaw from 'rehype-raw'
 import { useGraphStore } from '../store/graphStore'
-import { parseNoteRef, parseSections } from '../lib/notes'
+import { parseNoteRef, parseSections, extractOutline } from '../lib/notes'
 import { rehypeFoldQA } from '../lib/rehypeFoldQA'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
@@ -13,8 +12,9 @@ import { NodeIcon } from './NodeIcon'
 import './NotePanel.css'
 
 // Note renderer shared by the graph-mode overlay (NotePanel) and the list-mode
-// docs pane (DocsView): fetches the note markdown, splits it into section tabs,
-// renders quiz <details> folds, and shows related-concept (crosslink) chips.
+// docs pane (DocsView): fetches the note markdown, renders the ONE section this
+// node anchors to (the tree/graph handles sibling navigation), plus an outline
+// of that section's sub-headings and related-concept crosslink chips.
 export function NoteView({ node, nodesById, neighbors }: {
   node: GraphNode
   nodesById: Map<string, GraphNode>
@@ -23,9 +23,7 @@ export function NoteView({ node, nodesById, neighbors }: {
   const select = useGraphStore((s) => s.select)
   const [md, setMd] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  // User-picked tab, scoped to a node id so it never bleeds across notes
-  // (all notes share the "핵심-질문-quiz" slug). null → follow the default.
-  const [override, setOverride] = useState<{ id: string; slug: string } | null>(null)
+  const noteRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMd(null)
@@ -47,13 +45,15 @@ export function NoteView({ node, nodesById, neighbors }: {
   const related = (neighbors.get(node.id) ?? []).map((id) => nodesById.get(id)).filter(Boolean) as GraphNode[]
   const sections = parsed?.sections ?? []
 
-  // Default tab (derived synchronously — no post-paint flash): the noteRef
-  // anchor's section if it matches, else the first section.
+  // The one section this node points at (its noteRef anchor), else the first.
   const anchor = node.noteRef ? parseNoteRef(node.noteRef).anchor : null
-  const defaultSlug = (anchor && sections.find((s) => s.slug === anchor)?.slug) || sections[0]?.slug || null
-  const activeSlug = (override && override.id === node.id && sections.some((s) => s.slug === override.slug))
-    ? override.slug : defaultSlug
-  const active = sections.find((s) => s.slug === activeSlug) ?? sections[0]
+  const active = (anchor && sections.find((s) => s.slug === anchor)) || sections[0]
+  const outline = useMemo(() => (active ? extractOutline(active.body) : []), [active])
+
+  const jumpTo = (slug: string) => {
+    const el = noteRef.current?.querySelector(`[id="${slug}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   return (
     <>
@@ -78,22 +78,15 @@ export function NoteView({ node, nodesById, neighbors }: {
           </div>
         )}
       </div>
-      {sections.length > 1 && (
-        <nav className="np-tabs" aria-label="노트 섹션">
-          {sections.map((s) => (
-            <button
-              key={s.slug}
-              className="np-tab"
-              data-active={s.slug === active?.slug}
-              style={{ '--c': color } as CSSProperties}
-              onClick={() => setOverride({ id: node.id, slug: s.slug })}
-            >
-              {s.heading}
-            </button>
+      {outline.length >= 2 && (
+        <nav className="np-outline" aria-label="섹션 목차" style={{ ['--c' as string]: color }}>
+          {outline.map((o) => (
+            <button key={o.slug} className="np-outline-item" data-sub={o.depth === 3}
+              onClick={() => jumpTo(o.slug)}>{o.text}</button>
           ))}
         </nav>
       )}
-      <div className="np-note" key={`${node.id}:${active?.slug ?? 'none'}`}>
+      <div className="np-note" ref={noteRef} key={`${node.id}:${active?.slug ?? 'none'}`}>
         {loading && <p className="np-dim">노트 불러오는 중…</p>}
         {!loading && active && (
           <>

@@ -16,7 +16,8 @@
       "position": {
         "x": -820,
         "y": -360
-      }
+      },
+      "noteRef": "notes/08-hardware/hardware-core.md#핵심-질문-quiz"
     },
     {
       "id": "os",
@@ -34,7 +35,8 @@
       "position": {
         "x": -420,
         "y": -380
-      }
+      },
+      "noteRef": "notes/02-os/os-core.md#핵심-질문-quiz"
     },
     {
       "id": "network",
@@ -52,7 +54,8 @@
       "position": {
         "x": 40,
         "y": -380
-      }
+      },
+      "noteRef": "notes/03-network/network-core.md#핵심-질문-quiz"
     },
     {
       "id": "java",
@@ -70,7 +73,8 @@
       "position": {
         "x": -420,
         "y": 120
-      }
+      },
+      "noteRef": "notes/01-java-jvm/jvm-memory-gc.md#핵심-질문-quiz"
     },
     {
       "id": "javascript",
@@ -88,7 +92,8 @@
       "position": {
         "x": 260,
         "y": -80
-      }
+      },
+      "noteRef": "notes/11-javascript/javascript-core.md#핵심-질문-quiz"
     },
     {
       "id": "dsa",
@@ -106,7 +111,8 @@
       "position": {
         "x": -860,
         "y": 140
-      }
+      },
+      "noteRef": "notes/09-dsa/dsa-core.md#핵심-질문-quiz"
     },
     {
       "id": "spring",
@@ -124,7 +130,8 @@
       "position": {
         "x": -420,
         "y": 560
-      }
+      },
+      "noteRef": "notes/05-spring/spring-core.md#핵심-질문-quiz"
     },
     {
       "id": "react",
@@ -142,7 +149,8 @@
       "position": {
         "x": 440,
         "y": 320
-      }
+      },
+      "noteRef": "notes/10-react/react-core.md#핵심-질문-quiz"
     },
     {
       "id": "database",
@@ -160,7 +168,8 @@
       "position": {
         "x": 120,
         "y": 560
-      }
+      },
+      "noteRef": "notes/04-database/database-core.md#핵심-질문-quiz"
     },
     {
       "id": "systemdesign",
@@ -178,7 +187,8 @@
       "position": {
         "x": 560,
         "y": -380
-      }
+      },
+      "noteRef": "notes/06-system-design/system-design-core.md#핵심-질문-quiz"
     },
     {
       "id": "devops",
@@ -196,7 +206,8 @@
       "position": {
         "x": 860,
         "y": 120
-      }
+      },
+      "noteRef": "notes/07-devops/devops-core.md#핵심-질문-quiz"
     },
     {
       "id": "jvm",
