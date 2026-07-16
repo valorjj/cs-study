@@ -8,7 +8,10 @@ describe('visibleLevels', () => {
   it('shows domains + major at mid zoom', () => {
     expect(visibleLevels(0.8)).toEqual([0, 1])
   })
-  it('shows all levels when zoomed in', () => {
-    expect(visibleLevels(1.5)).toEqual([0, 1, 2])
+  it('does NOT auto-reveal L2 even when zoomed in', () => {
+    expect(visibleLevels(1.5)).toEqual([0, 1])
+  })
+  it('boundary at 0.6 shows major', () => {
+    expect(visibleLevels(0.6)).toEqual([0, 1])
   })
 })
