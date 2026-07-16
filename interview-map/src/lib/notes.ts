@@ -1,4 +1,4 @@
-import { slug } from 'github-slugger'
+import GithubSlugger, { slug } from 'github-slugger'
 
 export function parseNoteRef(ref: string): { path: string; anchor: string | null } {
   const [rawPath, anchor] = ref.split('#')
@@ -61,4 +61,32 @@ export function parseSections(md: string): ParsedNote {
   }
   flush()
   return { title, sections }
+}
+
+export interface OutlineItem {
+  depth: 2 | 3
+  text: string
+  slug: string
+}
+
+// Extract H2/H3 sub-headings from a section body for an in-page outline (TOC).
+// Fence-aware (same guard as parseSections). Slugs come from a GithubSlugger
+// instance walked in document order, so they match the ids rehype-slug assigns
+// when the same body is rendered (including -1/-2 dedup suffixes).
+export function extractOutline(body: string): OutlineItem[] {
+  const lines = body.split('\n')
+  const fence = /^\s*(```|~~~)/
+  const heading = /^(#{2,3}) (?!#)(.*)$/
+  let inFence = false
+  const slugger = new GithubSlugger()
+  const out: OutlineItem[] = []
+  for (const line of lines) {
+    if (fence.test(line)) { inFence = !inFence; continue }
+    if (inFence) continue
+    const m = heading.exec(line)
+    if (!m) continue
+    const text = m[2].trim()
+    out.push({ depth: m[1].length as 2 | 3, text, slug: slugger.slug(text) })
+  }
+  return out
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseNoteRef, parseSections } from './notes'
+import { parseNoteRef, parseSections, extractOutline } from './notes'
 
 describe('parseNoteRef', () => {
   it('splits path and anchor', () => {
@@ -79,5 +79,30 @@ describe('parseSections', () => {
     expect(sections[0].body).toContain('# 나쁜 예 — 주석')
     expect(sections[0].body).toContain('```dockerfile')
     expect(sections[0].body.match(/```/g)).toHaveLength(2) // fence stays balanced
+  })
+})
+
+describe('extractOutline', () => {
+  it('extracts H2 and H3 headings in order with matching slugs', () => {
+    const body = '## 1. 비유\n텍스트\n\n### 세부\n더\n\n## 2. 개념 정의\n끝'
+    expect(extractOutline(body)).toEqual([
+      { depth: 2, text: '1. 비유', slug: '1-비유' },
+      { depth: 3, text: '세부', slug: '세부' },
+      { depth: 2, text: '2. 개념 정의', slug: '2-개념-정의' },
+    ])
+  })
+
+  it('ignores ## lines inside code fences', () => {
+    const body = '## real\n```py\n## not a heading\n```\n## also real'
+    expect(extractOutline(body).map((o) => o.text)).toEqual(['real', 'also real'])
+  })
+
+  it('returns [] when there are no sub-headings (quiz case)', () => {
+    expect(extractOutline('<details><summary>Q</summary>A</details>')).toEqual([])
+  })
+
+  it('dedupes duplicate heading text like rehype-slug does', () => {
+    const body = '## 정리\n\n## 정리'
+    expect(extractOutline(body).map((o) => o.slug)).toEqual(['정리', '정리-1'])
   })
 })
