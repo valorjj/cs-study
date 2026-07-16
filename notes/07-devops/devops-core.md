@@ -8,6 +8,8 @@
 - [DO2. Kubernetes](#do2-kubernetes) — 오케스트레이션, Pod/Deployment/Service, 자가 복구
 - [DO3. CI/CD](#do3-cicd) — CI/CD 구분, 파이프라인, 배포 전략
 - [DO4. Observability](#do4-observability) — 로그·메트릭·트레이싱
+- [DO5. K8s 오브젝트 (Pod · Deployment · Service)](#do5-k8s-오브젝트-pod--deployment--service) — 최소 배포 단위, 롤링업데이트, Service 타입 3종
+- [DO6. 헬스 프로브와 오토스케일링(HPA)](#do6-헬스-프로브와-오토스케일링hpa) — liveness/readiness/startup 오설정 사고, HPA 스케일링
 
 ---
 
@@ -529,6 +531,171 @@ Canary:  트래픽 100% → v1
 
 **Q4. "메트릭만으로 부족한 이유는?"**
 > ① 메트릭은 집계된 숫자라 개별 요청의 상세 컨텍스트가 소실됨 → ② 특정 유저·특정 요청만 느린 outlier는 평균에 묻혀 안 보임 → ③ 트레이싱으로 개별 요청 경로를 따라가야 원인 확인 가능.
+
+---
+
+# DO5. K8s 오브젝트 (Pod · Deployment · Service)
+
+**학습 목표**: *"왜 컨테이너가 아니라 Pod가 최소 단위인가요?"* / *"Deployment는 Pod를 어떻게 관리하나요?"* / *"Service 타입 3가지를 언제 쓰나요?"* 에 계층도를 그리며 5분 답할 수 있다.
+> DO2에서 3종 오브젝트를 개괄했다면, 여기서는 **각 오브젝트의 경계와 "왜 이 층이 필요한가"**를 한 단계 더 파고든다.
+
+## 1. 비유 — 파견 인력 관리 계층
+
+- **Pod** = 한 조로 묶여 함께 움직이는 "2인 1조 작업팀"(주 작업자 + 보조 = 컨테이너들). 한 명만 따로 다른 현장으로 못 보냄 — **조 단위로만 배치·철수**한다.
+- **ReplicaSet** = "이 현장에 항상 3개 조를 유지하라"는 인원 감시자. 한 조가 빠지면 즉시 새 조를 채워 넣는다.
+- **Deployment** = "새 매뉴얼(v2)로 조를 한 팀씩 교체하라"고 지시하고, 문제 생기면 "예전 매뉴얼(v1)로 되돌려"라고 명령하는 **현장소장**.
+- **Service** = 외부에서 거는 **대표 전화번호**. 안의 조가 바뀌고 자리를 옮겨도(=Pod IP가 바뀌어도) 번호는 그대로.
+
+## 2. 개념 정의 — 왜 층이 나뉘나
+
+> **Pod** = 스케줄링·배포의 **최소 단위**. 컨테이너 1개 이상이 **같은 네트워크 네임스페이스(같은 IP·포트공간)와 볼륨을 공유**하는 묶음.
+> **ReplicaSet** = "원하는 Pod 개수(replicas)"를 감시·유지하는 컨트롤러.
+> **Deployment** = ReplicaSet을 관리하며 **버전 전환(롤아웃)·롤백**을 담당하는 상위 컨트롤러.
+> **Service** = 라벨 셀렉터로 선택된 Pod 집합에 대한 **안정적 가상 IP(고정 진입점) + L4 로드밸런싱**.
+
+각 층은 "관심사 분리"다: Pod=실행 단위, ReplicaSet=개수, Deployment=버전, Service=네트워킹. 한 층이 한 가지만 책임진다.
+
+## 3. 다이어그램 — 소유 계층과 라벨 연결
+
+```
+Deployment  (spec: replicas=3, image=app:v2, selector app=web)
+    │  소유(owns) — 롤아웃마다 새 ReplicaSet 생성
+    ▼
+ReplicaSet-v2  (replicas=3 감시)      [ReplicaSet-v1: replicas=0, 롤백용 히스토리]
+    │  소유
+    ▼
+ Pod        Pod        Pod           label: app=web
+ (IP a.1)   (IP a.2)   (IP a.3)      ← IP는 재생성마다 바뀜(휘발성)
+    ▲          ▲          ▲
+    └──────────┴──────────┘
+        selector: app=web            ← Service는 "IP"가 아니라 "라벨"로 Pod를 묶는다
+              │
+          Service (ClusterIP 10.96.0.7, 고정)
+```
+
+핵심: Service와 Pod는 **직접 연결이 아니라 라벨(app=web)로 느슨하게 연결**된다. 그래서 Pod가 죽고 새로 떠 IP가 바뀌어도 라벨만 같으면 Service가 자동으로 다시 묶는다.
+
+## 4. 왜 컨테이너가 아니라 Pod가 최소 단위인가
+
+- 로그 수집기·프록시(사이드카)처럼 **주 컨테이너와 생명주기·네트워크·디스크를 반드시 공유해야 하는 보조 프로세스**가 있다. 이들을 "같은 localhost, 같은 볼륨"으로 묶으려면 컨테이너보다 한 단계 위의 묶음 단위가 필요 → 그게 Pod.
+- 같은 Pod 안 컨테이너끼리는 `localhost:포트`로 통신하고 `emptyDir` 볼륨을 공유한다. **스케줄링(어느 노드에 배치)도 Pod 단위** — 한 Pod의 컨테이너들은 항상 같은 노드에 함께 뜬다.
+
+## 5. Service 타입 3종 — 선택 기준
+
+| 타입 | 노출 범위 | 동작 | 언제 |
+|------|-----------|------|------|
+| **ClusterIP**(기본) | 클러스터 **내부**에서만 | 내부 전용 가상 IP 부여 | 백엔드·DB 등 내부 서비스 간 통신 |
+| **NodePort** | 각 노드의 `30000~32767` 포트로 외부 노출 | 모든 노드 IP:노드포트 → Service | 간단한 외부 노출/테스트(운영엔 비권장) |
+| **LoadBalancer** | 클라우드 LB를 통해 외부 노출 | 클라우드가 외부 IP 붙은 LB 프로비저닝 | 운영에서 서비스 하나를 외부에 직접 노출 |
+
+- 실무 관례: 외부 진입은 **LoadBalancer Service 하나 + 그 뒤 Ingress**로 여러 서비스를 L7 경로 분기(DO2 §10 Ingress 참고) → 서비스마다 LB를 만들지 않아 비용 절감.
+- **headless Service**(`clusterIP: None`)는 로드밸런싱 없이 Pod들의 개별 DNS를 노출 — StatefulSet(DB 등 안정적 식별자 필요한 경우)과 함께 쓴다.
+
+## 6. 롤링 업데이트 메커니즘 (Deployment의 핵심 가치)
+
+`kubectl set image` 또는 매니페스트 image 변경 → Deployment가 **새 ReplicaSet(v2)을 만들고 Pod를 조금씩 v2로, 기존 v1 ReplicaSet의 Pod는 조금씩 줄여** 무중단 전환. (파라미터 `maxSurge`/`maxUnavailable`는 DO2 §14 참고)
+- 이전 ReplicaSet은 **replicas=0으로 남겨둔다**(삭제 아님) → `kubectl rollout undo`로 즉시 롤백 가능한 이유.
+
+## 7. 핵심 포인트 (자주 하는 실수)
+
+- 🔴 "Pod = 컨테이너" ❌ — Pod는 컨테이너 **1개 이상의 묶음**이며 최소 스케줄링 단위. IP·볼륨을 조 단위로 공유.
+- 🔴 "Service가 Pod IP를 직접 알고 라우팅한다" ❌ — Service는 **라벨 셀렉터**로 Pod를 묶는다(엔드포인트 목록은 kube가 자동 갱신). IP가 아니라 라벨이 연결고리.
+- 🔴 "Deployment 없이 Pod만 만들어도 죽으면 되살아난다" ❌ — 단독 Pod는 **재생성 안 됨**. 자가 복구는 ReplicaSet(→Deployment)이 있어야 동작.
+- 🟡 롤백을 위해 이전 ReplicaSet이 replicas=0으로 남는다 — `revisionHistoryLimit`으로 보관 개수 조절.
+- 🟡 Service 라벨 셀렉터 오타 → 엔드포인트 0개가 되어 **502/커넥션 거부**. `kubectl get endpoints <svc>`로 실제 묶인 Pod 확인이 첫 디버깅.
+
+## 8. 예상 면접 질문 + 답변 골격
+
+**Q1. "왜 컨테이너가 아니라 Pod가 최소 배포 단위인가요?"**
+> ① 사이드카처럼 주 컨테이너와 네트워크·볼륨·생명주기를 공유해야 하는 보조 프로세스가 있음 → ② 이를 묶어 같은 노드·같은 localhost·같은 볼륨으로 함께 스케줄링하려면 컨테이너 위의 묶음 단위가 필요 → ③ 그 단위가 Pod.
+
+**Q2. "Deployment가 Pod를 어떻게 관리하나요?"**
+> ① Deployment는 ReplicaSet을 만들고, ReplicaSet이 "원하는 개수"를 감시·유지 → ② 이미지 버전을 바꾸면 새 ReplicaSet을 만들어 Pod를 순차 교체(롤링) → ③ 이전 ReplicaSet을 replicas=0으로 남겨 롤백에 사용.
+
+**Q3. "Service 타입 3가지를 언제 쓰나요?"**
+> ① ClusterIP=내부 통신 전용(기본) → ② NodePort=노드 포트로 간단 외부 노출(테스트용) → ③ LoadBalancer=클라우드 LB로 운영 외부 노출. 실무는 LB+Ingress로 여러 서비스를 L7 분기해 비용 절감.
+
+**Q4. "Pod IP가 계속 바뀌는데 다른 서비스는 어떻게 안정적으로 호출하나요?"**
+> ① Pod IP는 휘발성이라 직접 호출 금지 → ② Service의 고정 ClusterIP나 DNS 이름(`svc명.namespace`)으로 호출 → ③ Service가 라벨로 살아있는 Pod만 골라 로드밸런싱하므로 뒤에서 Pod가 바뀌어도 무관.
+
+---
+
+# DO6. 헬스 프로브와 오토스케일링(HPA)
+
+**학습 목표**: *"liveness와 readiness의 차이는?"* / *"프로브를 잘못 설정하면 어떤 사고가 나나요?"* / *"HPA는 Pod 개수를 어떻게 정하나요?"* 에 사고 사례를 들며 5분 답할 수 있다.
+> DO2 §12·§13에서 개괄한 프로브/HPA를, 여기서는 **오설정으로 인한 실제 장애 시나리오** 중심으로 깊게 다룬다.
+
+## 1. 비유 — 병원 환자 상태 체크 3종
+
+- **Startup probe** = "환자가 마취에서 깨어났나?"(수술 직후 회복실). 아직 깨는 중이면 다른 검사를 시작하지 않고 기다린다.
+- **Liveness probe** = "심장이 뛰고 있나?" 멈췄으면(회복 불가) **재시작(소생술)**.
+- **Readiness probe** = "면회/진료를 받을 준비가 됐나?" 아직이면 재시작하지 않고 **면회객(트래픽)만 잠시 막는다**.
+
+세 프로브는 "죽었나 / 아직 안 켜졌나 / 받을 준비 됐나"라는 **서로 다른 질문**에 답한다 — 이걸 혼동하는 게 사고의 근원.
+
+## 2. 개념 정의 — 프로브 3종
+
+| 프로브 | 질문 | 실패 시 동작 | 대표 용도 |
+|--------|------|--------------|-----------|
+| **startupProbe** | 앱이 다 떴나? | 성공 전까지 liveness/readiness **보류** | 부팅이 느린 앱(레거시 JVM 등) |
+| **livenessProbe** | 살아 있나? | 컨테이너 **재시작** | 데드락/행(hang) 감지 |
+| **readinessProbe** | 트래픽 받을 준비 됐나? | Service 엔드포인트에서 **제외**(재시작 X) | 웜업 중, 의존 서비스 일시 불가 |
+
+프로브 방식: `httpGet`(HTTP 200~399면 성공) / `tcpSocket`(포트 열림) / `exec`(명령 exit 0).
+
+## 3. 사고 시나리오 — 프로브 오설정 3대 함정
+
+```
+① liveness에 "무거운 의존성 체크"를 넣음
+   liveness: GET /health  →  이 핸들러가 DB·Redis까지 확인
+   DB가 잠깐 느려짐 → liveness 실패 → 컨테이너 재시작
+   → 재시작해도 DB는 여전히 느림 → 또 실패 → 무한 재시작(CrashLoopBackOff)
+   ✅ 교훈: liveness는 "프로세스 자체"만(가볍게), 의존성 체크는 readiness로.
+
+② startupProbe 없이 initialDelaySeconds도 짧음
+   부팅에 40초 걸리는 앱, liveness initialDelay=10s
+   → 아직 뜨는 중인데 liveness가 죽여버림 → 영원히 못 뜸
+   ✅ 교훈: 부팅 느린 앱은 startupProbe로 "다 뜰 때까지" liveness 유예.
+
+③ readiness는 없고 liveness만 있음
+   롤링 업데이트 중 새 Pod가 아직 웜업 안 됐는데 Service가 트래픽 전송
+   → 초기 요청 다수 실패(콜드 스타트)
+   ✅ 교훈: 웜업 필요한 앱은 readiness로 "준비 끝나면" 트래픽 받기.
+```
+
+## 4. HPA — 개수 계산과 동작
+
+```
+desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭) )
+
+예) 목표 CPU 50%, 현재 평균 CPU 80%, 현재 4개
+   → ceil(4 × 80/50) = ceil(6.4) = 7개로 scale-out
+```
+- 대상 메트릭: CPU/메모리(기본) 또는 커스텀 메트릭(RPS, 큐 길이 등, Prometheus Adapter 등 연동).
+- **scale-in은 보수적**(기본 안정화 윈도 5분) — 트래픽이 출렁일 때 Pod가 잦게 오르내리는 flapping을 막기 위해.
+- HPA(개수) vs **VPA**(개별 Pod의 CPU/메모리 할당량 자체) — VPA는 변경 시 Pod 재시작이 필요해 무중단성이 떨어짐. 보통 HPA를 먼저 고려.
+
+## 5. 핵심 포인트 (자주 하는 실수)
+
+- 🔴 "liveness와 readiness는 둘 다 실패하면 재시작" ❌ — readiness 실패는 **재시작이 아니라 트래픽 차단**. 혼동하면 CrashLoopBackOff.
+- 🔴 "liveness에서 DB까지 확인하면 더 안전하다" ❌ — 오히려 의존성 장애가 **전체 Pod 몰살**로 번진다. liveness는 프로세스 생존만 가볍게.
+- 🟡 부팅 느린 앱은 `startupProbe` 또는 넉넉한 `initialDelaySeconds` 필수 — 안 그러면 뜨는 중에 killed.
+- 🟡 HPA가 동작하려면 **metrics-server(또는 커스텀 메트릭 파이프라인)** 가 있어야 함. 없으면 HPA가 메트릭을 못 읽어 스케일 안 됨.
+- 🟡 HPA와 Pod의 `resources.requests`는 짝 — requests가 없으면 CPU 사용률(%) 계산 기준이 없어 CPU 기반 HPA가 무의미.
+
+## 6. 예상 면접 질문 + 답변 골격
+
+**Q1. "liveness probe와 readiness probe의 차이는?"**
+> ① liveness=살아있나 → 실패 시 컨테이너 재시작(데드락/행 감지) → ② readiness=트래픽 받을 준비 됐나 → 실패 시 Service 엔드포인트에서 제외(재시작 X) → ③ 목적이 다르므로 혼동하면 크래시 루프나 콜드 스타트가 생김.
+
+**Q2. "프로브 설정을 잘못하면 어떤 사고가 나나요?"**
+> ① liveness에 DB 체크를 넣으면 DB 지연 시 전 Pod가 재시작돼 CrashLoopBackOff → ② 부팅 느린 앱에 startupProbe가 없으면 뜨는 중에 liveness가 죽임 → ③ readiness가 없으면 웜업 전 Pod에 트래픽이 가 초기 요청 실패.
+
+**Q3. "HPA는 Pod 개수를 어떻게 정하나요?"**
+> ① 현재개수 × (현재메트릭/목표메트릭)을 올림 → ② 예: 목표 CPU 50%, 현재 80%, 4개면 7개로 증설 → ③ scale-in은 flapping 방지로 보수적(안정화 윈도). metrics-server와 resources.requests가 전제.
+
+**Q4. "HPA와 VPA는 언제 각각 쓰나요?"**
+> ① HPA=Pod 개수 수평 확장(무중단, 트래픽 변동 대응) → ② VPA=개별 Pod의 자원 할당량 조절(재시작 필요) → ③ 보통 HPA를 우선 쓰고, 단일 Pod 자원 산정이 어려운 배치성 워크로드에 VPA 고려.
 
 ---
 

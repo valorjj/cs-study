@@ -8,6 +8,8 @@
 - [R2. Rendering and Re-render](#r2-rendering-and-re-render) — 리렌더 트리거, memo/useMemo/useCallback
 - [R3. Hooks](#r3-hooks) — useState/useEffect, Hooks 규칙, 의존성 배열
 - [R4. State Management](#r4-state-management) — 로컬 vs 전역, Context vs Redux/Zustand
+- [R5. Reconciliation과 diffing](#r5-reconciliation과-diffing) — diffing 휴리스틱, key의 역할, 리스트 재조정, Fiber
+- [R6. useEffect 의존성과 클로저 함정](#r6-useeffect-의존성과-클로저-함정) — 의존성 배열, stale closure, cleanup, 참조 동일성
 
 ---
 
@@ -612,6 +614,172 @@ function App() {
 
 **Q5. "Context로 충분한 경우와 Redux/Zustand가 필요한 경우를 어떻게 구분하나요?"**
 > ① 값이 거의 안 바뀌고(테마, 인증 유저) 구독자가 적으면 Context로 충분 ② 값이 자주 바뀌고 트리 전역에서 부분 구독이 필요하거나, 복잡한 비동기 액션 흐름·디버깅 도구가 필요하면 selector 기반 외부 라이브러리로 전환. 판단 순서는 "로컬 state → Context → 그래도 리렌더/복잡도가 감당 안 되면 외부 라이브러리".
+
+---
+
+# R5. Reconciliation과 diffing
+
+**학습 목표**: *"React가 바뀐 부분을 어떻게 찾아내나요?"* / *"key는 왜 필요하고 index를 쓰면 왜 위험한가요?"* / *"diffing 휴리스틱이 뭔가요?"* / *"Fiber가 뭘 바꿨나요?"* 에 예시를 들며 5분 답할 수 있다.
+> R1에서 Virtual DOM/재조정을 개괄했다면, 여기서는 **diff 알고리즘의 휴리스틱과 key의 실제 동작**을 파고든다.
+
+## 1. 비유 — 두 장의 조직도를 비교하는 인사팀
+
+작년 조직도(이전 VDOM)와 올해 조직도(새 VDOM)를 나란히 놓고, **바뀐 부분만 실제 인사발령(DOM 조작)** 을 낸다. 전 직원을 다 해고하고 다시 뽑으면(전체 DOM 교체) 느리니까, "같은 자리·같은 직책이면 그대로 두고, 이름표(props)만 바뀐 사람은 이름표만 교체"한다. 이때 **사원번호(key)** 가 있으면 "이 사람이 자리를 옮긴 것"인지 "새로 온 사람"인지 정확히 구분할 수 있다.
+
+## 2. 개념 정의 (1줄)
+> **Reconciliation(재조정)** = 새 VDOM 트리와 이전 VDOM 트리를 비교(diffing)해 **실제 DOM에 반영할 최소 변경분**을 계산하는 과정.
+> 완전한 트리 비교는 O(n³)이라 비현실적 → React는 **2가지 휴리스틱**으로 O(n)에 근사한다.
+
+## 3. diffing 2대 휴리스틱
+
+```
+① 타입이 다르면 통째로 교체 (서브트리 비교 안 함)
+   <div><Counter/></div>  →  <span><Counter/></span>
+   div≠span → div 이하를 전부 버리고 span을 새로 마운트
+   (Counter의 state도 사라짐!)
+
+② 같은 레벨의 리스트는 key로 동일성 판단
+   [<li key=a/> <li key=b/>]  →  [<li key=b/> <li key=a/>]
+   key로 "a와 b가 순서만 바뀌었다"고 인식 → 재생성 없이 이동만
+```
+- 휴리스틱 ①의 함의: 조건부 렌더링으로 **엘리먼트 타입이 바뀌면 그 아래 컴포넌트가 언마운트→재마운트**되어 내부 state가 초기화된다.
+
+## 4. key — 왜 index가 위험한가
+
+```jsx
+// ❌ index를 key로: 리스트 중간에 삽입/삭제/정렬하면 어긋남
+{items.map((item, i) => <Row key={i} value={item} />)}
+
+// 맨 앞에 새 항목 추가 시:
+//   이전: key0=A, key1=B, key2=C
+//   이후: key0=X, key1=A, key2=B, key3=C
+//   → React는 "key0의 내용이 A→X로 바뀌었다"고 오판
+//   → 모든 Row의 props를 갈아끼우고, 각 Row의 내부 state(입력값 등)가 엉뚱한 행에 남음
+```
+```jsx
+// ✅ 안정적 고유 ID를 key로
+{items.map((item) => <Row key={item.id} value={item} />)}
+// 맨 앞 추가 시 X만 새로 마운트, 나머지는 그대로 → state도 올바르게 따라감
+```
+- key는 **형제 노드 사이에서만 고유**하면 된다(전역 유일 불필요). 정적이고 순서가 안 바뀌는 리스트라면 index도 무방하지만, 삽입/삭제/정렬이 있으면 반드시 안정적 ID.
+
+## 5. Fiber — 재조정의 재작성(React 16+)
+
+- 이전(Stack Reconciler)은 재조정이 **동기·중단 불가** → 큰 트리 diff 중 메인 스레드를 오래 붙잡아 입력이 버벅였다.
+- **Fiber**는 작업을 작은 단위로 쪼개 **중단·재개·우선순위 지정**이 가능한 구조. 렌더 단계(diff 계산, 중단 가능)와 커밋 단계(실제 DOM 반영, 중단 불가)를 분리 → Concurrent 기능(useTransition 등)의 토대.
+
+## 6. 핵심 포인트 (자주 하는 실수)
+
+- 🔴 "React는 실제 DOM을 통째로 다시 그린다" ❌ — VDOM diff로 **바뀐 부분만** 실제 DOM에 반영. VDOM 재계산(렌더)과 DOM 반영(커밋)은 별개.
+- 🔴 "key는 리스트에 그냥 넣으라니까 index를 쓴다" ❌ — 삽입/삭제/정렬 시 state가 엉뚱한 항목에 남거나 불필요한 재생성 발생. 안정적 고유 ID 사용.
+- 🟡 엘리먼트 **타입이 바뀌면 서브트리가 언마운트→재마운트** → 내부 state 초기화. 같은 위치의 컴포넌트 타입을 조건부로 바꿀 때 주의.
+- 🟡 key를 **강제 리마운트 트릭**으로도 쓸 수 있음 — key를 일부러 바꾸면 컴포넌트를 새로 마운트해 state를 리셋(폼 초기화 등).
+
+## 7. 예상 면접 질문 + 답변 골격
+
+**Q1. "React가 바뀐 부분을 어떻게 찾나요?"**
+> ① 새 VDOM과 이전 VDOM을 비교(diffing) → ② 완전 비교는 O(n³)이라 2가지 휴리스틱(타입 다르면 통째 교체, 같은 레벨은 key로 동일성 판단)으로 O(n) 근사 → ③ 계산된 최소 변경분만 실제 DOM에 커밋.
+
+**Q2. "key는 왜 필요하고 index를 쓰면 왜 위험한가요?"**
+> ① key는 리스트에서 같은 항목을 식별해 재생성 없이 이동/유지하게 함 → ② index를 쓰면 삽입/삭제/정렬 시 "내용이 바뀌었다"고 오판 → ③ 불필요한 재렌더와 내부 state가 엉뚱한 행에 남는 버그. 안정적 고유 ID를 써야 함.
+
+**Q3. "diffing 휴리스틱을 설명해주세요."**
+> ① 엘리먼트 타입이 다르면 서브트리를 비교하지 않고 통째로 교체(그래서 타입이 바뀌면 state 초기화) → ② 같은 레벨의 리스트는 key로 동일성을 판단해 순서 변경을 이동으로 처리 → ③ 이 두 가정으로 O(n³)을 O(n)에 근사.
+
+**Q4. "Fiber는 뭘 바꿨나요?"**
+> ① 기존 재조정은 동기·중단 불가라 큰 트리에서 메인 스레드를 오래 점유 → ② Fiber는 작업을 단위로 쪼개 중단·재개·우선순위 지정 가능 → ③ 렌더/커밋 단계 분리로 Concurrent 기능(useTransition 등)의 기반이 됨.
+
+---
+
+# R6. useEffect 의존성과 클로저 함정
+
+**학습 목표**: *"의존성 배열은 무슨 역할인가요?"* / *"stale closure가 뭔가요?"* / *"cleanup은 언제 실행되나요?"* / *"함수/객체를 의존성에 넣으면 왜 무한 루프가 나나요?"* 에 예시를 들며 5분 답할 수 있다.
+> R3에서 Hooks를 개괄했다면, 여기서는 **useEffect의 실행 타이밍과 클로저로 인한 실전 버그**를 집중적으로 다룬다.
+
+## 1. 비유 — 촬영 시점에 박제된 스냅샷
+
+각 렌더는 그 순간의 props/state를 담은 **한 장의 사진**이다. useEffect 안의 함수는 "찍힐 당시의 사진(그 렌더의 값)"을 그대로 붙들고 있다. 의존성 배열은 "**어떤 값이 바뀌면 사진을 다시 찍어(effect 재실행) 최신 값을 붙들지**"를 지정하는 것. 이걸 빠뜨리면 effect가 옛날 사진(과거 값)을 계속 들고 있게 된다 → **stale closure**.
+
+## 2. 개념 정의 — 의존성 배열의 역할
+
+> `useEffect(fn, deps)` — 렌더 후 `deps`의 값이 **이전 렌더와 하나라도 달라졌을 때만** `fn`을 재실행.
+> - `deps` 생략 → 매 렌더마다 실행
+> - `[]` → 마운트 시 1회만
+> - `[a, b]` → a나 b가 바뀐 렌더 후에만
+> 비교는 **Object.is(얕은 참조 비교)** — 객체/함수/배열은 내용이 같아도 매 렌더 새 참조면 "바뀐 것"으로 간주.
+
+## 3. stale closure — 대표 버그
+
+```jsx
+// ❌ deps=[] 라 effect는 첫 렌더의 count(0)를 영원히 붙듦
+function Counter() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => {
+      console.log(count);        // 항상 0 (stale!)
+      setCount(count + 1);       // 0+1만 반복 → 1에서 멈춤
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);                         // count를 안 넣어 옛 값에 고정
+}
+```
+```jsx
+// ✅ 해법 1: 함수형 업데이트 — 최신 값을 인자로 받음(클로저 의존 제거)
+setCount(c => c + 1);
+// ✅ 해법 2: 의존성에 count를 넣어 매번 최신 값으로 effect 재생성
+useEffect(() => { ... }, [count]);
+// (단 이러면 interval이 매번 재설정됨 → 상황에 따라 useRef로 최신값 보관도 고려)
+```
+
+## 4. cleanup 함수 — 언제 실행되나
+
+```
+마운트 → effect 실행
+                       ↓ (deps 바뀐 리렌더)
+       이전 effect의 cleanup 실행 → 새 effect 실행
+                       ↓
+언마운트 → 마지막 cleanup 실행
+```
+- cleanup은 "**다음 effect 실행 직전**"과 "**언마운트 시**"에 돈다. 이벤트 리스너 해제, 타이머 정리, 구독 취소, 진행 중 요청 취소(race condition 방지)에 필수.
+- cleanup을 빠뜨리면: 리스너/타이머 중복 등록, 언마운트된 컴포넌트에 setState → 메모리 누수·경고.
+
+## 5. 참조 동일성 함정 — 무한 루프
+
+```jsx
+// ❌ options 객체가 매 렌더 새로 생성 → deps가 항상 "바뀜" → effect 무한 실행
+function Search({ query }) {
+  const options = { query, limit: 10 };   // 매 렌더 새 참조
+  useEffect(() => { fetchData(options); }, [options]);  // 무한 루프
+}
+```
+```jsx
+// ✅ 원시값을 직접 의존성에 두거나(참조 아닌 값 비교)
+useEffect(() => { fetchData({ query, limit: 10 }); }, [query]);
+// ✅ 꼭 객체/함수여야 하면 useMemo/useCallback으로 참조 고정
+const options = useMemo(() => ({ query, limit: 10 }), [query]);
+```
+- 함수를 의존성에 넣을 때도 동일 — 부모가 매 렌더 새 함수를 내려주면 자식 effect가 매번 재실행. `useCallback`으로 참조 고정.
+
+## 6. 핵심 포인트 (자주 하는 실수)
+
+- 🔴 "의존성 배열은 성능 최적화용이라 아무거나 넣어도 된다" ❌ — effect가 사용하는 **모든 외부 값(props/state/함수)** 을 정확히 넣어야 함. 빠뜨리면 stale closure, 불필요하게 넣으면 과도한 재실행. (`exhaustive-deps` ESLint 규칙)
+- 🔴 "빈 배열 `[]`면 언제나 안전하다" ❌ — effect가 참조하는 값이 있는데 `[]`로 두면 **첫 렌더 값에 박제**됨(stale). 값을 안 바꾸려면 함수형 업데이트나 ref를 써야.
+- 🟡 객체/배열/함수는 **Object.is 참조 비교** — 내용이 같아도 새 참조면 재실행. useMemo/useCallback 또는 원시값 의존으로 해결.
+- 🟡 cleanup은 다음 실행 직전 + 언마운트 시 실행 — 비동기 요청은 cleanup에서 취소 플래그/AbortController로 race condition을 막아야.
+
+## 7. 예상 면접 질문 + 답변 골격
+
+**Q1. "useEffect 의존성 배열의 역할은?"**
+> ① 렌더 후 deps 값이 이전과 달라졌을 때만 effect를 재실행 → ② `[]`는 마운트 1회, 생략은 매 렌더 → ③ effect가 쓰는 모든 외부 값을 넣어야 최신 값을 반영(안 넣으면 stale closure).
+
+**Q2. "stale closure가 뭔가요?"**
+> ① 각 렌더는 그 시점의 값을 담은 클로저를 만듦 → ② effect가 옛 렌더의 값을 붙든 채 갱신되지 않으면(의존성 누락) 과거 값을 계속 사용 → ③ 해법은 함수형 업데이트(`setX(prev=>...)`)나 의존성에 최신 값 추가, 또는 useRef로 최신값 보관.
+
+**Q3. "cleanup 함수는 언제 실행되나요?"**
+> ① 다음 effect 실행 직전(deps가 바뀌어 재실행될 때) → ② 컴포넌트 언마운트 시 → ③ 리스너 해제·타이머 정리·구독 취소·진행 중 요청 취소에 사용. 빠뜨리면 중복 등록·메모리 누수.
+
+**Q4. "객체/함수를 의존성에 넣으면 왜 무한 루프가 날 수 있나요?"**
+> ① deps는 Object.is 참조 비교 → ② 매 렌더 새로 만든 객체/함수는 내용이 같아도 "바뀐 것"으로 판정 → ③ effect가 매번 재실행(setState 포함 시 무한 루프). useMemo/useCallback으로 참조 고정하거나 원시값을 의존성에 둬 해결.
 
 ---
 

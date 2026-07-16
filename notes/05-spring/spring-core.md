@@ -9,6 +9,8 @@
 - [S3. AOP and Proxy](#s3-aop-and-proxy) — 관점 지향, 프록시 동작
 - [S4. Transaction Management](#s4-transaction-management) — @Transactional 전파·함정 (↔ DB 트랜잭션)
 - [S5. Spring MVC Request Flow](#s5-spring-mvc-request-flow) — DispatcherServlet 요청 흐름
+- [S6. 트랜잭션 전파와 롤백](#s6-트랜잭션-전파와-롤백) — REQUIRED/REQUIRES_NEW/NESTED, 롤백 규칙 심화
+- [S7. AOP 프록시 (JDK/CGLIB)와 self-invocation](#s7-aop-프록시-jdkcglib와-self-invocation) — 프록시 생성 방식, 내부 호출 함정
 
 ---
 
@@ -52,7 +54,13 @@ public class OrderService {
 **Q2. "생성자 주입을 왜 권장하나요?"**
 > final로 불변을 보장하고, 필수 의존성 누락과 순환참조를 기동 시점에 발견할 수 있으며, 스프링 없이도 객체를 생성해 테스트하기 쉽기 때문입니다.
 
-**Q3(꼬리질문). "그럼 순환참조는 왜 생성자 주입에서만 문제가 되나요?"**
+**Q3(경험). "필드 주입(`@Autowired`)의 문제를 실제로 겪어본 적 있나요?"**
+> 필드 주입은 스프링 컨테이너 없이는 의존성을 채울 방법이 없어서, 순수 단위 테스트에서 `new`로 객체를 만들면 내부 필드가 전부 `null`이라 NPE가 났습니다. 결국 리플렉션(`ReflectionTestUtils`)으로 억지 주입하거나 스프링 컨텍스트를 띄워야 했는데, 생성자 주입으로 바꾸니 테스트 코드에서 그냥 `new Service(mockRepo)`로 끝났습니다. 또 필드 주입은 의존성이 몇 개인지 생성자만 봐도 안 드러나서 "이 클래스가 너무 많은 걸 하고 있다(SRP 위반)"는 신호를 놓치기 쉬웠습니다.
+
+**Q4(트레이드오프). "롬복 `@RequiredArgsConstructor`를 쓰면 생성자 주입인가요? 주의점은?"**
+> 네, `final` 필드를 파라미터로 받는 생성자를 컴파일 시점에 자동 생성해주므로 실질적으로 생성자 주입입니다. 다만 필드 선언 순서가 생성자 파라미터 순서가 되므로, 같은 타입 빈이 여러 개일 때 순서에 의존한 주입은 위험합니다. 또 롬복이 만들어주는 생성자라 리뷰에서 의존성 개수가 눈에 덜 띄어, 필드가 계속 늘어나는 걸 방치하기 쉽다는 점은 주의합니다.
+
+**Q5(꼬리질문). "그럼 순환참조는 왜 생성자 주입에서만 문제가 되나요?"**
 > 필드/setter 주입은 빈을 일단 빈 껍데기로 먼저 만들고 나중에 의존성을 채우기 때문에 순환이 있어도 어찌어찌 완성됩니다. 반면 생성자 주입은 객체 생성 시점에 의존성이 다 갖춰져야 하므로, A→B→A 순환이면 누구도 먼저 완성될 수 없어 즉시 예외가 터집니다. 아래 6번에서 자세히 다룹니다.
 
 ## 6. 심화 — 순환 참조(Circular Dependency)
@@ -130,8 +138,14 @@ public class OrderService {
 **Q. "스프링 빈은 싱글톤인데 멀티스레드에서 안전한가요?"**
 > 기본 싱글톤이라 여러 스레드가 같은 인스턴스를 공유합니다. 그래서 빈에 가변 상태를 두면 race condition이 생깁니다. 보통 서비스 빈은 무상태로 설계하고, 상태는 지역변수나 파라미터로 다뤄 안전하게 만듭니다.
 
-**Q(꼬리질문). "prototype 스코프 빈을 singleton 빈 안에 그냥 주입하면 문제가 없나요?"**
+**Q2(시나리오). "싱글톤 빈에 `SimpleDateFormat`이나 카운터 필드를 두면 어떤 장애가 나나요?"**
+> `SimpleDateFormat`은 내부에 가변 상태가 있어 thread-safe하지 않습니다. 싱글톤 빈 필드로 공유하면 동시 요청에서 파싱 결과가 깨지거나 `NumberFormatException`이 간헐적으로 터지는, 재현 안 되는 버그가 납니다. 카운터 필드도 마찬가지로 여러 스레드가 동시에 증가시키면 값이 유실됩니다(lost update). 해결은 ① 무상태 설계 ② 지역변수로 매번 생성 ③ 스레드 안전한 `DateTimeFormatter`(불변) 사용 ④ 정말 공유 상태가 필요하면 `AtomicLong` 같은 동시성 자료구조나 락을 씁니다.
+
+**Q3(꼬리질문). "prototype 스코프 빈을 singleton 빈 안에 그냥 주입하면 문제가 없나요?"**
 > singleton 빈은 딱 한 번만 조립되므로, prototype 빈을 생성자/필드로 주입하면 최초 1번만 새 인스턴스를 받고 그 뒤로는 계속 같은 인스턴스를 재사용하게 되어 "매번 새로 받는다"는 prototype 취지가 깨집니다. `ObjectProvider`나 `@Lookup` 메서드 주입으로 호출 시점마다 새로 조회해야 합니다.
+
+**Q4("왜"). "`@PostConstruct`는 왜 생성자가 아니라 별도 콜백으로 초기화하나요?"**
+> 생성자 실행 시점에는 아직 의존성 주입(DI)이 끝나지 않았을 수 있어서, 생성자 안에서 주입받은 빈을 쓰면 `null`일 수 있습니다. `@PostConstruct`는 "DI가 모두 완료된 뒤" 호출되는 것이 보장되므로, 주입된 의존성을 활용한 초기화(캐시 워밍업, 연결 검증 등)를 안전하게 할 수 있습니다.
 
 ---
 
@@ -368,17 +382,178 @@ Client
 - 🟡 이 흐름은 결국 HTTP 요청(Network N3) 위에서 동작.
 
 ## 4. 예상 면접 질문
-**Q. "스프링 MVC의 요청 처리 흐름을 설명해주세요."**
+**Q1. "스프링 MVC의 요청 처리 흐름을 설명해주세요."**
 > 모든 요청이 Front Controller인 DispatcherServlet으로 들어오면, HandlerMapping이 URL에 맞는 컨트롤러를 찾고 HandlerAdapter가 실행합니다. 컨트롤러가 서비스·리포지토리를 거쳐 결과를 반환하면, REST는 HttpMessageConverter로 JSON 직렬화, 뷰는 ViewResolver로 렌더해 응답합니다.
 
-**Q(꼬리질문). "이 흐름에서 Filter와 Interceptor는 각각 어디에 끼워지나요?"**
+**Q2(꼬리질문). "이 흐름에서 Filter와 Interceptor는 각각 어디에 끼워지나요?"**
 > Filter는 DispatcherServlet **앞뒤**(서블릿 컨테이너 단계)에서 실행되고, Interceptor는 DispatcherServlet이 HandlerMapping으로 컨트롤러를 찾은 **다음, 실제 실행 전후**에 끼어듭니다. 자세한 실행 순서·용도 비교는 S3의 7번(Filter vs Interceptor vs AOP)에 정리했습니다.
+
+**Q3(시나리오). "`@ControllerAdvice` + `@ExceptionHandler`로 예외를 잡는데, `@Transactional` 롤백은 정상 동작하나요?"**
+> 정상 동작합니다. 트랜잭션 AOP는 Service 메서드 프록시 레벨에서 예외가 밖으로 던져지는 순간 롤백 여부를 판단하고, 그 예외가 컨트롤러를 거쳐 DispatcherServlet까지 전파된 뒤 `@ControllerAdvice`가 잡습니다. 즉 "트랜잭션 롤백 판정 → 예외 상위 전파 → 전역 핸들러가 응답 변환" 순서라 서로 간섭하지 않습니다. 단, 예외를 Service 안에서 `try-catch`로 삼켜버리면 프록시까지 예외가 안 올라가 롤백이 안 되니 주의합니다.
+
+**Q4("왜"). "필터에서 던진 예외는 왜 `@ControllerAdvice`로 안 잡히나요?"**
+> `@ControllerAdvice`/`@ExceptionHandler`는 DispatcherServlet **안쪽**(스프링 MVC 영역)에서 발생한 예외만 처리합니다. Filter는 DispatcherServlet **앞단**(서블릿 컨테이너)이라, 여기서 던진 예외는 아직 스프링 MVC 예외 처리 체계에 진입하기 전이라 못 잡습니다. 그래서 인증 필터의 예외 응답은 별도로 `HandlerExceptionResolver`를 수동 호출하거나, 서블릿 `error-page`/`ErrorController`로 처리하는 식으로 우회합니다.
 
 ## 5. 심화 — 이 흐름과 Filter/Interceptor/AOP의 관계 (cross-link)
 - 요청이 DispatcherServlet에 도달하기 **전**에 이미 Filter 체인을 거쳐온 상태입니다(서블릿 컨테이너 레벨).
 - Controller 진입 **직전/직후**에는 Interceptor의 `preHandle`/`postHandle`이 개입합니다(스프링 MVC 레벨).
 - Controller가 호출하는 Service 메서드 레벨에서는 AOP(트랜잭션 등)가 개입합니다(빈 내부 레벨).
 - 세 가지 모두 "공통 로직을 어디서 가로챌 것인가"의 답이며, 실행 위치·용도 비교표는 **S3 §7**을 참고.
+
+---
+
+# S6. 트랜잭션 전파와 롤백
+
+**학습 목표**: *"REQUIRED와 REQUIRES_NEW·NESTED가 어떻게 다르고, 롤백은 언제 되나요?"* 에 5분간 답할 수 있다. (S4의 전파·롤백을 실무 함정 위주로 심화)
+
+## 1. 비유 — 여러 층으로 쌓인 계약서
+바깥 서비스가 "큰 계약(물리 트랜잭션)"을 열면, 안쪽에서 호출되는 서비스들은 상황에 따라 ① **그 계약에 서명만 더 하거나(REQUIRED)** ② **완전히 별도 계약서를 새로 쓰거나(REQUIRES_NEW)** ③ **큰 계약 안에 부분 취소가 가능한 조항(savepoint)을 다는(NESTED)** 방식으로 참여합니다. 전파(propagation)는 "이미 진행 중인 트랜잭션이 있을 때 어떻게 합류할지"의 규칙입니다.
+
+## 2. 개념 정의 — 물리 트랜잭션 vs 논리 트랜잭션
+> **물리(physical) 트랜잭션** = 실제 DB 커넥션에 붙은 begin~commit/rollback 단위(진짜 하나).
+> **논리(logical) 트랜잭션** = `@Transactional`이 붙은 메서드 각각의 트랜잭션 경계(개념상 여러 개).
+> REQUIRED로 중첩 호출하면 논리 트랜잭션은 여러 개지만 **물리 트랜잭션은 1개**로 묶입니다. 그래서 안쪽에서 하나라도 롤백을 표시하면 전체가 롤백됩니다.
+
+## 3. 전파 옵션 비교표 ⭐
+| 전파 | 기존 트랜잭션 있을 때 | 없을 때 | 부분 롤백 | 새 커넥션 |
+|------|----------------------|---------|-----------|-----------|
+| **REQUIRED(기본)** | 참여(같은 물리 트랜잭션) | 새로 시작 | ❌ (같이 롤백) | ❌ |
+| **REQUIRES_NEW** | 기존을 **일시 중단**하고 새 트랜잭션 | 새로 시작 | ✅ (독립 커밋/롤백) | ✅ (하나 더 점유) |
+| **NESTED** | savepoint 생성 후 진행 | 새로 시작 | ✅ (savepoint까지만 롤백, 바깥은 유지) | ❌ (같은 커넥션) |
+| SUPPORTS | 참여 | 트랜잭션 없이 실행 | — | ❌ |
+| MANDATORY | 참여 | **예외**(반드시 기존 필요) | — | ❌ |
+| NEVER | **예외** | 트랜잭션 없이 실행 | — | ❌ |
+| NOT_SUPPORTED | 기존 중단, 트랜잭션 없이 실행 | 없이 실행 | — | ❌ |
+
+### REQUIRES_NEW vs NESTED — 자주 헷갈리는 핵심 ⭐
+```
+[REQUIRES_NEW] 바깥 TX ─(중단)─→ 완전히 새 물리 TX(별도 커넥션) → 독립 커밋
+               → 바깥이 롤백해도 안쪽 커밋은 살아남음, 커넥션 2개 점유
+[NESTED]       바깥 TX 안에 savepoint 설정 → 안쪽 실패 시 savepoint까지만 롤백
+               → 같은 커넥션, 바깥이 롤백하면 안쪽도 함께 사라짐(종속적)
+```
+- **REQUIRES_NEW**: 완전히 독립. 바깥과 운명을 달리함(감사 로그처럼 무조건 남겨야 할 때). 대신 커넥션을 하나 더 쓴다.
+- **NESTED**: JDBC savepoint 기반. 바깥에 종속적이라 바깥이 롤백하면 같이 롤백되지만, 안쪽만의 실패는 savepoint로 국소 롤백 가능. DB/드라이버가 savepoint를 지원해야 하고, JPA(Hibernate)에서는 제약이 있어 실무에서 덜 쓰임.
+
+## 4. 롤백 규칙 심화 ⭐
+- 🔴 **스프링 기본 롤백 대상 = `RuntimeException`(unchecked) + `Error`뿐**. **checked exception은 기본적으로 롤백하지 않고 커밋**됩니다.
+  - EJB 시절 관례를 이어받은 기본값입니다. checked도 롤백하려면 명시해야 합니다.
+```java
+@Transactional(rollbackFor = Exception.class)      // checked까지 롤백 대상에 추가
+public void placeOrder() throws IOException { ... }
+
+@Transactional(noRollbackFor = NotifyFailedException.class) // 이 예외는 롤백 제외(커밋)
+public void notifyUser() { ... }
+```
+- 🔴 **예외를 `try-catch`로 삼키면 롤백 안 됨**: 트랜잭션 AOP는 프록시 밖으로 예외가 **던져질 때** 롤백을 판단합니다. 메서드 안에서 잡아 삼키면 프록시가 예외를 못 봐서 정상 커밋됩니다.
+- 🔴 **`UnexpectedRollbackException` 함정**: REQUIRED로 참여한 안쪽 메서드에서 예외가 나 트랜잭션이 "rollback-only"로 마킹되면, 바깥에서 그 예외를 잡고 정상 종료하려 해도 커밋 시점에 스프링이 "이미 롤백 표시됨"을 발견해 `UnexpectedRollbackException`을 던지며 전체를 롤백합니다. ("나는 잡았는데 왜 롤백되지?"의 대표 원인 — 안쪽이 REQUIRED라 물리 트랜잭션을 공유하기 때문. 안쪽을 정말 독립시키려면 REQUIRES_NEW가 필요.)
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 **self-invocation이면 전파 옵션 자체가 무시됨**: 같은 클래스 안에서 `this.otherMethod()`로 호출하면 프록시를 안 거쳐 `@Transactional(propagation=REQUIRES_NEW)`가 통째로 무력화됩니다. 반드시 **다른 빈으로 분리**해야 전파가 먹습니다(S7 참고).
+- 🔴 **REQUIRES_NEW 남발 = 커넥션 풀 고갈·데드락**: 바깥 트랜잭션이 커넥션을 붙잡은 채 안쪽이 또 하나를 요구하므로, 동시성이 높으면 풀이 마르거나 두 커넥션이 서로 락을 기다리는 데드락이 날 수 있습니다.
+- 🟡 **REQUIRED 참여 시 전파된 옵션은 바깥이 승자**: 안쪽 메서드에 `readOnly`, `timeout`, `isolation`을 다르게 줘도, 이미 시작된 바깥 물리 트랜잭션에 참여하는 것이라 대체로 무시됩니다(새 트랜잭션을 여는 REQUIRES_NEW에서만 독립 적용).
+
+## 6. 예상 면접 질문
+**Q1. "REQUIRED와 REQUIRES_NEW의 차이를 실무 예로 설명해주세요."**
+> REQUIRED는 기존 트랜잭션에 참여해 같은 물리 트랜잭션으로 묶이므로, 하나라도 실패하면 전부 롤백됩니다. 반면 REQUIRES_NEW는 기존 트랜잭션을 잠시 중단하고 별도 커넥션으로 독립 트랜잭션을 열어, 바깥이 롤백돼도 살아남습니다. 저는 "주문은 실패해도 감사 로그·결제 시도 이력은 반드시 남아야 하는" 케이스에 REQUIRES_NEW를 썼고, 커넥션을 하나 더 쓰기 때문에 트랜잭션이 짧게 끝나도록 신경 썼습니다.
+
+**Q2(시나리오). "안쪽 메서드에서 난 예외를 바깥에서 잡았는데도 전체가 롤백됐습니다. 왜죠?"**
+> 안쪽 메서드가 REQUIRED라 바깥과 **같은 물리 트랜잭션**을 공유했기 때문입니다. 안쪽에서 예외가 나는 순간 트랜잭션이 "rollback-only"로 마킹되고, 바깥에서 예외를 잡아 정상 종료하려 해도 커밋 시점에 스프링이 rollback-only를 발견해 `UnexpectedRollbackException`을 던지며 전체를 롤백합니다. 안쪽을 정말 독립적으로 커밋/롤백시키려면 REQUIRES_NEW로 물리 트랜잭션을 분리해야 합니다.
+
+**Q3("왜"). "체크 예외는 왜 기본적으로 롤백이 안 되나요? 그럼 저는 어떻게 하나요?"**
+> 스프링이 EJB의 관례를 이어받아 "unchecked/Error = 시스템 오류라 롤백, checked = 복구 가능한 비즈니스 상황이라 커밋"을 기본값으로 삼았기 때문입니다. 실무에서는 이 기본값이 헷갈림을 많이 유발해서, 비즈니스 예외를 `RuntimeException` 계열로 설계하거나, checked를 쓴다면 `rollbackFor = Exception.class`를 명시하는 팀 컨벤션을 둡니다.
+
+**Q4(트레이드오프). "REQUIRES_NEW를 남발하면 어떤 문제가 있나요?"**
+> 바깥 트랜잭션이 커넥션을 붙잡은 채 안쪽이 커넥션을 하나 더 요구하므로, 요청 하나가 커넥션 2개 이상을 점유합니다. 동시성이 높으면 커넥션 풀이 고갈되고, 바깥이 잡은 행 락을 안쪽이 기다리면서 데드락이 날 수도 있습니다. 그래서 정말 "독립 커밋"이 필요한 지점에만 최소한으로 쓰고, 트랜잭션 범위를 짧게 유지합니다.
+
+**Q5(꼬리질문). "그럼 NESTED는 REQUIRES_NEW 대신 언제 쓰나요?"**
+> NESTED는 같은 커넥션에서 savepoint를 잡아 "안쪽만 부분 롤백하되, 바깥이 롤백하면 같이 사라지는" 종속적 부분 롤백이 필요할 때 적합합니다. 커넥션을 추가로 안 쓴다는 장점이 있지만, DB·드라이버의 savepoint 지원이 필요하고 JPA(Hibernate)와는 궁합 제약이 있어 실무에서는 REQUIRES_NEW보다 훨씬 드물게 씁니다.
+
+---
+
+# S7. AOP 프록시 (JDK/CGLIB)와 self-invocation
+
+**학습 목표**: *"스프링 AOP 프록시는 어떻게 만들어지고, self-invocation이 왜 `@Transactional`·`@Async`를 무력화하나요?"* 에 5분간 답할 수 있다. (S3의 프록시·self-invocation을 원리 위주로 심화)
+
+## 1. 비유 — 대리인을 통해서만 통하는 계약
+클라이언트는 실제 담당자(대상 빈)와 직접 말하지 않고 **대리인(프록시)** 을 거칩니다. 대리인이 "계약서 검토(트랜잭션 시작), 서명(부가기능), 마무리(커밋)"를 대신 처리하고 진짜 담당자에게 일을 넘깁니다. 그런데 **담당자가 사무실 안에서 옆자리 동료를 직접 부르면(내부 호출)**, 그 대화는 대리인을 거치지 않으므로 아무 부가기능도 안 걸립니다 — 이게 self-invocation 함정입니다.
+
+## 2. 개념 정의 — 스프링 AOP = 런타임 프록시
+> 스프링 AOP는 **런타임에 대상 빈을 감싼 프록시 객체를 만들어** 컨테이너에 등록합니다. `@Transactional`, `@Async`, `@Cacheable`, `@Retryable` 등 대부분의 애노테이션 기반 부가기능이 이 프록시로 동작합니다.
+> 컴파일 타임에 바이트코드를 짜넣는 AspectJ(weaving)와 달리, 스프링은 프록시 기반이라 **프록시를 거치는 호출**에만 부가기능이 적용됩니다.
+
+## 3. JDK 동적 프록시 vs CGLIB 비교표 ⭐
+| 구분 | JDK 동적 프록시 | CGLIB |
+|------|----------------|-------|
+| 생성 방식 | 대상의 **인터페이스를 구현**한 프록시를 런타임 생성 (`java.lang.reflect.Proxy`) | 대상 **클래스를 상속**한 서브클래스를 런타임 생성(바이트코드 조작) |
+| 요구 조건 | 인터페이스 필수 | 인터페이스 없어도 됨(구체 클래스면 충분) |
+| 타입 | 인터페이스 타입으로만 참조 가능(구체 타입 캐스팅 시 `ClassCastException`) | 구체 클래스 타입으로 참조 가능 |
+| 적용 불가 | 인터페이스에 없는 메서드 | `final` 클래스/메서드, `private` 메서드 |
+| Spring Boot 기본 | `proxyTargetClass=false`일 때만 | **기본값**(`proxyTargetClass=true`, 2.0+) |
+
+- Spring Boot 2.0+는 인터페이스가 있어도 기본적으로 **CGLIB**를 씁니다(구체 타입 주입 시 캐스팅 문제를 피하려는 결정).
+
+## 4. self-invocation은 왜 프록시를 무력화하나 ⭐⭐
+```
+[정상] 다른 빈 A → (프록시 B) → 부가기능 O → 실제 B.method()
+[함정] 실제 B.outer() 안에서 this.inner() 호출
+        → this = 프록시가 아니라 "진짜 대상 객체"
+        → 프록시를 안 거침 → inner()의 @Transactional/@Async 무시
+```
+- **원리**: 컨테이너가 주입해준 것은 "프록시"지만, 메서드 내부의 `this`는 **프록시가 감싸고 있는 진짜 대상 객체**입니다. 따라서 `this.inner()`(또는 그냥 `inner()`) 호출은 프록시를 완전히 우회합니다. 프록시는 "바깥에서 들어오는 첫 진입"만 가로챌 수 있습니다.
+- **무력화되는 대표 애노테이션**: `@Transactional`(트랜잭션 안 열림), `@Async`(별도 스레드로 안 감, 호출 스레드에서 동기 실행), `@Cacheable`(캐시 조회/저장 스킵), `@Retryable`(재시도 안 함).
+
+```java
+@Service
+public class ReportService {
+    public void run() {
+        generate();          // ❌ self-invocation: @Async 무시 → 같은 스레드에서 동기 실행
+    }
+    @Async
+    public void generate() { ... }
+}
+```
+
+### 해결책 비교 ⭐
+| 방법 | 내용 | 평가 |
+|------|------|------|
+| **다른 빈으로 분리(권장)** | `@Async`/`@Transactional` 메서드를 별도 빈으로 빼고 주입받아 호출 → 프록시 경유 | 🟢 가장 깔끔, 책임 분리에도 도움 |
+| **self-injection** | 자기 자신을 프록시로 주입받아 `self.inner()` 호출 | 🟡 동작하나 순환참조 냄새, `@Lazy`나 `ObjectProvider` 필요 |
+| `AopContext.currentProxy()` | 현재 프록시를 꺼내 `((MyService) AopContext.currentProxy()).inner()` | 🟡 `exposeProxy=true` 필요, 스프링 API에 코드가 묶임 |
+| AspectJ 로드타임/컴파일타임 위빙 | 프록시가 아니라 바이트코드에 직접 위빙 → 내부 호출도 적용 | 🟡 강력하나 설정 복잡, 대부분 과함 |
+
+```java
+// 권장: 다른 빈으로 분리
+@Service
+public class ReportService {
+    private final ReportGenerator generator;   // 별도 빈
+    public void run() { generator.generate(); } // ✅ 프록시 경유 → @Async 적용
+}
+```
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 **`private` 메서드에 `@Transactional`/`@Async`는 무의미**: CGLIB는 상속으로 오버라이드하는데 `private`은 서브클래스에서 보이지 않고, JDK 프록시는 인터페이스 메서드만 다룹니다. 그래서 애노테이션이 있어도 조용히 무시됩니다(경고 없이 안 걸리는 게 더 위험).
+- 🔴 **`final` 클래스/메서드에 CGLIB 불가**: 서비스 빈을 `final`로 선언하면 CGLIB가 상속을 못 해 프록시 생성이 실패하거나 그 메서드만 부가기능이 빠집니다. Kotlin의 클래스 기본 `final`이 대표적 함정(→ `all-open`/`kotlin-spring` 플러그인 필요).
+- 🟡 **AOP가 걸리려면 메서드는 `public`**: 트랜잭션/캐시/비동기 대상 메서드는 `public`으로 두고, 같은 클래스 내부에서 직접 호출하지 않는지 확인하는 습관이 필요합니다.
+- 🟡 **`@Transactional`이 안 먹으면 체크리스트**: ① 내부 호출(self-invocation) 아닌지 ② `public`인지 ③ 빈으로 등록됐는지 ④ 예외를 삼키지 않았는지 ⑤ checked 예외인데 `rollbackFor` 빠지지 않았는지.
+
+## 6. 예상 면접 질문
+**Q1. "같은 클래스 안에서 메서드를 호출하면 트랜잭션이 왜 안 걸리나요?"**
+> 스프링 트랜잭션은 프록시가 대상 빈을 감싸서 "바깥에서 들어오는 첫 호출"을 가로채는 방식입니다. 그런데 같은 클래스 안에서 `this.method()`로 호출하면 `this`는 프록시가 아니라 프록시가 감싸고 있는 진짜 객체라, 프록시를 우회해 트랜잭션 시작 로직이 실행되지 않습니다. 해결은 그 메서드를 다른 빈으로 분리해 프록시를 거치도록 하는 것입니다.
+
+**Q2. "`@Transactional`을 `private` 메서드에 붙이면 어떻게 되나요?"**
+> 적용되지 않습니다. CGLIB 프록시는 대상 클래스를 상속해 메서드를 오버라이드하는데 `private` 메서드는 서브클래스에서 보이지 않아 오버라이드 대상이 아니고, JDK 동적 프록시는 인터페이스에 선언된 메서드만 다루므로 `private`은 애초에 대상이 아닙니다. 게다가 컴파일 에러도 경고도 없이 조용히 무시되기 때문에 더 위험합니다. 트랜잭션 대상 메서드는 반드시 `public`으로 둡니다.
+
+**Q3(시나리오). "`@Async`를 붙였는데 별도 스레드로 안 돌고 그냥 동기로 실행됐습니다. 원인은?"**
+> 가장 흔한 원인은 self-invocation입니다. 같은 빈 안에서 `@Async` 메서드를 직접 호출하면 프록시를 안 거쳐 비동기 처리가 무시되고 호출 스레드에서 동기로 실행됩니다. 그 외에 `@EnableAsync`를 안 켰거나, 메서드가 `public`이 아니거나, 반환 타입이 잘못된 경우도 있습니다. 저는 비동기 메서드를 별도 빈으로 분리해 해결했습니다.
+
+**Q4("왜"). "스프링 부트는 인터페이스가 있어도 왜 CGLIB를 기본으로 쓰나요?"**
+> JDK 동적 프록시는 인터페이스 타입으로만 프록시를 만들어서, 구체 클래스 타입으로 주입받으려 하면 `ClassCastException`이 나는 문제가 있었습니다. Spring Boot 2.0부터는 이런 캐스팅 이슈와 예측 가능성을 위해 `proxyTargetClass=true`(CGLIB)를 기본값으로 삼았습니다. 덕분에 인터페이스 유무와 상관없이 일관되게 동작합니다.
+
+**Q5(트레이드오프). "self-invocation 해결책 중 self-injection과 빈 분리 중 뭘 택하나요?"**
+> 저는 빈 분리를 선호합니다. self-injection은 자기 자신을 프록시로 주입받아야 해서 순환참조 냄새가 나고 `@Lazy` 같은 우회가 필요합니다. 반면 별도 빈으로 빼면 프록시를 자연스럽게 경유하면서 책임도 분리돼 코드가 더 명확해집니다. `AopContext.currentProxy()`는 스프링 API에 코드가 묶여서 최후의 수단으로만 씁니다.
+
+---
 
 # 핵심 질문 (Quiz)
 
@@ -446,28 +621,58 @@ Client
 </details>
 
 <details>
-<summary>Q7. @Transactional의 전파 레벨을 설명해주세요.</summary>
+<summary>Q7. 싱글톤 빈에 가변 상태를 두면 어떤 문제가 나고, 어떻게 피하나요? (S2)</summary>
 
-| 전파 | 동작 |
-|------|------|
-| REQUIRED(기본) | 기존 트랜잭션이 있으면 참여, 없으면 새로 시작 |
-| REQUIRES_NEW | 항상 새 트랜잭션(기존은 잠시 중단) |
-| NESTED | 중첩(savepoint), 부분 롤백 |
-| SUPPORTS | 있으면 참여, 없으면 없이 실행 |
-
-- 롤백 규칙: 기본적으로 **unchecked(RuntimeException)·Error만 롤백**, checked 예외는 롤백 안 함(`rollbackFor`로 확장 가능)
-- REQUIRES_NEW는 커넥션을 하나 더 사용하므로 커넥션 풀 고갈·데드락 가능성을 고려해 남발 금지, 반드시 다른 빈으로 분리해야 함(self-invocation 주의)
+- 싱글톤은 여러 스레드가 **같은 인스턴스**를 공유하므로 가변 필드는 race condition을 유발
+- 예: `SimpleDateFormat`(비-thread-safe) 필드 공유 → 간헐적 파싱 오류, 카운터 필드 → lost update
+- 해결: 무상태 설계 / 지역변수 사용 / 불변 객체(`DateTimeFormatter`) / 꼭 필요하면 `AtomicLong`·락
 
 </details>
 
 <details>
-<summary>Q8. 스프링 MVC의 요청 처리 흐름을 설명해주세요.</summary>
+<summary>Q8. 스프링 MVC의 요청 처리 흐름을 설명해주세요. (S5)</summary>
 
 - 모든 요청이 **Front Controller**인 `DispatcherServlet`으로 먼저 들어옴
 - `HandlerMapping`이 URL에 맞는 컨트롤러를 찾고 `HandlerAdapter`가 실행
 - 컨트롤러가 Service → Repository를 거쳐 결과 반환
 - REST(`@RestController`)는 `HttpMessageConverter`로 JSON 직렬화, 뷰는 `ViewResolver`로 렌더
 - Filter는 DispatcherServlet **앞뒤**(서블릿 컨테이너 단계), Interceptor는 DispatcherServlet이 컨트롤러를 찾은 **다음, 실행 전후**에 개입
+
+</details>
+
+<details>
+<summary>Q9. REQUIRED와 REQUIRES_NEW, NESTED의 차이는? (S6)</summary>
+
+- **REQUIRED(기본)**: 기존에 참여 → **같은 물리 트랜잭션**, 하나라도 실패하면 전체 롤백
+- **REQUIRES_NEW**: 기존을 일시 중단하고 **별도 커넥션으로 독립 트랜잭션** → 바깥이 롤백돼도 생존, 커넥션 하나 더 점유(남발 시 풀 고갈·데드락)
+- **NESTED**: 같은 커넥션에서 **savepoint** → 안쪽만 부분 롤백 가능하나 바깥이 롤백하면 함께 사라짐(종속적), JPA 제약으로 실무엔 드묾
+
+</details>
+
+<details>
+<summary>Q10. 체크 예외는 왜 롤백이 안 되고, 안쪽 예외를 바깥에서 잡았는데 왜 전체가 롤백되나요? (S6)</summary>
+
+- 스프링 기본 롤백 대상은 **unchecked(RuntimeException)+Error**뿐 → checked는 커밋됨(`rollbackFor=Exception.class`로 확장)
+- 예외를 메서드 안에서 `try-catch`로 삼키면 프록시가 예외를 못 봐 롤백 판정 자체가 안 됨
+- 안쪽이 REQUIRED로 **같은 물리 트랜잭션**을 공유하면, 안쪽 예외가 "rollback-only"를 마킹 → 바깥이 잡아도 커밋 시점에 `UnexpectedRollbackException`으로 전체 롤백 (독립시키려면 REQUIRES_NEW)
+
+</details>
+
+<details>
+<summary>Q11. self-invocation이 @Transactional·@Async를 무력화하는 이유와 해결책은? (S7)</summary>
+
+- 컨테이너가 주입한 건 프록시지만, 메서드 안의 `this`는 **프록시가 감싼 진짜 대상 객체** → `this.inner()`는 프록시를 우회
+- 프록시는 "바깥에서 들어오는 첫 호출"만 가로채므로 내부 호출엔 트랜잭션/비동기/캐시가 안 걸림
+- 해결: **다른 빈으로 분리(권장)** / self-injection(`@Lazy`) / `AopContext.currentProxy()`(`exposeProxy=true`)
+
+</details>
+
+<details>
+<summary>Q12. @Transactional을 private 메서드에 붙이면? JDK 프록시와 CGLIB의 차이는? (S7)</summary>
+
+- `private` 메서드엔 **적용 안 됨** — CGLIB는 상속 오버라이드라 `private`이 안 보이고, JDK 프록시는 인터페이스 메서드만 다룸(경고 없이 조용히 무시 → 위험). 대상 메서드는 반드시 `public`
+- **JDK 동적 프록시**: 인터페이스 구현 프록시(인터페이스 필수), 인터페이스 타입으로만 참조
+- **CGLIB**: 클래스 상속 서브클래스(인터페이스 불필요), `final` 클래스/메서드엔 불가 — Spring Boot 2.0+ 기본값(`proxyTargetClass=true`)
 
 </details>
 
