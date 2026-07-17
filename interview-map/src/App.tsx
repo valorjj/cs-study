@@ -9,17 +9,19 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { DocsView } from './components/DocsView'
 import { QuizView } from './components/QuizView'
+import { PathView } from './components/PathView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { ViewToggle } from './components/ViewToggle'
 import { useGraphStore } from './store/graphStore'
-import { useThemeEffect, useViewModeEffect } from './hooks/useTheme'
+import { useThemeEffect, useViewModeEffect, useProgressEffect } from './hooks/useTheme'
 
 const data = graphData as GraphData
 
 export default function App() {
   useThemeEffect()
   useViewModeEffect()
+  useProgressEffect()
   const viewMode = useGraphStore((s) => s.viewMode)
   const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])
   const edges = useMemo(() => toFlowEdges(data.edges), [])
@@ -39,7 +41,8 @@ export default function App() {
         <DocsView tree={tree} edges={data.edges} nodesById={nodesById} neighbors={neighbors} />
       )}
       {viewMode === 'quiz' && <QuizView nodes={data.nodes} />}
-      {viewMode !== 'quiz' && <SearchBar nodes={data.nodes} />}
+      {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
+      {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
       <ThemeSwitcher />
       <ViewToggle />
     </>
