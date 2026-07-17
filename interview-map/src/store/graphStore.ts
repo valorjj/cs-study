@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
 
-export type ViewMode = 'graph' | 'list' | 'quiz'
+export type ViewMode = 'graph' | 'list' | 'quiz' | 'path'
 
 interface GraphState {
   selectedId: string | null
@@ -13,6 +13,9 @@ interface GraphState {
   setTheme: (id: string) => void
   viewMode: ViewMode              // 지도(graph) vs 목록(list)
   setViewMode: (m: ViewMode) => void
+  studiedIds: string[]            // 학습 완료 체크된 노드 (localStorage 저장)
+  toggleStudied: (id: string) => void
+  setStudiedIds: (ids: string[]) => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -27,4 +30,11 @@ export const useGraphStore = create<GraphState>((set) => ({
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'graph',
   setViewMode: (m) => set({ viewMode: m }),
+  studiedIds: [],
+  toggleStudied: (id) => set((s) => ({
+    studiedIds: s.studiedIds.includes(id)
+      ? s.studiedIds.filter((x) => x !== id)
+      : [...s.studiedIds, id],
+  })),
+  setStudiedIds: (ids) => set({ studiedIds: ids }),
 }))

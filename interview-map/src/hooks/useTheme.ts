@@ -27,11 +27,30 @@ export function useViewModeEffect(): void {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   useEffect(() => {
     const saved = localStorage.getItem(VIEW_KEY)
-    if (saved === 'graph' || saved === 'list' || saved === 'quiz') setViewMode(saved)
+    if (saved === 'graph' || saved === 'list' || saved === 'quiz' || saved === 'path') setViewMode(saved)
     // hydrate once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, viewMode) } catch { /* ignore */ }
   }, [viewMode])
+}
+
+const PROGRESS_KEY = 'interview-map.progress.v1'
+
+// Persist study-path progress (studied node ids) across sessions.
+export function useProgressEffect(): void {
+  const studiedIds = useGraphStore((s) => s.studiedIds)
+  const setStudiedIds = useGraphStore((s) => s.setStudiedIds)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(PROGRESS_KEY)
+      if (saved) setStudiedIds(JSON.parse(saved) as string[])
+    } catch { /* ignore */ }
+    // hydrate once
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  useEffect(() => {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(studiedIds)) } catch { /* ignore */ }
+  }, [studiedIds])
 }
