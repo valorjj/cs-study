@@ -3,6 +3,19 @@ import { DEFAULT_THEME } from '../styles/themes'
 
 export type ViewMode = 'graph' | 'list' | 'quiz' | 'path'
 
+// Study-path progress key. Loaded synchronously at store creation so the first
+// render already has the saved state — avoids an effect-order hydrate/persist
+// race that StrictMode's double-mount would otherwise clobber.
+export const PROGRESS_KEY = 'interview-map.progress.v1'
+function loadStudied(): string[] {
+  try {
+    const s = localStorage.getItem(PROGRESS_KEY)
+    return s ? (JSON.parse(s) as string[]) : []
+  } catch {
+    return []
+  }
+}
+
 interface GraphState {
   selectedId: string | null
   select: (id: string | null) => void
@@ -30,7 +43,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'graph',
   setViewMode: (m) => set({ viewMode: m }),
-  studiedIds: [],
+  studiedIds: loadStudied(),
   toggleStudied: (id) => set((s) => ({
     studiedIds: s.studiedIds.includes(id)
       ? s.studiedIds.filter((x) => x !== id)
