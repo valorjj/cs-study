@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import graphData from '../graph/graph.json'
 import { CURATED_TRACKS } from '../graph/tracks'
-import { buildDomainTracks, trackProgress, nextStepIndex, type Track } from './tracks'
+import { buildDomainTracks, trackProgress, nextStepIndex, domainProgress, type Track } from './tracks'
 import type { GraphNode, GraphEdge } from '../graph/types'
 
 const N = (id: string, level: 0 | 1 | 2, domain = 'java'): GraphNode => ({
@@ -37,6 +37,18 @@ describe('nextStepIndex', () => {
     expect(nextStepIndex(t, new Set())).toBe(0)
     expect(nextStepIndex(t, new Set(['a']))).toBe(1)
     expect(nextStepIndex(t, new Set(['a', 'b', 'c']))).toBe(-1)
+  })
+})
+
+describe('domainProgress', () => {
+  const ns: GraphNode[] = [
+    N('java', 0, 'java'), N('jvm', 1, 'java'), N('jvm-gc', 2, 'java'), N('collections', 1, 'java'),
+    N('os', 0, 'os'), N('os-proc', 1, 'os'),
+  ]
+  it('counts studied L1/L2 per domain, ignoring L0', () => {
+    const m = domainProgress(ns, new Set(['jvm', 'jvm-gc']))
+    expect(m.get('java')).toEqual({ done: 2, total: 3 })
+    expect(m.get('os')).toEqual({ done: 0, total: 1 })
   })
 })
 

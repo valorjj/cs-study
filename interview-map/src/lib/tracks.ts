@@ -41,3 +41,18 @@ export function nextStepIndex(track: Track, studied: Set<string>): number {
   for (let i = 0; i < track.steps.length; i++) if (!studied.has(track.steps[i])) return i
   return -1
 }
+
+// Completed vs total concept nodes (level 1|2) per domain id.
+export function domainProgress(
+  nodes: GraphNode[], studied: Set<string>,
+): Map<string, { done: number; total: number }> {
+  const m = new Map<string, { done: number; total: number }>()
+  for (const n of nodes) {
+    if (n.level === 0) continue
+    const e = m.get(n.domain) ?? { done: 0, total: 0 }
+    e.total++
+    if (studied.has(n.id)) e.done++
+    m.set(n.domain, e)
+  }
+  return m
+}
