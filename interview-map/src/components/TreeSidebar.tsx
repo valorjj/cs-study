@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { LuChevronRight } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { ancestorsOf, type TreeNode } from '../lib/tree'
+import { domainProgress } from '../lib/tracks'
 import { domainColor } from '../styles/theme'
 import { NodeIcon } from './NodeIcon'
-import type { GraphEdge } from '../graph/types'
+import type { GraphEdge, GraphNode } from '../graph/types'
 import './TreeSidebar.css'
 
-function Row({ item, depth, expanded, toggle, rowRef }: {
+type DomainProg = Map<string, { done: number; total: number }>
+
+function Row({ item, depth, expanded, toggle, rowRef, studied, domainProg }: {
   item: TreeNode
   depth: number
   expanded: Set<string>
   toggle: (id: string) => void
   rowRef: (id: string, el: HTMLButtonElement | null) => void
+  studied: Set<string>
+  domainProg: DomainProg
 }) {
   const selectedId = useGraphStore((s) => s.selectedId)
   const select = useGraphStore((s) => s.select)
@@ -22,6 +27,8 @@ function Row({ item, depth, expanded, toggle, rowRef }: {
   const hasNote = !!node.noteRef
   const isOpen = expanded.has(node.id)
   const color = domainColor(node.domain)
+  const isDone = studied.has(node.id)
+  const prog = depth === 0 ? domainProg.get(node.domain) : undefined
 
   const onRowClick = () => {
     if (hasNote) select(node.id)
@@ -48,9 +55,11 @@ function Row({ item, depth, expanded, toggle, rowRef }: {
         </span>
         <span className="tsb-icon"><NodeIcon id={node.id} domain={node.domain} size={depth === 0 ? 18 : 15} /></span>
         <span className="tsb-label">{node.label}</span>
+        {prog && prog.done > 0 && <span className="tsb-count">{prog.done}/{prog.total}</span>}
+        {isDone && <span className="tsb-check" aria-label="완료">✓</span>}
       </button>
       {hasChildren && isOpen && children.map((c) => (
-        <Row key={c.node.id} item={c} depth={depth + 1} expanded={expanded} toggle={toggle} rowRef={rowRef} />
+        <Row key={c.node.id} item={c} depth={depth + 1} expanded={expanded} toggle={toggle} rowRef={rowRef} studied={studied} domainProg={domainProg} />
       ))}
     </>
   )
@@ -58,6 +67,14 @@ function Row({ item, depth, expanded, toggle, rowRef }: {
 
 export function TreeSidebar({ tree, edges }: { tree: TreeNode[]; edges: GraphEdge[] }) {
   const selectedId = useGraphStore((s) => s.selectedId)
+  const studiedIds = useGraphStore((s) => s.studiedIds)
+  const studied = useMemo(() => new Set(studiedIds), [studiedIds])
+  const domainProg = useMemo(() => {
+    const all: GraphNode[] = []
+    const walk = (t: TreeNode) => { all.push(t.node); t.children.forEach(walk) }
+    tree.forEach(walk)
+    return domainProgress(all, studied)
+  }, [tree, studied])
   // Domains (level 0) start expanded so the manual reads top-down at a glance.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(tree.map((t) => t.node.id)))
   const rows = useRef(new Map<string, HTMLButtonElement>())
@@ -88,7 +105,7 @@ export function TreeSidebar({ tree, edges }: { tree: TreeNode[]; edges: GraphEdg
   return (
     <nav className="tsb" aria-label="주제 목록">
       {tree.map((t) => (
-        <Row key={t.node.id} item={t} depth={0} expanded={expanded} toggle={toggle} rowRef={rowRef} />
+        <Row key={t.node.id} item={t} depth={0} expanded={expanded} toggle={toggle} rowRef={rowRef} studied={studied} domainProg={domainProg} />
       ))}
     </nav>
   )

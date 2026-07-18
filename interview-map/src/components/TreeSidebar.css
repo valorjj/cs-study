@@ -16,3 +16,10 @@
 .tsb-caret[data-has="false"] { visibility: hidden; }
 .tsb-icon { display: inline-flex; align-items: center; color: var(--c); flex: none; }
 .tsb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Study-path progress badges */
+.tsb-check { margin-left: auto; flex: none; width: 17px; height: 17px; border-radius: 50%;
+  background: var(--accent); color: var(--node-studied-text); font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; }
+.tsb-count { margin-left: auto; flex: none; font-size: 11px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums; }
+.tsb-count + .tsb-check { margin-left: 8px; }
