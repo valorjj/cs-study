@@ -11,6 +11,7 @@ import { useGraphStore } from '../store/graphStore'
 import { computeFocus } from '../lib/focus'
 import { buildAdjacency } from '../lib/graphUtils'
 import { visibleL2Ids, activeParentId, parentIdsWithChildren } from '../lib/expansion'
+import { domainProgress } from '../lib/tracks'
 import { tokensOf } from '../styles/themes'
 import type { GraphNode } from '../graph/types'
 import './controls.css'
@@ -28,6 +29,8 @@ function Inner({ nodes, edges, adjacency }: {
   const clearFocusRequest = useGraphStore((s) => s.clearFocusRequest)
   const themeId = useGraphStore((s) => s.themeId)
   const grid = tokensOf(themeId).grid
+  const studiedIds = useGraphStore((s) => s.studiedIds)
+  const studied = useMemo(() => new Set(studiedIds), [studiedIds])
   const { focused, isActive } = useMemo(
     () => computeFocus(selectedId, adjacency), [selectedId, adjacency])
   const [menu, setMenu] = useState<MenuState | null>(null)
@@ -57,6 +60,7 @@ function Inner({ nodes, edges, adjacency }: {
   const activeParent = useMemo(
     () => activeParentId(selectedId, allNodesList, hierarchyEdges),
     [selectedId, allNodesList, hierarchyEdges])
+  const domainProg = useMemo(() => domainProgress(allNodesList, studied), [allNodesList, studied])
   const visibleNodes = useMemo(() => {
     const lv = levelKey.split(',').map(Number)
     return nodes
@@ -65,12 +69,21 @@ function Inner({ nodes, edges, adjacency }: {
         if (node.level === 2) return l2Visible.has(n.id)
         return lv.includes(node.level)
       })
-      .map((n) => ({
-        ...n,
-        data: { ...n.data, hasChildren: parentSet.has(n.id), expanded: n.id === activeParent },
-        style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
-      }))
-  }, [nodes, levelKey, isActive, focused, l2Visible, parentSet, activeParent])
+      .map((n) => {
+        const node = (n.data as { node: GraphNode }).node
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            hasChildren: parentSet.has(n.id),
+            expanded: n.id === activeParent,
+            studied: node.level !== 0 && studied.has(n.id),
+            progress: node.level === 0 ? domainProg.get(node.domain) : undefined,
+          },
+          style: { ...(n.style ?? {}), opacity: isActive && !focused.has(n.id) ? 0.15 : 1 },
+        }
+      })
+  }, [nodes, levelKey, isActive, focused, l2Visible, parentSet, activeParent, studied, domainProg])
 
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes])
   const visibleEdges = useMemo(() => edges

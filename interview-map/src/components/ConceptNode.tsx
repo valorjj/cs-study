@@ -6,12 +6,13 @@ import { NodeIcon } from './NodeIcon'
 import './nodes.css'
 
 export function ConceptNode({ data }: NodeProps) {
-  const d = data as { node: GraphNode; hasChildren?: boolean; expanded?: boolean }
+  const d = data as { node: GraphNode; hasChildren?: boolean; expanded?: boolean; studied?: boolean }
   const node = d.node
   const color = domainColor(node.domain)
   return (
     <div className="km-node km-concept" style={{ '--c': color } as CSSProperties}>
       <Handle type="target" position={Position.Top} className="km-handle" />
+      {d.studied && <span className="km-check" aria-label="완료">✓</span>}
       <span className="km-icon"><NodeIcon id={node.id} domain={node.domain} size={20} /></span>
       <span className="km-label">{node.label}</span>
       {d.hasChildren && (
