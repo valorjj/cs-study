@@ -11,6 +11,14 @@
 .np-head { display: flex; align-items: center; gap: 10px; border-left: 4px solid; padding-left: 12px; }
 .np-head h2 { margin: 0; font-size: 20px; }
 .np-icon { display: flex; align-items: center; justify-content: center; }
+.np-done {
+  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid color-mix(in srgb, var(--c) 45%, var(--border)); background: transparent; color: var(--text-dim);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.np-done:hover { border-color: var(--c); color: var(--text); }
+.np-done[data-done='true'] { background: var(--c); border-color: var(--c); color: #fff; }
 .np-summary { color: var(--text); margin: 12px 0; font-size: 14px; line-height: 1.6; }
 .np-keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .np-keywords span { font-size: 12px; background: var(--bg-elev); padding: 3px 9px; border-radius: 6px; color: var(--text); }

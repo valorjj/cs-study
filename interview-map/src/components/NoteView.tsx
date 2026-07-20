@@ -7,6 +7,7 @@ import { useGraphStore } from '../store/graphStore'
 import { parseNoteRef, parseSections, extractOutline } from '../lib/notes'
 import { rehypeFoldQA } from '../lib/rehypeFoldQA'
 import { domainColor } from '../styles/theme'
+import { LuCheck } from 'react-icons/lu'
 import type { GraphNode } from '../graph/types'
 import { NodeIcon } from './NodeIcon'
 import './NotePanel.css'
@@ -21,6 +22,9 @@ export function NoteView({ node, nodesById, neighbors }: {
   neighbors: Map<string, string[]>
 }) {
   const select = useGraphStore((s) => s.select)
+  const studiedIds = useGraphStore((s) => s.studiedIds)
+  const toggleStudied = useGraphStore((s) => s.toggleStudied)
+  const isDone = studiedIds.includes(node.id)
   const [md, setMd] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const noteRef = useRef<HTMLDivElement>(null)
@@ -61,6 +65,15 @@ export function NoteView({ node, nodesById, neighbors }: {
         <header className="np-head" style={{ borderColor: color }}>
           <span className="np-icon"><NodeIcon id={node.id} domain={node.domain} size={22} /></span>
           <h2>{node.label}</h2>
+          <button
+            className="np-done"
+            data-done={isDone}
+            style={{ ['--c' as string]: color }}
+            onClick={() => toggleStudied(node.id)}
+            aria-pressed={isDone}
+          >
+            <LuCheck size={14} /> {isDone ? '읽음 완료' : '읽음 표시'}
+          </button>
         </header>
         <p className="np-summary">{node.summary}</p>
         {node.keywords.length > 0 && (
