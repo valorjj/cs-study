@@ -5,7 +5,7 @@ import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuShuffle } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { parseNoteRef, parseSections } from '../lib/notes'
-import { extractQuizItems, seededShuffle, hashSeed } from '../lib/quiz'
+import { extractQuizItems, seededShuffle, hashSeed, weakDomains } from '../lib/quiz'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
 import './QuizView.css'
@@ -30,6 +30,9 @@ function todayStr(): string {
 export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const select = useGraphStore((s) => s.select)
   const setViewMode = useGraphStore((s) => s.setViewMode)
+  const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
+  const quizStats = useGraphStore((s) => s.quizStats)
+  const requestTrack = useGraphStore((s) => s.requestTrack)
   const [pool, setPool] = useState<QuizItem[] | null>(null)
   const [scope, setScope] = useState<string>('all')
   const [index, setIndex] = useState(0)
@@ -94,6 +97,11 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   if (!pool) return <div className="quiz"><p className="quiz-dim">퀴즈 불러오는 중…</p></div>
   const card = deck[index]
 
+  const domainLabel = new Map(nodes.filter((n) => n.level === 0).map((n) => [n.domain, n.label]))
+  const weak = weakDomains(quizStats)
+  const advance = () => { setIndex((i) => (i + 1) % deck.length); setRevealed(false) }
+  const assess = (correct: boolean) => { if (card) recordQuizResult(card.domain, correct); advance() }
+
   return (
     <div className="quiz">
       <div className="quiz-scopes">
@@ -112,6 +120,17 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
           </button>
         ))}
       </div>
+
+      {weak.length > 0 && (
+        <div className="quiz-weak">
+          <span className="quiz-weak-label">🎯 약점 보강</span>
+          {weak.map((w) => (
+            <button key={w.domain} className="quiz-weak-chip" onClick={() => requestTrack(`domain:${w.domain}`)}>
+              {domainLabel.get(w.domain) ?? w.domain} <b>{w.correct}/{w.seen}</b>
+            </button>
+          ))}
+        </div>
+      )}
 
       {card ? (
         <div className="quiz-card" style={{ ['--c' as string]: domainColor(card.domain) }}>
@@ -133,9 +152,14 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
             <button className="quiz-link" onClick={() => { select(card.nodeId); setViewMode('list') }}>
               이 개념 보기 <LuArrowRight size={14} />
             </button>
-            <button className="quiz-next" onClick={() => { setIndex((i) => (i + 1) % deck.length); setRevealed(false) }}>
-              다음 <LuArrowRight size={14} />
-            </button>
+            {revealed ? (
+              <div className="quiz-assess">
+                <button className="quiz-miss" onClick={() => assess(false)}>몰랐음</button>
+                <button className="quiz-got" onClick={() => assess(true)}>알았음</button>
+              </div>
+            ) : (
+              <button className="quiz-next" onClick={advance}>다음 <LuArrowRight size={14} /></button>
+            )}
           </div>
         </div>
       ) : (

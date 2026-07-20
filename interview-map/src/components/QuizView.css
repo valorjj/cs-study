@@ -41,3 +41,17 @@
   .quiz-card { padding: 18px 16px 16px; }
   .quiz-q { font-size: 16px; }
 }
+
+.quiz-weak { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 680px; }
+.quiz-weak-label { font-size: 12px; color: var(--text-dim); font-weight: 700; }
+.quiz-weak-chip { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg));
+  color: var(--text-strong); border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12px; }
+.quiz-weak-chip:hover { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
+.quiz-weak-chip b { font-variant-numeric: tabular-nums; }
+
+.quiz-assess { display: flex; gap: 8px; }
+.quiz-miss, .quiz-got { border-radius: 10px; padding: 9px 16px; cursor: pointer; font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+.quiz-miss { background: none; border-color: var(--border-strong); color: var(--text-dim); }
+.quiz-miss:hover { color: var(--text-strong); border-color: var(--text-dim); }
+.quiz-got { background: var(--accent); color: var(--node-studied-text); }
+.quiz-got:hover { filter: brightness(1.08); }
