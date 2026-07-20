@@ -7,8 +7,14 @@ import {
 } from '../lib/cloudSync'
 
 // Syncs studiedIds and quizStats with the cloud for the logged-in user. No-op
-// when logged out or Supabase is unconfigured. `readyRef` gates the debounced
-// saves so they cannot overwrite cloud data before the initial load+merge.
+// when logged out or Supabase is unconfigured. `readyRef` gates the write-through
+// so it cannot overwrite cloud data before the initial load+merge.
+//
+// Writes fire immediately on change (not debounced): studied/quiz toggles are
+// low-frequency, human-paced actions, and a debounce timer gets *cancelled* when
+// the user signs out or the page navigates (OAuth redirect) within its window —
+// silently dropping the pending write. Immediate saves have no pending window to
+// lose.
 export function useCloudSync(): void {
   const { user } = useAuth()
   const studiedIds = useGraphStore((s) => s.studiedIds)
@@ -54,16 +60,14 @@ export function useCloudSync(): void {
     return () => { cancelled = true }
   }, [user, setStudiedIds, setQuizStats])
 
-  // While signed in and past the initial merge: debounce-save on every change.
+  // While signed in and past the initial merge: save immediately on every change.
   useEffect(() => {
     if (!user || !readyRef.current) return
-    const t = setTimeout(() => { void saveStudied(user.id, studiedIds) }, 800)
-    return () => clearTimeout(t)
+    void saveStudied(user.id, studiedIds)
   }, [studiedIds, user])
 
   useEffect(() => {
     if (!user || !readyRef.current) return
-    const t = setTimeout(() => { void saveQuizStats(user.id, quizStats) }, 800)
-    return () => clearTimeout(t)
+    void saveQuizStats(user.id, quizStats)
   }, [quizStats, user])
 }
