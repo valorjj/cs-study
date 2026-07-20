@@ -12,6 +12,7 @@ import { QuizView } from './components/QuizView'
 import { PathView } from './components/PathView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
+import { AuthButton } from './components/AuthButton'
 import { ViewToggle } from './components/ViewToggle'
 import { useGraphStore } from './store/graphStore'
 import { useThemeEffect, useViewModeEffect, useProgressEffect } from './hooks/useTheme'
@@ -43,6 +44,7 @@ export default function App() {
       {viewMode === 'quiz' && <QuizView nodes={data.nodes} />}
       {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
+      <AuthButton />
       <ThemeSwitcher />
       <ViewToggle />
     </>
