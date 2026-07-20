@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractQuizItems, seededShuffle, hashSeed, weakDomains } from './quiz'
+import { extractQuizItems, seededShuffle, hashSeed, weakDomains, extractDrillChains } from './quiz'
 
 describe('extractQuizItems', () => {
   it('pairs a **Q...** line with its following blockquote answer', () => {
@@ -78,5 +78,87 @@ describe('weakDomains', () => {
   it('computes rate and is empty when nothing qualifies', () => {
     expect(weakDomains({ x: { correct: 3, seen: 3 } })).toEqual([])
     expect(weakDomains({ y: { correct: 0, seen: 4 } })[0].rate).toBe(0)
+  })
+})
+
+describe('extractDrillChains', () => {
+  it('captures a main Q with its ordered follow-up chain', () => {
+    const body = [
+      '**Q1. "프로세스와 스레드 차이?"**',
+      '> 프로세스는 독립 메모리, 스레드는 공유.',
+      '',
+      '**꼬리 Q1-1. "멀티프로세스를 택하는 경우는?"**',
+      '> 격리가 안정성으로 직결될 때.',
+      '',
+      '**꼬리 Q1-2. "JVM 스레드와 OS 스레드 관계는?"**',
+      '> 1:1 매핑이 일반적.',
+    ].join('\n')
+    const chains = extractDrillChains(body)
+    expect(chains).toHaveLength(1)
+    expect(chains[0].question).toBe('프로세스와 스레드 차이?')
+    expect(chains[0].answer).toBe('프로세스는 독립 메모리, 스레드는 공유.')
+    expect(chains[0].followups).toEqual([
+      { question: '멀티프로세스를 택하는 경우는?', answer: '격리가 안정성으로 직결될 때.' },
+      { question: 'JVM 스레드와 OS 스레드 관계는?', answer: '1:1 매핑이 일반적.' },
+    ])
+  })
+
+  it('excludes a main Q that has no follow-ups', () => {
+    const body = [
+      '**Q1. "꼬리 없는 질문?"**',
+      '> 답만 있음.',
+      '',
+      '**Q2. "꼬리 있는 질문?"**',
+      '> 메인 답.',
+      '',
+      '**꼬리 Q2-1. "따라오는 질문?"**',
+      '> 따라오는 답.',
+    ].join('\n')
+    const chains = extractDrillChains(body)
+    expect(chains).toHaveLength(1)
+    expect(chains[0].question).toBe('꼬리 있는 질문?')
+    expect(chains[0].followups).toHaveLength(1)
+  })
+
+  it('ignores Q/follow-up markers inside code fences', () => {
+    const body = [
+      '```',
+      '**Q1. "코드 안 질문"**',
+      '> 무시됨',
+      '**꼬리 Q1-1. "코드 안 꼬리"**',
+      '> 무시됨',
+      '```',
+      '**Q2. "진짜 질문?"**',
+      '> 진짜 답.',
+      '',
+      '**꼬리 Q2-1. "진짜 꼬리?"**',
+      '> 진짜 꼬리 답.',
+    ].join('\n')
+    const chains = extractDrillChains(body)
+    expect(chains).toHaveLength(1)
+    expect(chains[0].question).toBe('진짜 질문?')
+    expect(chains[0].followups).toHaveLength(1)
+  })
+
+  it('parses multiple chains and stops each at the next main Q', () => {
+    const body = [
+      '**Q1. "첫 질문?"**',
+      '> 첫 답.',
+      '**꼬리 Q1-1. "첫 꼬리?"**',
+      '> 첫 꼬리 답.',
+      '**Q2. "둘째 질문?"**',
+      '> 둘째 답.',
+      '**꼬리 Q2-1. "둘째 꼬리?"**',
+      '> 둘째 꼬리 답.',
+    ].join('\n')
+    const chains = extractDrillChains(body)
+    expect(chains.map((c) => c.question)).toEqual(['첫 질문?', '둘째 질문?'])
+    expect(chains[0].followups).toHaveLength(1)
+    expect(chains[1].followups[0].question).toBe('둘째 꼬리?')
+  })
+
+  it('returns [] when there are no follow-ups anywhere', () => {
+    const body = ['**Q1. "질문?"**', '> 답.'].join('\n')
+    expect(extractDrillChains(body)).toEqual([])
   })
 })

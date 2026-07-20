@@ -44,6 +44,87 @@ export function extractQuizItems(body: string): RawQuizItem[] {
   return out
 }
 
+// Follow-up marker: "**꼬리 Q1-1. ...**", "**꼬리 Q2-1: ...**".
+const FOLLOWUP_START = /^\*\*꼬리/
+
+// Clean a follow-up question line: drop the "꼬리 Q1-1." marker and wrapping quotes.
+function cleanFollowup(inner: string): string {
+  let t = inner.replace(/^꼬리\s*Q?[\d-]*(?:\([^)]*\))?\s*[.:]\s*/, '').trim()
+  t = t.replace(/^["“”'](.*)["“”']$/s, '$1').trim()
+  return t
+}
+
+export interface DrillFollowup {
+  question: string
+  answer: string
+}
+
+export interface DrillChain {
+  question: string
+  answer: string
+  followups: DrillFollowup[]
+}
+
+// Parse main-Q + follow-up chains from a section body. A chain is a **Q...** line
+// with its `>` answer, followed by consecutive **꼬리...** lines (each with its own
+// `>` answer), up to the next main **Q...** or the section end. Main Qs with no
+// follow-ups are excluded (the flashcard mode covers those). Fence-aware.
+export function extractDrillChains(body: string): DrillChain[] {
+  const lines = body.split('\n')
+  const fence = /^\s*(```|~~~)/
+  let inFence = false
+  const out: DrillChain[] = []
+
+  // Read a `>` blockquote starting at index `start`; returns [text, nextIndex].
+  const readQuote = (start: number): [string, number] => {
+    const acc: string[] = []
+    let j = start
+    while (j < lines.length && lines[j].trimStart().startsWith('>')) {
+      acc.push(lines[j].trimStart().replace(/^>\s?/, ''))
+      j++
+    }
+    return [acc.join('\n').trim(), j]
+  }
+
+  const isMain = (t: string) => Q_START.test(t) && t.endsWith('**') && t.length > 4
+  const isFollow = (t: string) => FOLLOWUP_START.test(t) && t.endsWith('**') && t.length > 4
+
+  let i = 0
+  while (i < lines.length) {
+    if (fence.test(lines[i])) { inFence = !inFence; i++; continue }
+    if (inFence) { i++; continue }
+    const t = lines[i].trim()
+    if (!isMain(t)) { i++; continue }
+
+    const question = cleanQuestion(t.slice(2, -2))
+    let j = i + 1
+    while (j < lines.length && lines[j].trim() === '') j++
+    if (j >= lines.length || !lines[j].trimStart().startsWith('>')) { i += 1; continue }
+    const [answer, afterAns] = readQuote(j)
+
+    const followups: DrillFollowup[] = []
+    let k = afterAns
+    while (k < lines.length) {
+      if (fence.test(lines[k])) { inFence = !inFence; k++; continue }
+      if (inFence) { k++; continue }
+      const tk = lines[k].trim()
+      if (isMain(tk)) break // next main Q ends this chain
+      if (!isFollow(tk)) { k++; continue }
+      const fq = cleanFollowup(tk.slice(2, -2))
+      let m = k + 1
+      while (m < lines.length && lines[m].trim() === '') m++
+      if (m >= lines.length || !lines[m].trimStart().startsWith('>')) { k += 1; continue }
+      const [fans, afterF] = readQuote(m)
+      followups.push({ question: fq, answer: fans })
+      k = afterF
+    }
+
+    if (followups.length > 0) out.push({ question, answer, followups })
+    i = k
+  }
+  return out
+}
+
 // FNV-1a hash → 32-bit seed for seededShuffle (e.g. hashSeed("2026-07-16:all")).
 export function hashSeed(s: string): number {
   let h = 2166136261 >>> 0
