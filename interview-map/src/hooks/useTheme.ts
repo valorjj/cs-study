@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useGraphStore, PROGRESS_KEY, QUIZSTATS_KEY } from '../store/graphStore'
+import { useGraphStore } from '../store/graphStore'
 import { applyTheme, DEFAULT_THEME } from '../styles/themes'
 
 const KEY = 'interview-map.theme.v1'
@@ -36,19 +36,7 @@ export function useViewModeEffect(): void {
   }, [viewMode])
 }
 
-// Persist study-path progress. State is hydrated synchronously in the store
-// (see loadStudied), so this only writes changes — no hydrate/persist race.
-export function useProgressEffect(): void {
-  const studiedIds = useGraphStore((s) => s.studiedIds)
-  useEffect(() => {
-    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(studiedIds)) } catch { /* ignore */ }
-  }, [studiedIds])
-}
-
-// Persist quiz stats (hydrated synchronously in the store; this only writes).
-export function useQuizStatsEffect(): void {
-  const quizStats = useGraphStore((s) => s.quizStats)
-  useEffect(() => {
-    try { localStorage.setItem(QUIZSTATS_KEY, JSON.stringify(quizStats)) } catch { /* ignore */ }
-  }, [quizStats])
-}
+// NOTE: studiedIds and quizStats persistence is owned by useCloudSync, which
+// routes writes to localStorage (guest) or the cloud (logged in) and keeps the
+// two separate. Don't add a plain localStorage persist effect here — it would
+// clobber the guest copy with account data while logged in.

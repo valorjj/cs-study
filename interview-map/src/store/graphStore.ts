@@ -7,7 +7,10 @@ export type ViewMode = 'graph' | 'list' | 'quiz' | 'path'
 // render already has the saved state — avoids an effect-order hydrate/persist
 // race that StrictMode's double-mount would otherwise clobber.
 export const PROGRESS_KEY = 'interview-map.progress.v1'
-function loadStudied(): string[] {
+// Guest-mode (logged-out) progress lives here. When logged in the cloud row is
+// the source of truth and this key is left untouched, so the guest copy survives
+// to be restored on logout. Exported for useCloudSync's guest/cloud switching.
+export function readGuestStudied(): string[] {
   try {
     const s = localStorage.getItem(PROGRESS_KEY)
     return s ? (JSON.parse(s) as string[]) : []
@@ -18,7 +21,7 @@ function loadStudied(): string[] {
 
 export interface QuizStat { correct: number; seen: number }
 export const QUIZSTATS_KEY = 'interview-map.quizstats.v1'
-function loadQuizStats(): Record<string, QuizStat> {
+export function readGuestQuizStats(): Record<string, QuizStat> {
   try {
     const s = localStorage.getItem(QUIZSTATS_KEY)
     return s ? (JSON.parse(s) as Record<string, QuizStat>) : {}
@@ -60,14 +63,14 @@ export const useGraphStore = create<GraphState>((set) => ({
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'graph',
   setViewMode: (m) => set({ viewMode: m }),
-  studiedIds: loadStudied(),
+  studiedIds: readGuestStudied(),
   toggleStudied: (id) => set((s) => ({
     studiedIds: s.studiedIds.includes(id)
       ? s.studiedIds.filter((x) => x !== id)
       : [...s.studiedIds, id],
   })),
   setStudiedIds: (ids) => set({ studiedIds: ids }),
-  quizStats: loadQuizStats(),
+  quizStats: readGuestQuizStats(),
   recordQuizResult: (domain, correct) => set((s) => {
     const cur = s.quizStats[domain] ?? { correct: 0, seen: 0 }
     return { quizStats: { ...s.quizStats, [domain]: { correct: cur.correct + (correct ? 1 : 0), seen: cur.seen + 1 } } }

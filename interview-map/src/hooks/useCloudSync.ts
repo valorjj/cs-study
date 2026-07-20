@@ -1,32 +1,56 @@
 import { useEffect, useRef } from 'react'
 import { useAuth } from './useAuth'
-import { useGraphStore } from '../store/graphStore'
 import {
-  loadStudied, saveStudied, mergeStudied,
-  loadQuizStats, saveQuizStats, mergeQuizStats,
-} from '../lib/cloudSync'
+  useGraphStore, PROGRESS_KEY, QUIZSTATS_KEY,
+  readGuestStudied, readGuestQuizStats,
+  type QuizStat,
+} from '../store/graphStore'
+import { loadStudied, saveStudied, loadQuizStats, saveQuizStats } from '../lib/cloudSync'
 
-// Syncs studiedIds and quizStats with the cloud for the logged-in user. No-op
-// when logged out or Supabase is unconfigured. `readyRef` gates the write-through
-// so it cannot overwrite cloud data before the initial load+merge.
-//
-// Writes fire immediately on change (not debounced): studied/quiz toggles are
-// low-frequency, human-paced actions, and a debounce timer gets *cancelled* when
-// the user signs out or the page navigates (OAuth redirect) within its window —
-// silently dropping the pending write. Immediate saves have no pending window to
-// lose.
+// Single persistence orchestrator for studiedIds + quizStats. Guest mode and
+// logged-in mode keep COMPLETELY SEPARATE progress — switching account never
+// merges the two:
+//   - Guest (logged out): state is persisted to localStorage only.
+//   - Logged in: state mirrors the user's cloud row; localStorage is left
+//     untouched so the guest copy is preserved and restored on logout.
+//   - On login  → load cloud and REPLACE the in-memory state (no merge).
+//   - On logout → restore the preserved guest snapshot.
+// Works in guest-only builds too (Supabase unconfigured → user always null →
+// the guest/localStorage branch runs; the cloud calls are no-ops).
 export function useCloudSync(): void {
   const { user } = useAuth()
-  const studiedIds = useGraphStore((s) => s.studiedIds)
   const setStudiedIds = useGraphStore((s) => s.setStudiedIds)
-  const quizStats = useGraphStore((s) => s.quizStats)
   const setQuizStats = useGraphStore((s) => s.setQuizStats)
-  const readyRef = useRef(false)
+  const studiedIds = useGraphStore((s) => s.studiedIds)
+  const quizStats = useGraphStore((s) => s.quizStats)
 
-  // On sign-in (user change): load cloud → merge with local → upload if needed.
+  // Current user, read from the write-through effects. Those effects deliberately
+  // do NOT depend on `user`, so a login/logout alone can't fire them with the
+  // outgoing mode's stale value — only an actual data change triggers a write.
+  const userRef = useRef(user)
+  userRef.current = user
+  // Guest snapshot to restore on logout; kept current on every guest-mode write.
+  const guestStudiedRef = useRef<string[]>(readGuestStudied())
+  const guestQuizRef = useRef<Record<string, QuizStat>>(readGuestQuizStats())
+  // Gates write-through until the initial load/restore for the current mode is done.
+  const readyRef = useRef(false)
+  // Whether the previous state was logged-in — so we only restore guest on a
+  // real login→logout transition, not on the initial guest mount.
+  const wasLoggedInRef = useRef(false)
+
+  // Mode switch. On login: load cloud, replace (no merge). On logout: restore the
+  // guest snapshot. readyRef is dropped first so no stale write races the switch.
   useEffect(() => {
     readyRef.current = false
-    if (!user) return
+    if (!user) {
+      if (wasLoggedInRef.current) {
+        setStudiedIds(guestStudiedRef.current)
+        setQuizStats(guestQuizRef.current)
+        wasLoggedInRef.current = false
+      }
+      readyRef.current = true
+      return
+    }
     let cancelled = false
     void (async () => {
       const [cloudStudied, cloudStats] = await Promise.all([
@@ -34,40 +58,30 @@ export function useCloudSync(): void {
         loadQuizStats(user.id),
       ])
       if (cancelled) return
-      const { studiedIds: localStudied, quizStats: localStats } = useGraphStore.getState()
-
-      // studied_ids: set-union (idempotent).
-      if (cloudStudied === null) {
-        await saveStudied(user.id, localStudied) // first login → migrate local up
-      } else {
-        const merged = mergeStudied(localStudied, cloudStudied)
-        if (merged.length !== localStudied.length) setStudiedIds(merged)
-        if (merged.length !== cloudStudied.length) await saveStudied(user.id, merged)
-      }
-
-      // quiz_stats: per-domain field-wise max (idempotent). Always push the
-      // merged result on login — cheap, and keeps both sides converged.
-      if (cloudStats === null) {
-        await saveQuizStats(user.id, localStats) // first login → migrate local up
-      } else {
-        const merged = mergeQuizStats(localStats, cloudStats)
-        setQuizStats(merged)
-        await saveQuizStats(user.id, merged)
-      }
-
-      if (!cancelled) readyRef.current = true
+      setStudiedIds(cloudStudied ?? [])
+      setQuizStats(cloudStats ?? {})
+      wasLoggedInRef.current = true
+      readyRef.current = true
     })()
     return () => { cancelled = true }
   }, [user, setStudiedIds, setQuizStats])
 
-  // While signed in and past the initial merge: save immediately on every change.
+  // Write-through on data change. Keyed on the data only (user via ref) so a mode
+  // switch fires this exactly once — with the new mode's value set by the effect
+  // above — never with the outgoing value.
   useEffect(() => {
-    if (!user || !readyRef.current) return
-    void saveStudied(user.id, studiedIds)
-  }, [studiedIds, user])
+    if (!readyRef.current) return
+    const u = userRef.current
+    if (u) { void saveStudied(u.id, studiedIds); return }
+    guestStudiedRef.current = studiedIds
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(studiedIds)) } catch { /* ignore */ }
+  }, [studiedIds])
 
   useEffect(() => {
-    if (!user || !readyRef.current) return
-    void saveQuizStats(user.id, quizStats)
-  }, [quizStats, user])
+    if (!readyRef.current) return
+    const u = userRef.current
+    if (u) { void saveQuizStats(u.id, quizStats); return }
+    guestQuizRef.current = quizStats
+    try { localStorage.setItem(QUIZSTATS_KEY, JSON.stringify(quizStats)) } catch { /* ignore */ }
+  }, [quizStats])
 }
