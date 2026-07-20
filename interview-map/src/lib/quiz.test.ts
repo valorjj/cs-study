@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractQuizItems, seededShuffle, hashSeed } from './quiz'
+import { extractQuizItems, seededShuffle, hashSeed, weakDomains } from './quiz'
 
 describe('extractQuizItems', () => {
   it('pairs a **Q...** line with its following blockquote answer', () => {
@@ -58,5 +58,25 @@ describe('hashSeed', () => {
   it('is deterministic and distinguishes strings', () => {
     expect(hashSeed('2026-07-16:all')).toBe(hashSeed('2026-07-16:all'))
     expect(hashSeed('2026-07-16:all')).not.toBe(hashSeed('2026-07-16:network'))
+  })
+})
+
+describe('weakDomains', () => {
+  const stats = {
+    os: { correct: 2, seen: 5 },       // 0.40  weak
+    network: { correct: 3, seen: 5 },  // 0.60  weak
+    java: { correct: 5, seen: 5 },     // 1.00  not weak
+    db: { correct: 1, seen: 2 },       // 0.50  but seen<3 → excluded
+    react: { correct: 4, seen: 5 },    // 0.80  not < 0.8 → excluded
+  }
+  it('returns domains with seen>=minSeen and rate<maxRate, weakest first', () => {
+    expect(weakDomains(stats).map((w) => w.domain)).toEqual(['os', 'network'])
+  })
+  it('respects the limit', () => {
+    expect(weakDomains(stats, { limit: 1 }).map((w) => w.domain)).toEqual(['os'])
+  })
+  it('computes rate and is empty when nothing qualifies', () => {
+    expect(weakDomains({ x: { correct: 3, seen: 3 } })).toEqual([])
+    expect(weakDomains({ y: { correct: 0, seen: 4 } })[0].rate).toBe(0)
   })
 })

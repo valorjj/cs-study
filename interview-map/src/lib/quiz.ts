@@ -74,3 +74,24 @@ export function seededShuffle<T>(items: T[], seed: number): T[] {
   }
   return out
 }
+
+export interface WeakDomain {
+  domain: string
+  correct: number
+  seen: number
+  rate: number
+}
+
+// Domains answered >= minSeen times with accuracy below maxRate, weakest (lowest
+// rate) first, capped at limit. Ties broken by more attempts (seen) first.
+export function weakDomains(
+  stats: Record<string, { correct: number; seen: number }>,
+  opts?: { minSeen?: number; maxRate?: number; limit?: number },
+): WeakDomain[] {
+  const { minSeen = 3, maxRate = 0.8, limit = 3 } = opts ?? {}
+  return Object.entries(stats)
+    .map(([domain, s]) => ({ domain, correct: s.correct, seen: s.seen, rate: s.seen ? s.correct / s.seen : 0 }))
+    .filter((w) => w.seen >= minSeen && w.rate < maxRate)
+    .sort((a, b) => a.rate - b.rate || b.seen - a.seen)
+    .slice(0, limit)
+}
