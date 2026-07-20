@@ -12,10 +12,10 @@ export function useAuth() {
 
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ?? null)
-      setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data }) => { setUser(data.session?.user ?? null) })
+      .catch(() => { /* offline / unreachable → stay guest */ })
+      .finally(() => { setLoading(false) })
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
