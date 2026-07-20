@@ -15,7 +15,7 @@ import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { AuthButton } from './components/AuthButton'
 import { ViewToggle } from './components/ViewToggle'
 import { useGraphStore } from './store/graphStore'
-import { useThemeEffect, useViewModeEffect, useProgressEffect } from './hooks/useTheme'
+import { useThemeEffect, useViewModeEffect, useProgressEffect, useQuizStatsEffect } from './hooks/useTheme'
 import { useCloudSync } from './hooks/useCloudSync'
 
 const data = graphData as GraphData
@@ -24,6 +24,7 @@ export default function App() {
   useThemeEffect()
   useViewModeEffect()
   useProgressEffect()
+  useQuizStatsEffect()
   useCloudSync()
   const viewMode = useGraphStore((s) => s.viewMode)
   const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])

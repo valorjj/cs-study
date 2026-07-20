@@ -16,6 +16,17 @@ function loadStudied(): string[] {
   }
 }
 
+export interface QuizStat { correct: number; seen: number }
+export const QUIZSTATS_KEY = 'interview-map.quizstats.v1'
+function loadQuizStats(): Record<string, QuizStat> {
+  try {
+    const s = localStorage.getItem(QUIZSTATS_KEY)
+    return s ? (JSON.parse(s) as Record<string, QuizStat>) : {}
+  } catch {
+    return {}
+  }
+}
+
 interface GraphState {
   selectedId: string | null
   select: (id: string | null) => void
@@ -29,6 +40,11 @@ interface GraphState {
   studiedIds: string[]            // 학습 완료 체크된 노드 (localStorage 저장)
   toggleStudied: (id: string) => void
   setStudiedIds: (ids: string[]) => void
+  quizStats: Record<string, QuizStat>       // 도메인별 퀴즈 정답/시도 (localStorage 저장)
+  recordQuizResult: (domain: string, correct: boolean) => void
+  pathTrackId: string | null                // 퀴즈 약점 칩 → 경로 코스 열기 요청
+  requestTrack: (trackId: string) => void
+  clearPathTrack: () => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -50,4 +66,12 @@ export const useGraphStore = create<GraphState>((set) => ({
       : [...s.studiedIds, id],
   })),
   setStudiedIds: (ids) => set({ studiedIds: ids }),
+  quizStats: loadQuizStats(),
+  recordQuizResult: (domain, correct) => set((s) => {
+    const cur = s.quizStats[domain] ?? { correct: 0, seen: 0 }
+    return { quizStats: { ...s.quizStats, [domain]: { correct: cur.correct + (correct ? 1 : 0), seen: cur.seen + 1 } } }
+  }),
+  pathTrackId: null,
+  requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
+  clearPathTrack: () => set({ pathTrackId: null }),
 }))

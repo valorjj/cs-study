@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useGraphStore, PROGRESS_KEY } from '../store/graphStore'
+import { useGraphStore, PROGRESS_KEY, QUIZSTATS_KEY } from '../store/graphStore'
 import { applyTheme, DEFAULT_THEME } from '../styles/themes'
 
 const KEY = 'interview-map.theme.v1'
@@ -43,4 +43,12 @@ export function useProgressEffect(): void {
   useEffect(() => {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(studiedIds)) } catch { /* ignore */ }
   }, [studiedIds])
+}
+
+// Persist quiz stats (hydrated synchronously in the store; this only writes).
+export function useQuizStatsEffect(): void {
+  const quizStats = useGraphStore((s) => s.quizStats)
+  useEffect(() => {
+    try { localStorage.setItem(QUIZSTATS_KEY, JSON.stringify(quizStats)) } catch { /* ignore */ }
+  }, [quizStats])
 }
