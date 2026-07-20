@@ -42,6 +42,7 @@ interface GraphState {
   setStudiedIds: (ids: string[]) => void
   quizStats: Record<string, QuizStat>       // 도메인별 퀴즈 정답/시도 (localStorage 저장)
   recordQuizResult: (domain: string, correct: boolean) => void
+  setQuizStats: (stats: Record<string, QuizStat>) => void
   pathTrackId: string | null                // 퀴즈 약점 칩 → 경로 코스 열기 요청
   requestTrack: (trackId: string) => void
   clearPathTrack: () => void
@@ -71,6 +72,7 @@ export const useGraphStore = create<GraphState>((set) => ({
     const cur = s.quizStats[domain] ?? { correct: 0, seen: 0 }
     return { quizStats: { ...s.quizStats, [domain]: { correct: cur.correct + (correct ? 1 : 0), seen: cur.seen + 1 } } }
   }),
+  setQuizStats: (stats) => set({ quizStats: stats }),
   pathTrackId: null,
   requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
   clearPathTrack: () => set({ pathTrackId: null }),
