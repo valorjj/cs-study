@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { LuArrowRight, LuCheck } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
@@ -20,6 +20,8 @@ export function PathView({ nodes, edges, nodesById }: {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const studiedIds = useGraphStore((s) => s.studiedIds)
   const toggleStudied = useGraphStore((s) => s.toggleStudied)
+  const pathTrackId = useGraphStore((s) => s.pathTrackId)
+  const clearPathTrack = useGraphStore((s) => s.clearPathTrack)
 
   const studied = useMemo(() => new Set(studiedIds), [studiedIds])
   const tracks = useMemo(() => [...CURATED_TRACKS, ...buildDomainTracks(nodes, edges)], [nodes, edges])
@@ -29,6 +31,14 @@ export function PathView({ nodes, edges, nodesById }: {
   )
   const [selectedId, setSelectedId] = useState(tracks[0]?.id ?? '')
   const [mobileDetail, setMobileDetail] = useState(false)
+
+  // A quiz weak-domain chip (requestTrack) asked to open a specific course.
+  useEffect(() => {
+    if (!pathTrackId) return
+    setSelectedId(pathTrackId)
+    setMobileDetail(true)
+    clearPathTrack()
+  }, [pathTrackId, clearPathTrack])
 
   const curated = tracks.filter((t) => t.id.startsWith('curated:'))
   const domainTracks = tracks.filter((t) => t.id.startsWith('domain:'))
