@@ -8,7 +8,7 @@ import { buildTree } from './lib/tree'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { DocsView } from './components/DocsView'
-import { QuizView } from './components/QuizView'
+import { QuizTab } from './components/QuizTab'
 import { PathView } from './components/PathView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
@@ -42,7 +42,7 @@ export default function App() {
       {viewMode === 'list' && (
         <DocsView tree={tree} edges={data.edges} nodesById={nodesById} neighbors={neighbors} />
       )}
-      {viewMode === 'quiz' && <QuizView nodes={data.nodes} />}
+      {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
       {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
       <AuthButton />

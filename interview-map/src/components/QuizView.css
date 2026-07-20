@@ -1,6 +1,6 @@
-.quiz { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
-  gap: 18px; padding: 72px 20px 110px; overflow-y: auto; background: var(--bg);
-  font-family: system-ui, sans-serif; color: var(--text); }
+.quiz { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; align-items: center;
+  gap: 18px; padding: 0 20px 12px; overflow-y: auto; color: var(--text);
+  font-family: system-ui, sans-serif; }
 .quiz-dim { color: var(--text-dim); margin-top: 40px; }
 
 .quiz-scopes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 760px; }
