@@ -27,7 +27,7 @@ export function useViewModeEffect(): void {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   useEffect(() => {
     const saved = localStorage.getItem(VIEW_KEY)
-    if (saved === 'graph' || saved === 'list' || saved === 'quiz' || saved === 'path') setViewMode(saved)
+    if (saved === 'home' || saved === 'graph' || saved === 'list' || saved === 'quiz' || saved === 'path') setViewMode(saved)
     // hydrate once
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

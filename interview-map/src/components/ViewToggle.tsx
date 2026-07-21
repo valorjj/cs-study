@@ -1,4 +1,4 @@
-import { LuMap, LuList, LuBrain, LuRoute } from 'react-icons/lu'
+import { LuHouse, LuMap, LuList, LuBrain, LuRoute } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import './ViewToggle.css'
 
@@ -7,6 +7,14 @@ export function ViewToggle() {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   return (
     <div className="vt" role="tablist" aria-label="보기 방식">
+      <button
+        role="tab"
+        aria-selected={viewMode === 'home'}
+        data-active={viewMode === 'home'}
+        onClick={() => setViewMode('home')}
+      >
+        <LuHouse size={15} /> 홈
+      </button>
       <button
         role="tab"
         aria-selected={viewMode === 'graph'}

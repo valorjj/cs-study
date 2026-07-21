@@ -9,6 +9,7 @@ import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { DocsView } from './components/DocsView'
 import { QuizTab } from './components/QuizTab'
+import { HomeView } from './components/HomeView'
 import { PathView } from './components/PathView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
@@ -42,6 +43,7 @@ export default function App() {
       {viewMode === 'list' && (
         <DocsView tree={tree} edges={data.edges} nodesById={nodesById} neighbors={neighbors} />
       )}
+      {viewMode === 'home' && <HomeView />}
       {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
       {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}

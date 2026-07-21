@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
 
-export type ViewMode = 'graph' | 'list' | 'quiz' | 'path'
+export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path'
 
 // Study-path progress key. Loaded synchronously at store creation so the first
 // render already has the saved state — avoids an effect-order hydrate/persist
@@ -61,7 +61,7 @@ export const useGraphStore = create<GraphState>((set) => ({
   clearFocusRequest: () => set({ focusRequestId: null }),
   themeId: DEFAULT_THEME,
   setTheme: (id) => set({ themeId: id }),
-  viewMode: 'graph',
+  viewMode: 'home',
   setViewMode: (m) => set({ viewMode: m }),
   studiedIds: readGuestStudied(),
   toggleStudied: (id) => set((s) => ({
