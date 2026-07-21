@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { parseNoteRef, parseSections } from '../lib/notes'
 import type { GraphNode } from '../graph/types'
+import { srsKeyOf } from '../lib/srs'
 
 export interface NoteContext {
   domain: string
   nodeId: string
   nodeLabel: string
   key: string
+  srsKey: string
 }
 
 // Shared note loader for the quiz tab. Fetches every concept note once, then
@@ -61,9 +63,17 @@ export function useNotePool(nodes: GraphNode[]): {
           const dn = maps.domainNode.get(domain)
           const nodeId = owner?.id ?? dn?.id ?? ''
           const nodeLabel = owner?.label ?? dn?.label ?? domain
-          raws.forEach((r, i) =>
-            out.push({ ...r, domain, nodeId, nodeLabel, key: `${path}#${s.slug}#${i}` }),
-          )
+          raws.forEach((r, i) => {
+            const q = (r as { question?: string }).question
+            out.push({
+              ...r,
+              domain,
+              nodeId,
+              nodeLabel,
+              key: `${path}#${s.slug}#${i}`,
+              srsKey: q ? srsKeyOf(path, s.slug, q) : '',
+            })
+          })
         }
       }
       return out
