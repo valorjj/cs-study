@@ -8,7 +8,7 @@ import {
 import { loadStudied, saveStudied, loadQuizStats, saveQuizStats, loadSrs, saveSrs } from '../lib/cloudSync'
 import type { SrsState } from '../lib/srs'
 
-// Single persistence orchestrator for studiedIds + quizStats. Guest mode and
+// Single persistence orchestrator for studiedIds + quizStats + srs. Guest mode and
 // logged-in mode keep COMPLETELY SEPARATE progress — switching account never
 // merges the two:
 //   - Guest (logged out): state is persisted to localStorage only.
