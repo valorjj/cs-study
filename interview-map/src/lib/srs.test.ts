@@ -1,0 +1,89 @@
+import { describe, it, expect } from 'vitest'
+import { srsKeyOf, addDays, review, type SrsCard } from './srs'
+
+describe('srsKeyOf', () => {
+  it('is stable for the same question regardless of index/order', () => {
+    const a = srsKeyOf('notes/03-network/network-core.md', 'osi-model', 'TCP와 UDP 차이는?')
+    const b = srsKeyOf('notes/03-network/network-core.md', 'osi-model', 'TCP와 UDP 차이는?')
+    expect(a).toBe(b)
+  })
+  it('differs when the question text differs', () => {
+    const a = srsKeyOf('f.md', 's', 'Q one')
+    const b = srsKeyOf('f.md', 's', 'Q two')
+    expect(a).not.toBe(b)
+  })
+  it('differs when the file or slug differs', () => {
+    expect(srsKeyOf('f1.md', 's', 'Q')).not.toBe(srsKeyOf('f2.md', 's', 'Q'))
+    expect(srsKeyOf('f.md', 's1', 'Q')).not.toBe(srsKeyOf('f.md', 's2', 'Q'))
+  })
+})
+
+describe('addDays', () => {
+  it('adds days within a month', () => {
+    expect(addDays('2026-07-21', 6)).toBe('2026-07-27')
+  })
+  it('crosses a month boundary', () => {
+    expect(addDays('2026-07-30', 3)).toBe('2026-08-02')
+  })
+  it('crosses a year boundary', () => {
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
+  })
+  it('adds zero days', () => {
+    expect(addDays('2026-07-21', 0)).toBe('2026-07-21')
+  })
+})
+
+describe('review', () => {
+  const today = '2026-07-21'
+
+  it('first success: interval 1, reps 1, due tomorrow', () => {
+    const c = review(undefined, 5, today)
+    expect(c.reps).toBe(1)
+    expect(c.interval).toBe(1)
+    expect(c.due).toBe('2026-07-22')
+    expect(c.lapses).toBe(0)
+  })
+
+  it('second success: interval 6', () => {
+    const first = review(undefined, 4, today)
+    const second = review(first, 4, first.due)
+    expect(second.reps).toBe(2)
+    expect(second.interval).toBe(6)
+    expect(second.due).toBe(addDays(first.due, 6))
+  })
+
+  it('third success: interval = round(prevInterval * ef)', () => {
+    const c1 = review(undefined, 4, today)
+    const c2 = review(c1, 4, c1.due)
+    const c3 = review(c2, 4, c2.due)
+    expect(c3.reps).toBe(3)
+    expect(c3.interval).toBe(Math.round(c2.interval * c2.ef))
+    expect(c3.interval).toBeGreaterThan(6)
+  })
+
+  it('failure resets reps/interval, bumps lapses, due tomorrow', () => {
+    const c1 = review(undefined, 5, today)
+    const c2 = review(c1, 5, c1.due)
+    const fail = review(c2, 0, c2.due)
+    expect(fail.reps).toBe(0)
+    expect(fail.interval).toBe(1)
+    expect(fail.lapses).toBe(1)
+    expect(fail.due).toBe(addDays(c2.due, 1))
+  })
+
+  it('ease factor rises on grade 5 and never drops below 1.3', () => {
+    const easy = review(undefined, 5, today)
+    expect(easy.ef).toBeGreaterThan(2.5)
+    // repeated failures clamp ef at 1.3
+    let c: SrsCard | undefined
+    for (let i = 0; i < 20; i++) c = review(c, 0, today)
+    expect(c!.ef).toBe(1.3)
+  })
+
+  it('grade 3 (애매) counts as a success and keeps ef roughly flat', () => {
+    const c = review(undefined, 3, today)
+    expect(c.reps).toBe(1)
+    expect(c.interval).toBe(1)
+    expect(c.ef).toBeCloseTo(2.36, 2)
+  })
+})
