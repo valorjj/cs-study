@@ -20,7 +20,7 @@ function todayStr(): string {
 export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const select = useGraphStore((s) => s.select)
   const setViewMode = useGraphStore((s) => s.setViewMode)
-  const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
+  const recordReview = useGraphStore((s) => s.recordReview)
   const quizStats = useGraphStore((s) => s.quizStats)
   const requestTrack = useGraphStore((s) => s.requestTrack)
   const [scope, setScope] = useState<string>('all')
@@ -48,7 +48,10 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const domainLabel = new Map(nodes.filter((n) => n.level === 0).map((n) => [n.domain, n.label]))
   const weak = weakDomains(quizStats)
   const advance = () => { setIndex((i) => (i + 1) % deck.length); setRevealed(false) }
-  const assess = (correct: boolean) => { if (card) recordQuizResult(card.domain, correct); advance() }
+  const assess = (correct: boolean) => {
+    if (card) recordReview(card.srsKey, card, correct ? 4 : 0, todayStr())
+    advance()
+  }
 
   return (
     <div className="quiz">
