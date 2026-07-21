@@ -14,3 +14,9 @@
   cursor: pointer; border: none; background: transparent; color: var(--text-dim);
 }
 .quiztab-mode[data-active='true'] { background: var(--accent); color: #fff; }
+.quiztab-badge {
+  display: inline-block; margin-left: 6px; padding: 0 6px; min-width: 16px;
+  font-size: 11px; font-weight: 700; line-height: 16px; text-align: center;
+  border-radius: 999px; background: var(--accent); color: #fff;
+}
+.quiztab-mode[data-active='true'] .quiztab-badge { background: #fff; color: var(--accent); }
