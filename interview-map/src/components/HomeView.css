@@ -22,6 +22,11 @@
 .home-card-desc { font-size: 13px; color: var(--text-dim); line-height: 1.5; flex: 1; }
 .home-card-cta { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--accent); }
 
+.home-card-badge {
+  align-self: flex-start; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; background: var(--accent); color: #fff;
+}
+
 @media (max-width: 640px) {
   .home { gap: 24px; padding: 60px 16px 100px; }
   .home-hero h1 { font-size: 24px; }

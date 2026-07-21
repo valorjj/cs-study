@@ -43,7 +43,7 @@ export default function App() {
       {viewMode === 'list' && (
         <DocsView tree={tree} edges={data.edges} nodesById={nodesById} neighbors={neighbors} />
       )}
-      {viewMode === 'home' && <HomeView />}
+      {viewMode === 'home' && <HomeView nodes={data.nodes} />}
       {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
       {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
