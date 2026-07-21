@@ -45,3 +45,14 @@ create policy "own row - select" on public.user_state for select using (auth.uid
 create policy "own row - insert" on public.user_state for insert with check (auth.uid() = user_id);
 create policy "own row - update" on public.user_state for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 ```
+
+### SRS 컬럼 추가 (간격 반복 기능)
+
+`user_state`에 카드별 간격반복 상태를 저장할 컬럼을 추가합니다:
+
+```sql
+alter table public.user_state
+  add column if not exists srs jsonb not null default '{}'::jsonb;
+```
+
+기존 RLS(own-row) 정책이 컬럼과 무관하게 적용되므로 정책 변경은 필요 없습니다.

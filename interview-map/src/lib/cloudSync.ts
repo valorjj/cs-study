@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import type { QuizStat } from '../store/graphStore'
+import type { SrsState } from './srs'
 
 // Guest and logged-in progress are kept fully separate (see useCloudSync), so
 // there is no cross-source merge — login replaces state with the cloud row.
@@ -56,4 +57,27 @@ export async function saveQuizStats(userId: string, quizStats: Record<string, Qu
     .from('user_state')
     .upsert({ user_id: userId, quiz_stats: quizStats, updated_at: new Date().toISOString() })
   logError('saveQuizStats', error)
+}
+
+// Returns the user's srs state, or null when there is no row yet or Supabase
+// is unconfigured/unreachable.
+export async function loadSrs(userId: string): Promise<SrsState | null> {
+  if (!supabase) return null
+  const { data, error } = await supabase
+    .from('user_state')
+    .select('srs')
+    .eq('user_id', userId)
+    .maybeSingle()
+  if (error) { logError('loadSrs', error); return null }
+  if (!data) return null
+  return (data.srs as SrsState | null) ?? {}
+}
+
+// Upsert only srs (+ updated_at); other columns are left untouched.
+export async function saveSrs(userId: string, srs: SrsState): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase
+    .from('user_state')
+    .upsert({ user_id: userId, srs, updated_at: new Date().toISOString() })
+  logError('saveSrs', error)
 }
