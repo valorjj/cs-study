@@ -54,3 +54,41 @@ export function review(prev: SrsCard | undefined, grade: number, today: string):
 
   return { ef, interval, reps, lapses, due: addDays(today, interval) }
 }
+
+export const NEW_CARD_DAILY_CAP = 15
+
+// Split a pool into due reviews + new cards for today's review session.
+// Due = has an srs record with due <= today (most overdue first).
+// New = no srs record, weak-domain-first, capped at NEW_CARD_DAILY_CAP.
+export function buildReviewDeck<T extends { srsKey: string; domain: string }>(
+  pool: T[],
+  srs: SrsState,
+  today: string,
+  weakDomainsOrder: string[],
+): T[] {
+  const due = pool
+    .filter((c) => srs[c.srsKey] && srs[c.srsKey].due <= today)
+    .sort((a, b) => (srs[a.srsKey].due < srs[b.srsKey].due ? -1 : srs[a.srsKey].due > srs[b.srsKey].due ? 1 : 0))
+
+  const rank = (domain: string) => {
+    const i = weakDomainsOrder.indexOf(domain)
+    return i === -1 ? weakDomainsOrder.length : i
+  }
+  const fresh = pool
+    .filter((c) => !srs[c.srsKey])
+    .sort((a, b) => rank(a.domain) - rank(b.domain))
+    .slice(0, NEW_CARD_DAILY_CAP)
+
+  return [...due, ...fresh]
+}
+
+// How many cards today's review would show: due + capped new. Used for badges.
+export function dueCount<T extends { srsKey: string; domain: string }>(
+  pool: T[],
+  srs: SrsState,
+  today: string,
+): number {
+  const due = pool.filter((c) => srs[c.srsKey] && srs[c.srsKey].due <= today).length
+  const fresh = pool.filter((c) => !srs[c.srsKey]).length
+  return due + Math.min(fresh, NEW_CARD_DAILY_CAP)
+}

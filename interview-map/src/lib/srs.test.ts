@@ -87,3 +87,57 @@ describe('review', () => {
     expect(c.ef).toBeCloseTo(2.36, 2)
   })
 })
+
+import { buildReviewDeck, dueCount, NEW_CARD_DAILY_CAP } from './srs'
+
+type Card = { srsKey: string; domain: string }
+const mk = (n: number, domain = 'net'): Card => ({ srsKey: `k${n}`, domain })
+
+describe('buildReviewDeck', () => {
+  const today = '2026-07-21'
+
+  it('includes only cards due on/before today, most-overdue first', () => {
+    const pool = [mk(1), mk(2), mk(3)]
+    const srs = {
+      k1: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-21' },
+      k2: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-19' }, // most overdue
+      k3: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-25' }, // future
+    }
+    const deck = buildReviewDeck(pool, srs, today, [])
+    expect(deck.map((c) => c.srsKey)).toEqual(['k2', 'k1'])
+  })
+
+  it('appends new (unseen) cards after due cards, capped at NEW_CARD_DAILY_CAP', () => {
+    const pool = Array.from({ length: NEW_CARD_DAILY_CAP + 5 }, (_, i) => mk(i))
+    const deck = buildReviewDeck(pool, {}, today, [])
+    expect(deck.length).toBe(NEW_CARD_DAILY_CAP)
+  })
+
+  it('orders new cards weak-domain-first', () => {
+    const pool = [mk(1, 'strong'), mk(2, 'weak'), mk(3, 'strong')]
+    const deck = buildReviewDeck(pool, {}, today, ['weak'])
+    expect(deck[0].domain).toBe('weak')
+  })
+
+  it('places due cards before new cards', () => {
+    const pool = [mk(1), mk(2)]
+    const srs = { k2: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-20' } }
+    const deck = buildReviewDeck(pool, srs, today, [])
+    expect(deck.map((c) => c.srsKey)).toEqual(['k2', 'k1'])
+  })
+})
+
+describe('dueCount', () => {
+  const today = '2026-07-21'
+  it('counts due cards plus capped new cards', () => {
+    const pool = Array.from({ length: NEW_CARD_DAILY_CAP + 2 }, (_, i) => mk(i + 10))
+    const srs = { k10: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-20' } }
+    // 1 due (k10) + min(rest new, cap). rest new = pool minus k10 = cap+1 → capped to cap.
+    expect(dueCount(pool, srs, today)).toBe(1 + NEW_CARD_DAILY_CAP)
+  })
+  it('is zero when nothing is due and there are no new cards', () => {
+    const pool = [mk(1)]
+    const srs = { k1: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-25' } }
+    expect(dueCount(pool, srs, today)).toBe(0)
+  })
+})
