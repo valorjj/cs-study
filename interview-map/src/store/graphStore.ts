@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
+import { review, type SrsState } from '../lib/srs'
 
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path'
 
@@ -30,6 +31,16 @@ export function readGuestQuizStats(): Record<string, QuizStat> {
   }
 }
 
+export const SRS_KEY = 'interview-map.srs.v1'
+export function readGuestSrs(): SrsState {
+  try {
+    const s = localStorage.getItem(SRS_KEY)
+    return s ? (JSON.parse(s) as SrsState) : {}
+  } catch {
+    return {}
+  }
+}
+
 interface GraphState {
   selectedId: string | null
   select: (id: string | null) => void
@@ -46,6 +57,9 @@ interface GraphState {
   quizStats: Record<string, QuizStat>       // 도메인별 퀴즈 정답/시도 (localStorage 저장)
   recordQuizResult: (domain: string, correct: boolean) => void
   setQuizStats: (stats: Record<string, QuizStat>) => void
+  srs: SrsState                             // 카드별 간격반복 상태 (localStorage/클라우드)
+  setSrs: (srs: SrsState) => void
+  recordReview: (srsKey: string, item: { domain: string }, grade: number, today: string) => void
   pathTrackId: string | null                // 퀴즈 약점 칩 → 경로 코스 열기 요청
   requestTrack: (trackId: string) => void
   clearPathTrack: () => void
@@ -76,6 +90,17 @@ export const useGraphStore = create<GraphState>((set) => ({
     return { quizStats: { ...s.quizStats, [domain]: { correct: cur.correct + (correct ? 1 : 0), seen: cur.seen + 1 } } }
   }),
   setQuizStats: (stats) => set({ quizStats: stats }),
+  srs: readGuestSrs(),
+  setSrs: (srs) => set({ srs }),
+  recordReview: (srsKey, item, grade, today) => set((s) => {
+    const nextSrs = { ...s.srs, [srsKey]: review(s.srs[srsKey], grade, today) }
+    const cur = s.quizStats[item.domain] ?? { correct: 0, seen: 0 }
+    const nextStats = {
+      ...s.quizStats,
+      [item.domain]: { correct: cur.correct + (grade >= 3 ? 1 : 0), seen: cur.seen + 1 },
+    }
+    return { srs: nextSrs, quizStats: nextStats }
+  }),
   pathTrackId: null,
   requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
   clearPathTrack: () => set({ pathTrackId: null }),
