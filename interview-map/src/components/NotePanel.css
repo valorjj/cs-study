@@ -67,6 +67,16 @@
   border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
 .np-note details blockquote { margin-top: 10px; border-left-color: var(--border-strong); }
 
+/* 저자 표시 심화 블록: 기본 접힘, "심화" 뱃지로 구분 */
+.np-note details.deep { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.np-note details.deep > summary::before {
+  content: '심화'; display: inline-block; margin-right: 8px; padding: 1px 7px;
+  border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.5;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.np-note details.deep[open] { background: color-mix(in srgb, var(--bg-elev) 85%, var(--accent)); }
+
 /* Mobile: full-screen sheet. The header (title/summary/keywords/related)
    scrolls away with the content so the body gets the full screen; only the
    section outline stays pinned. */
