@@ -1,4 +1,5 @@
 .tsb { display: flex; flex-direction: column; height: 100%; overflow-y: auto;
+  box-sizing: border-box;
   padding: 12px 8px 40px; font-family: system-ui, sans-serif; background: var(--bg-panel);
   border-right: 1px solid var(--border); }
 .tsb-row { display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
