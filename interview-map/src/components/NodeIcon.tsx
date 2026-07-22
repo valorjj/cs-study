@@ -94,6 +94,8 @@ const BY_ID: Record<string, IconType> = {
   'net-handshake': LuArrowRightLeft,
   'net-flowcc': LuWaves,
   'net-httpver': LuRadio,
+  'net-socket': LuArrowDownUp,
+  'net-realtime': LuActivity,
   'db-btree': LuListTree,
   'db-clustered': LuTable2,
   'db-isolation': LuLock,

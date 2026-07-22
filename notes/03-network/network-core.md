@@ -42,6 +42,58 @@
  Link: [Eth|IP|TCP|Data|]  ← 프레임 ───┘ 물리 전송
 ```
 
+**계층별 PDU 이름** (면접 단골): L4 = **세그먼트**(TCP)/**데이터그램**(UDP) · L3 = **패킷** · L2 = **프레임** · L1 = **비트**. "패킷"은 넓게도 쓰지만 엄밀히는 L3 단위다.
+
+<details class="deep">
+<summary>심화: 계층별 헤더 필드 상세 (Ethernet 프레임 · IP · TCP · UDP)</summary>
+
+한 번의 `HTTP GET`이 내려가며 실제로 어떤 바이트가 붙는지. 위→아래로 헤더가 감싸진다.
+
+### L2 — Ethernet II 프레임
+```
+[ Preamble 7 | SFD 1 ][ Dst MAC 6 | Src MAC 6 | EtherType 2 |  Payload 46~1500  | FCS 4 ]
+   (물리 동기화, 프레임 밖)     ▲목적지 물리주소  ▲상위 프로토콜         ▲IP 패킷         ▲CRC 오류검출
+```
+- **Dst/Src MAC(각 6B)**: 같은 링크(LAN) 안 **인접 노드**의 물리주소. 라우터를 지날 때마다 **바뀐다**(IP는 안 바뀜).
+- **EtherType(2B)**: 페이로드가 뭔지 — `0x0800`=IPv4, `0x86DD`=IPv6, `0x0806`=ARP.
+- **MTU**: 페이로드 최대 1500B(표준 이더넷). 이보다 크면 L3에서 조각화(fragmentation).
+- **FCS(4B)**: CRC 체크섬. 깨진 프레임은 그냥 버림(재전송은 상위 TCP 몫).
+
+### L3 — IPv4 헤더 (최소 20B)
+| 필드 | 크기 | 의미 |
+|------|------|------|
+| Version / IHL | 4b / 4b | IPv4=4 / 헤더 길이(워드 수) |
+| Total Length | 2B | 헤더+데이터 전체 바이트 |
+| Identification / Flags / Fragment Offset | 2B / 3b / 13b | **조각화**용 (같은 패킷 조각 식별·순서) |
+| **TTL** | 1B | 홉마다 −1, 0되면 폐기(라우팅 루프 방지) |
+| **Protocol** | 1B | 상위 프로토콜: `6`=TCP, `17`=UDP, `1`=ICMP |
+| Header Checksum | 2B | 헤더 오류검출(홉마다 재계산 — TTL이 바뀌므로) |
+| **Src / Dst IP** | 각 4B | **종단 논리주소** — 라우팅되는 동안 안 바뀜 |
+
+### L4 — TCP 헤더 (최소 20B)
+| 필드 | 크기 | 의미 |
+|------|------|------|
+| **Src / Dst Port** | 각 2B | 프로세스 식별(0~65535) |
+| **Sequence Number** | 4B | 보낸 바이트 스트림의 첫 바이트 번호 |
+| **Ack Number** | 4B | "여기까지 잘 받음, 다음은 이 번호" |
+| Data Offset | 4b | TCP 헤더 길이 |
+| **Flags** | 9b | `SYN` `ACK` `FIN` `RST` `PSH` `URG` … 핸드셰이크/종료 제어 |
+| **Window** | 2B | 흐름 제어 — 받을 수 있는 여유 버퍼 크기 |
+| Checksum | 2B | 세그먼트 오류검출 |
+| Options | 가변 | **MSS**, Window Scale, SACK, Timestamp |
+
+### L4 — UDP 헤더 (딱 8B)
+```
+[ Src Port 2 | Dst Port 2 | Length 2 | Checksum 2 ]
+```
+- TCP의 seq/ack/window/flags가 **전부 없음** → 연결·순서·재전송·흐름제어 없음. 그래서 헤더가 8B로 가볍고 빠르다.
+
+### MSS와 조각화
+- **MSS**(Max Segment Size) = MTU(1500) − IP헤더(20) − TCP헤더(20) = **1460B**. TCP는 한 세그먼트를 MSS 이하로 쪼개 IP 조각화를 피한다.
+- IP 조각화는 성능·유실 위험이 커서(조각 하나 잃으면 전체 재전송) 피하는 게 원칙 → Path MTU Discovery.
+
+</details>
+
 ## 4. 핵심 포인트
 - 🟡 각 계층은 **바로 위/아래 계층하고만** 인터페이스 → 계층 독립성(한 계층 바뀌어도 나머지 영향 최소).
 - 🟡 "IP는 3계층(주소·라우팅), TCP/UDP는 4계층(포트·종단전달)" — 계층 헷갈리지 말 것.
@@ -590,6 +642,173 @@ cwnd
 
 **Q4. "HTTP/3가 연결 수립을 어떻게 빠르게 하나요?"**
 > QUIC은 TLS 1.3을 프로토콜에 내장해 전송 연결과 암호화 협상을 합쳐 1-RTT에 끝냅니다. TCP+TLS라면 3-way 핸드셰이크 뒤 TLS 핸드셰이크가 별도로 붙어 최소 2~3 RTT가 드는 것과 대비됩니다. 한 번 붙었던 서버에는 세션 정보를 캐시해 0-RTT로 곧바로 요청을 실어 보낼 수도 있고, Connection ID로 식별하므로 Wi-Fi↔LTE 전환처럼 IP가 바뀌어도 연결을 새로 맺지 않습니다.
+
+---
+
+# 소켓 (Socket) 프로그래밍
+
+**학습 목표**: *"소켓이 뭔가요?"* 부터 *"TCP 서버는 socket→bind→listen→accept 순서로 어떻게 도나요?"* 까지, 소켓이 OS·TCP/IP와 어떻게 맞물리는지 5분간 답할 수 있다. (시스템 콜·옵션 세부는 아래 **심화**.)
+
+## 1. 비유 — 건물의 전화기
+
+- **IP 주소** = 건물 주소, **포트** = 그 건물 안 내선 번호, **소켓** = 실제로 통화하는 **전화기 한 대**.
+- 서버는 대표번호(listening 소켓)로 전화를 받고, 연결이 성사되면 **통화 전용 회선(connected 소켓)**을 새로 하나 딴다. 그래서 한 서버가 수천 통화를 동시에 한다.
+
+## 2. 개념 정의 (1줄)
+> **소켓** = 네트워크 통신의 **양 끝점(endpoint)**을 추상화한 것. OS가 파일처럼 다루는 **파일 디스크립터(fd)**로, `{프로토콜, 출발 IP:Port, 목적 IP:Port}` **5-튜플**로 하나의 연결이 유일하게 식별된다.
+
+## 3. 다이어그램 — TCP 서버·클라이언트 생명주기
+```
+   서버                             클라이언트
+ socket()      소켓(fd) 생성          socket()
+ bind()        IP:Port 할당
+ listen()      수신 대기(backlog 큐)
+ accept() ───┐ 블로킹, 연결 대기
+             │        connect() ──►  3-way handshake (SYN/SYN-ACK/ACK)
+ (새 소켓) ◄─┘ 연결 성사 → 통신 전용 fd 반환
+ recv()/send() ◄──────────────────► send()/recv()   양방향 바이트 스트림
+ close()                            close()          4-way handshake
+```
+- `accept()`는 **연결마다 새 소켓(fd)**을 돌려준다. listening 소켓은 계속 새 연결을 받는 역할만.
+- `listen(backlog)`의 backlog = 아직 `accept()` 안 된 **완성된 연결의 대기 큐 크기**.
+
+## 4. TCP 소켓 vs UDP 소켓
+| 구분 | TCP 소켓(`SOCK_STREAM`) | UDP 소켓(`SOCK_DGRAM`) |
+|------|------------------------|------------------------|
+| 연결 | `connect`/`accept`로 연결 수립 | 연결 없음(주소를 매 전송에 지정) |
+| API | `listen`/`accept`/`send`/`recv` | `sendto`/`recvfrom` |
+| 경계 | 바이트 **스트림**(메시지 경계 없음) | **데이터그램** 단위(경계 보존) |
+| 신뢰성 | 순서·재전송 보장 | 없음(앱이 처리) |
+
+<details class="deep">
+<summary>심화: 소켓 시스템 콜 흐름과 상태 (accept 큐·TIME_WAIT)</summary>
+
+- `listen()`은 커널에 **두 개의 큐**를 만든다: SYN 큐(핸드셰이크 진행 중)와 accept 큐(완료돼 `accept()`를 기다리는 연결). accept 큐가 꽉 차면 새 연결이 드롭되거나 지연된다(`somaxconn`, backlog 튜닝 포인트).
+- **스트림엔 경계가 없다**: `send()` 한 번이 `recv()` 한 번과 1:1이 아니다. 그래서 앱은 **길이 프리픽스**나 **구분자**로 메시지 프레이밍을 직접 해야 한다(부분 수신/합쳐짐 처리).
+- 연결 종료 후 능동 종료 측은 `TIME_WAIT`(보통 2×MSL) 상태로 남아 지연 패킷 오배달을 막는다. 서버가 다량의 `TIME_WAIT`로 포트가 마르면 `SO_REUSEADDR`/커넥션 재사용(keep-alive)으로 완화. (→ N6 핸드셰이크)
+
+</details>
+
+<details class="deep">
+<summary>심화: 블로킹 vs 논블로킹 소켓과 주요 옵션</summary>
+
+- **블로킹**(기본): `accept`/`recv`가 데이터 올 때까지 스레드를 멈춤 → 연결당 스레드 모델(연결 많으면 스레드 폭발).
+- **논블로킹 + I/O 멀티플렉싱**(`epoll`/`kqueue`): 한 스레드가 수천 소켓 감시 → C10K 해법(Netty·Nginx·Redis). (→ OS I/O 모델)
+- 주요 소켓 옵션:
+  - `SO_REUSEADDR`: `TIME_WAIT` 중 포트 재바인드 허용(서버 재시작 시 필수).
+  - `TCP_NODELAY`: **Nagle 알고리즘** 끔 — 작은 패킷을 모으지 않고 즉시 전송(지연 민감 실시간에 사용, 처리량과 트레이드오프).
+  - `SO_KEEPALIVE`: 유휴 연결 생존 확인(죽은 연결 감지).
+
+</details>
+
+## 5. 자주 하는 실수
+- 🔴 "소켓 = 포트" — 아님. 포트는 번호일 뿐, 소켓은 5-튜플로 식별되는 **연결 끝점**(같은 서버 포트에 수천 소켓 공존).
+- 🔴 `recv()` 한 번이 `send()` 한 번과 대응한다고 가정 — 스트림엔 경계 없음. 프레이밍 필요.
+- 🟡 서버 재시작 시 "Address already in use" — `TIME_WAIT` + `SO_REUSEADDR` 미설정.
+- 🟡 연결당 스레드로 수만 연결 시도 → 스레드/메모리 폭발. epoll 기반으로.
+
+## 6. 예상 면접 질문 + 답변 골격
+
+**Q1. "소켓이 뭔가요?"**
+> ① 네트워크 통신의 양 끝점을 추상화한 것으로 OS는 파일 디스크립터로 다룹니다 → ② {프로토콜, 출발 IP:Port, 목적 IP:Port} 5-튜플로 연결이 유일하게 식별됩니다 → ③ 그래서 같은 서버 포트에 수천 개의 연결 소켓이 공존할 수 있습니다.
+
+**꼬리 Q1-1. "그럼 포트 하나로 어떻게 수천 명을 동시에 처리하나요?"**
+> listening 소켓은 연결을 받기만 하고, accept()가 연결마다 별도의 소켓(fd)을 새로 반환합니다. 각 연결은 클라이언트 IP:Port가 달라 5-튜플이 전부 다르므로 서로 구분됩니다.
+
+**Q2. "TCP 서버의 소켓 호출 순서를 설명해보세요."**
+> socket()으로 fd 생성 → bind()로 IP:Port 할당 → listen()으로 수신 대기(backlog 큐) → accept()가 블로킹하며 연결을 기다리다 성사되면 통신 전용 소켓을 반환 → recv()/send()로 양방향 통신 → close(). 클라이언트는 socket() → connect()(3-way) → send()/recv() → close().
+
+**Q3. "TCP 소켓과 UDP 소켓의 코드상 차이는?"**
+> TCP는 connect/accept로 연결을 맺고 send/recv로 스트림을 주고받습니다. UDP는 연결이 없어 sendto/recvfrom으로 매번 상대 주소를 지정하며 데이터그램 단위(경계 보존)로 주고받습니다.
+
+**꼬리 Q3-1. "TCP는 스트림이라 메시지 경계가 없다는데, 그럼 어떻게 메시지를 구분하나요?"**
+> 애플리케이션이 프레이밍을 직접 합니다 — 길이를 앞에 붙이거나(length-prefix) 구분자를 넣는 방식입니다. HTTP는 Content-Length/청크 인코딩으로, 많은 RPC가 length-prefix로 해결합니다.
+
+**Q4. "Nagle 알고리즘과 TCP_NODELAY가 뭔가요?"**
+> Nagle은 작은 패킷을 모아 한 번에 보내 헤더 오버헤드를 줄이는 최적화인데, 실시간 응답엔 지연을 유발합니다. TCP_NODELAY로 끄면 작은 패킷도 즉시 전송해 지연을 줄이지만 패킷 수가 늘어 처리량과 트레이드오프가 됩니다.
+
+**Q5. "서버 재시작 때 'Address already in use'가 왜 나나요?"**
+> 능동 종료 측 소켓이 TIME_WAIT로 남아 포트를 잡고 있어서입니다. SO_REUSEADDR를 설정하면 TIME_WAIT 상태 포트에 재바인드할 수 있어 해결됩니다.
+
+---
+
+# 실시간 통신 (Polling · SSE · WebSocket)
+
+**학습 목표**: *"서버가 클라이언트로 실시간 푸시하려면 뭘 쓰나요?"* 에 Polling / Long-Polling / **SSE** / WebSocket을 방향성·프로토콜·용도로 구분해 답할 수 있다.
+
+## 1. 비유 — 택배 도착 확인
+- **Short Polling**: 5분마다 택배사에 "왔어요?" 전화 → 대부분 헛걸음.
+- **Long Polling**: 전화했더니 "올 때까지 안 끊고 기다릴게요" → 도착하면 바로 답, 끊고 다시 전화.
+- **SSE**: "오면 문자로 계속 알려줄게요" → 한 번 구독하면 서버가 **단방향**으로 계속 밀어줌.
+- **WebSocket**: 서로 인터폰을 깔아 **양방향** 실시간 대화.
+
+## 2. 개념 정의
+> 네 방식은 "누가·언제·어느 방향으로" 데이터를 밀 수 있느냐가 다르다. HTTP는 본래 클라이언트 요청이 있어야 응답하는 **요청-응답** 모델이라, 서버 푸시를 흉내(polling)내거나 연결을 유지(SSE/WebSocket)해야 한다.
+
+## 3. 비교표 ⭐
+| 방식 | 방향 | 프로토콜 | 연결 | 자동 재연결 | 대표 용도 |
+|------|------|----------|------|-------------|-----------|
+| Short Polling | 요청마다 | HTTP | 매번 새로 | — | 대충 주기 갱신(간단) |
+| Long Polling | 서버→클라(유사) | HTTP | 응답까지 대기 후 재요청 | 수동 | WebSocket 불가 환경 폴백 |
+| **SSE** | **서버→클라 단방향** | **HTTP**(`text/event-stream`) | 1개 지속 | **브라우저 내장(자동)** | 알림·피드·주가·진행률·LLM 토큰 스트리밍 |
+| **WebSocket** | **양방향** | `ws://`(HTTP Upgrade 후 별도) | 1개 지속(full-duplex) | 수동(라이브러리) | 채팅·게임·협업 편집·실시간 양방향 |
+
+## 4. SSE 상세 ⭐ (Server-Sent Events)
+- **HTTP 위에서 동작**: 클라이언트가 평범한 GET을 보내고, 서버가 `Content-Type: text/event-stream`으로 응답을 **닫지 않고** 이벤트를 계속 흘려보낸다.
+- **브라우저 API 내장**: `EventSource` — 연결 끊기면 **자동 재연결**하고, `Last-Event-ID` 헤더로 **놓친 이벤트부터 재개**까지 표준 제공.
+- **텍스트 이벤트 포맷**(줄 기반):
+```
+data: {"price": 42100}\n\n         ← 한 이벤트 (빈 줄로 구분)
+event: alert\ndata: 임계치 초과\n\n   ← 이름 있는 이벤트
+id: 1027\ndata: ...\n\n              ← id (재연결 시 Last-Event-ID로 전송)
+retry: 3000\n\n                      ← 재연결 간격(ms) 지정
+```
+```java
+// Spring: SSE 스트림 (server → client 단방향)
+@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter stream() {
+    SseEmitter emitter = new SseEmitter();
+    // 다른 스레드에서 emitter.send(event) 반복, 완료 시 emitter.complete()
+    return emitter;
+}
+```
+- **장점**: 구현 단순(HTTP 그대로·프록시/방화벽 친화), 자동 재연결·재개 내장, HTTP/2면 한 연결에 다중화.
+- **한계**: **단방향**(클라→서버는 별도 요청), 텍스트만(바이너리는 인코딩 필요), HTTP/1.1에선 브라우저의 **도메인당 동시 연결 6개 제한**에 걸릴 수 있음(HTTP/2로 해소).
+
+<details class="deep">
+<summary>심화: WebSocket 업그레이드 핸드셰이크와 SSE와의 선택 기준</summary>
+
+- **WebSocket 시작은 HTTP**: 클라이언트가 `Upgrade: websocket` + `Sec-WebSocket-Key` 헤더로 GET → 서버가 `101 Switching Protocols`로 승격 → 이후엔 HTTP가 아니라 **프레임 기반 full-duplex** 프로토콜로 전환.
+- **선택 기준**: 서버→클라 **단방향 푸시**(알림/피드/진행률/LLM 스트리밍)면 **SSE**가 더 간단하고 견고(자동 재연결·HTTP 인프라 그대로). **양방향 저지연**(채팅/게임/협업)이면 **WebSocket**. "실시간=무조건 WebSocket"은 과설계인 경우가 많다.
+- **LLM 토큰 스트리밍**(ChatGPT식 타이핑 효과)이 대표적 SSE 사용처 — 서버가 토큰을 순차로 밀기만 하면 되므로 단방향으로 충분.
+
+</details>
+
+## 5. 자주 하는 실수
+- 🔴 "실시간이면 WebSocket" — 단방향 푸시엔 SSE가 더 단순·견고. 방향성부터 따질 것.
+- 🔴 SSE가 별도 프로토콜인 줄 앎 — **그냥 HTTP 응답 스트림**이다(`text/event-stream`).
+- 🟡 Short Polling 남발 → 서버·네트워크 낭비(대부분 빈 응답). 최소 Long Polling이나 SSE로.
+- 🟡 HTTP/1.1에서 SSE 여러 개 → 도메인당 6 연결 제한에 막힘. HTTP/2 사용.
+
+## 6. 예상 면접 질문 + 답변 골격
+
+**Q1. "서버가 클라이언트에 실시간으로 데이터를 밀어야 합니다. 어떤 방식들이 있나요?"**
+> ① Short/Long Polling으로 HTTP 요청-응답을 흉내 → ② 서버→클라 단방향이면 SSE(text/event-stream) → ③ 양방향이면 WebSocket. 방향성과 인프라 제약으로 고릅니다.
+
+**Q2. "SSE와 WebSocket의 차이와 선택 기준은?"**
+> SSE는 HTTP 위 단방향(서버→클라) 스트림으로 EventSource가 자동 재연결·재개를 내장해 구현이 단순합니다. WebSocket은 HTTP Upgrade로 승격되는 양방향 프로토콜입니다. 알림·피드·LLM 스트리밍 같은 단방향엔 SSE, 채팅·게임처럼 양방향 저지연엔 WebSocket을 씁니다.
+
+**꼬리 Q2-1. "SSE는 별도 프로토콜인가요?"**
+> 아니요. 평범한 HTTP 응답을 닫지 않고 `text/event-stream` 형식으로 이벤트를 계속 흘려보내는 것이라, 기존 HTTP 인프라(프록시·인증)를 그대로 씁니다.
+
+**꼬리 Q2-2. "SSE에서 연결이 끊기면 놓친 데이터는 어떻게 하나요?"**
+> 각 이벤트에 id를 실어 보내면, 브라우저가 자동 재연결할 때 Last-Event-ID 헤더로 마지막 id를 보내줘 서버가 그 다음부터 재전송할 수 있습니다. 재연결 간격은 retry 필드로 조절합니다.
+
+**Q3. "Long Polling은 Short Polling과 뭐가 다른가요?"**
+> Short Polling은 주기적으로 요청해 대부분 빈 응답을 받습니다. Long Polling은 서버가 데이터가 생길 때까지 응답을 미뤄뒀다 보내고 클라이언트가 곧바로 다시 요청해, 헛요청을 줄이고 지연을 낮춥니다.
+
+**Q4. "WebSocket 연결은 어떻게 시작되나요?"**
+> HTTP로 시작합니다. 클라이언트가 Upgrade: websocket 헤더로 GET을 보내면 서버가 101 Switching Protocols로 승격하고, 이후 프레임 기반 full-duplex 통신으로 전환됩니다.
 
 ---
 

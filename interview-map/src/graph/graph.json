@@ -1442,6 +1442,46 @@
       }
     },
     {
+      "id": "net-socket",
+      "label": "소켓 프로그래밍",
+      "domain": "network",
+      "level": 2,
+      "icon": "LuArrowDownUp",
+      "summary": "소켓 = 통신 끝점(5-튜플) — TCP 서버/클라 생명주기",
+      "keywords": [
+        "Socket",
+        "bind/listen/accept",
+        "5-튜플",
+        "TCP_NODELAY"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#소켓-socket-프로그래밍",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "net-realtime",
+      "label": "실시간 통신 (SSE·WebSocket)",
+      "domain": "network",
+      "level": 2,
+      "icon": "LuActivity",
+      "summary": "Polling·Long-Polling·SSE·WebSocket 방향성·용도",
+      "keywords": [
+        "SSE",
+        "WebSocket",
+        "Long Polling",
+        "text/event-stream"
+      ],
+      "status": "learning",
+      "noteRef": "notes/03-network/network-core.md#실시간-통신-polling--sse--websocket",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "db-btree",
       "label": "B+Tree 구조",
       "domain": "database",
@@ -2333,6 +2373,22 @@
       "target": "java-queue",
       "type": "crosslink",
       "label": "PriorityQueue"
+    },
+    {
+      "source": "net-tcp",
+      "target": "net-socket",
+      "type": "hierarchy"
+    },
+    {
+      "source": "net-http",
+      "target": "net-realtime",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-io",
+      "target": "net-socket",
+      "type": "crosslink",
+      "label": "I/O 모델"
     }
   ]
 }
