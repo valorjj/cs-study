@@ -2146,6 +2146,87 @@
         "x": 0,
         "y": 0
       }
+    },
+    {
+      "id": "spring-jpa",
+      "label": "JPA 영속성 컨텍스트",
+      "domain": "spring",
+      "level": 1,
+      "icon": "LuTable2",
+      "summary": "1차 캐시·dirty checking·flush, 생명주기, OSIV",
+      "keywords": [
+        "영속성 컨텍스트",
+        "dirty checking",
+        "merge",
+        "OSIV"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s8-jpa-영속성-컨텍스트",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spring-security",
+      "label": "Spring Security",
+      "domain": "spring",
+      "level": 1,
+      "icon": "LuShield",
+      "summary": "SecurityFilterChain, 인증/인가, 세션 vs JWT",
+      "keywords": [
+        "인증",
+        "인가",
+        "JWT",
+        "SecurityFilterChain",
+        "CSRF"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s9-spring-security",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spring-config",
+      "label": "@Configuration·빈 등록",
+      "domain": "spring",
+      "level": 2,
+      "icon": "LuFileCog",
+      "summary": "@Bean vs @Component, proxyBeanMethods(CGLIB)",
+      "keywords": [
+        "@Bean",
+        "@Configuration",
+        "proxyBeanMethods",
+        "컴포넌트 스캔"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s10-configuration과-빈-등록-원리",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "spring-validation",
+      "label": "예외 처리·Validation",
+      "domain": "spring",
+      "level": 2,
+      "icon": "LuBadgeCheck",
+      "summary": "@ControllerAdvice, @Valid·BindingResult",
+      "keywords": [
+        "@ControllerAdvice",
+        "@Valid",
+        "예외 처리",
+        "BindingResult"
+      ],
+      "status": "learning",
+      "noteRef": "notes/05-spring/spring-core.md#s11-예외-처리와-validation",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
     }
   ],
   "edges": [
@@ -2938,6 +3019,56 @@
       "target": "devops-k8s-objects",
       "type": "crosslink",
       "label": "Service 구현"
+    },
+    {
+      "source": "spring",
+      "target": "spring-jpa",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring",
+      "target": "spring-security",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-ioc",
+      "target": "spring-config",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-mvc",
+      "target": "spring-validation",
+      "type": "hierarchy"
+    },
+    {
+      "source": "spring-jpa",
+      "target": "spring-tx",
+      "type": "crosslink",
+      "label": "flush·트랜잭션"
+    },
+    {
+      "source": "spring-jpa",
+      "target": "db-tx",
+      "type": "crosslink",
+      "label": "DB 트랜잭션"
+    },
+    {
+      "source": "spring-security",
+      "target": "net-https",
+      "type": "crosslink",
+      "label": "인증·토큰"
+    },
+    {
+      "source": "spring-config",
+      "target": "spring-aop",
+      "type": "crosslink",
+      "label": "CGLIB 프록시"
+    },
+    {
+      "source": "spring-validation",
+      "target": "net-http",
+      "type": "crosslink",
+      "label": "400 응답"
     }
   ]
 }

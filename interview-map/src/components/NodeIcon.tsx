@@ -13,7 +13,7 @@ import {
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
   LuBox, LuInfinity, LuActivity, LuCopy, LuSave,
   LuShapes, LuRuler, LuBlocks, LuWorkflow, LuGitMerge, LuShieldAlert,
-  LuServerCog, LuSlidersHorizontal,
+  LuServerCog, LuSlidersHorizontal, LuShield, LuFileCog, LuBadgeCheck,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -45,6 +45,10 @@ const BY_ID: Record<string, IconType> = {
   'spring-aop': LuScissors,
   'spring-tx': LuReceipt,
   'spring-mvc': LuRoute,
+  'spring-jpa': LuTable2,
+  'spring-security': LuShield,
+  'spring-config': LuFileCog,
+  'spring-validation': LuBadgeCheck,
   database: LuDatabase,
   'db-index': LuListTree,
   'db-tx': LuLock,

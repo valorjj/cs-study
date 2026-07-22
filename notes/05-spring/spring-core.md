@@ -11,6 +11,10 @@
 - [S5. Spring MVC Request Flow](#s5-spring-mvc-request-flow) — DispatcherServlet 요청 흐름
 - [S6. 트랜잭션 전파와 롤백](#s6-트랜잭션-전파와-롤백) — REQUIRED/REQUIRES_NEW/NESTED, 롤백 규칙 심화
 - [S7. AOP 프록시 (JDK/CGLIB)와 self-invocation](#s7-aop-프록시-jdkcglib와-self-invocation) — 프록시 생성 방식, 내부 호출 함정
+- [S8. JPA 영속성 컨텍스트](#s8-jpa-영속성-컨텍스트) — 1차 캐시·dirty checking·flush, 엔티티 생명주기, merge/persist, OSIV
+- [S9. Spring Security](#s9-spring-security) — SecurityFilterChain, 인증/인가 흐름, 세션 vs JWT, CSRF
+- [S10. @Configuration과 빈 등록 원리](#s10-configuration과-빈-등록-원리) — @Bean vs @Component, proxyBeanMethods(CGLIB), 컴포넌트 스캔
+- [S11. 예외 처리와 Validation](#s11-예외-처리와-validation) — @ControllerAdvice, @Valid·BindingResult, 에러 응답 표준화
 
 ---
 
@@ -567,6 +571,277 @@ public class ReportService {
 
 ---
 
+# S8. JPA 영속성 컨텍스트
+
+**학습 목표**: *"영속성 컨텍스트가 뭔가요?"* / *"dirty checking(변경 감지)은 어떻게 동작하나요?"* / *"persist와 merge 차이는?"* / *"OSIV가 뭐고 왜 논쟁이 되나요?"* 에 엔티티 상태를 그리며 5분 답할 수 있다.
+> S4의 N+1이 "쿼리 성능"이었다면, 여기는 **JPA가 엔티티를 어떻게 관리하나**의 근본. JPA를 쓴다고 하면 면접관이 반드시 파고드는 자리.
+
+## 1. 비유 — 작업용 임시 책상(1차 캐시)
+DB가 창고라면, 영속성 컨텍스트는 **내 앞의 작업용 책상**이다. 창고에서 꺼낸 서류(엔티티)를 책상에 올려두고 작업하는데, 같은 서류를 또 찾으면 창고까지 안 가고 **책상 위 것을 그대로 준다**(1차 캐시). 작업이 끝나 자리를 정리(commit/flush)할 때, 책상 위 서류가 처음 꺼낼 때와 **뭐가 달라졌는지 비교해** 바뀐 것만 창고에 반영한다(dirty checking) — 내가 "저장해"라고 안 해도.
+
+## 2. 개념 정의 ⭐
+> **영속성 컨텍스트(Persistence Context)** = 엔티티를 저장·관리하는 **논리적 공간**(EntityManager가 관리). 트랜잭션 범위와 생명주기를 같이한다.
+> 핵심 기능 5가지: ① **1차 캐시**(같은 트랜잭션 내 같은 id 조회는 DB 안 감) ② **동일성 보장**(`==`로 같은 인스턴스) ③ **dirty checking**(변경 감지, 자동 UPDATE) ④ **쓰기 지연**(write-behind, SQL을 모았다 flush 시 전송) ⑤ **지연 로딩**(연관 엔티티를 실제 접근 시 조회).
+
+## 3. dirty checking (변경 감지) — 왜 save() 없이 UPDATE되나 ⭐
+```java
+@Transactional
+public void updateName(Long id, String newName) {
+    Member m = memberRepository.findById(id).get(); // 영속 상태로 1차 캐시에 로드
+    m.setName(newName);                              // 필드만 변경 — save() 호출 X
+}   // 트랜잭션 커밋 시점에 flush → JPA가 UPDATE 자동 실행
+```
+- **원리**: 엔티티가 영속 컨텍스트에 들어올 때 **스냅샷(최초 상태)** 을 떠둔다. flush 시점에 현재 값과 스냅샷을 비교해 **달라진 필드가 있으면 UPDATE SQL을 자동 생성**한다.
+- 그래서 영속 상태 엔티티는 `save()`를 명시하지 않아도 값만 바꾸면 반영된다. (반대로 준영속/비영속 엔티티는 dirty checking 대상이 아님 → 안 바뀜.)
+
+## 4. 엔티티 생명주기 4상태 ⭐
+```
+new Member()          [비영속 transient]  ← 영속성 컨텍스트와 무관
+  │ persist(m)
+  ▼
+                      [영속 persistent]   ← 1차 캐시·dirty checking 대상
+  │ detach/clear/close    │ remove(m)
+  ▼                        ▼
+[준영속 detached]      [삭제 removed]      ← 커밋 시 DELETE
+```
+| 상태 | 의미 | dirty checking |
+|------|------|----------------|
+| **비영속(transient)** | `new`만 한 순수 객체, 컨텍스트 모름 | ❌ |
+| **영속(persistent)** | `persist()`되어 컨텍스트가 관리 | ✅ |
+| **준영속(detached)** | 관리되다 분리됨(`detach`, `clear`, 트랜잭션 종료) | ❌ |
+| **삭제(removed)** | `remove()`로 삭제 예약 | 커밋 시 DELETE |
+
+## 5. persist vs merge — 자주 헷갈림 ⭐
+| | persist | merge |
+|--|---------|-------|
+| 대상 | **비영속**(신규) 엔티티 | **준영속**(detached) 엔티티를 다시 영속화 |
+| 동작 | 컨텍스트에 등록(INSERT 예약) | **새 영속 인스턴스를 반환**(원본이 아님!), 필드를 복사 |
+| 반환 | void(전달한 객체가 영속화) | **병합된 새 객체** 반환 |
+
+- **merge 함정**: `merge(detached)`는 detached 객체를 영속화하는 게 아니라, **DB에서 조회(또는 1차 캐시)한 영속 엔티티에 값을 복사한 새 인스턴스를 반환**한다. 그래서 `merge` 후에는 반환값을 써야 하고, 넘긴 원본은 여전히 준영속. 또 merge는 **모든 필드를 덮어써서** null 필드가 있으면 기존 값을 날릴 수 있음 → 부분 수정엔 dirty checking(조회 후 변경)이 더 안전.
+
+<details class="deep">
+<summary>심화: 쓰기 지연(write-behind)·flush 시점·1차 캐시의 실제 동작</summary>
+
+- **쓰기 지연(transactional write-behind)**: `persist()`해도 즉시 INSERT가 안 나가고, SQL을 **쓰기 지연 저장소**에 모아뒀다 flush 시점에 한꺼번에 전송 → JDBC batch로 묶을 수 있어 성능↑.
+- **flush 시점**: ① 트랜잭션 커밋 시(자동) ② JPQL 쿼리 실행 직전(쿼리 결과 정합성 보장 위해) ③ `flush()` 명시 호출. flush는 "쓰기 지연 SQL을 DB에 전송 + dirty checking 반영"이지 **커밋이 아니다**(트랜잭션은 계속).
+- **1차 캐시의 범위**: 트랜잭션(영속성 컨텍스트) 단위로만 유효 → 트랜잭션 끝나면 사라짐. 애플리케이션 전역 캐시가 아니다(그건 2차 캐시, `@Cacheable`이나 Hibernate 2nd-level cache). "JPA 1차 캐시로 성능 최적화"라는 오해 주의 — 같은 트랜잭션 내 중복 조회 방지 정도.
+- **동일성 보장**: 같은 트랜잭션에서 같은 id를 두 번 조회하면 1차 캐시 덕에 `find1 == find2`가 true(같은 인스턴스). 트랜잭션이 다르면 보장 안 됨.
+
+</details>
+
+<details class="deep">
+<summary>심화: OSIV(Open Session In View) — 편의 vs 커넥션 고갈 논쟁</summary>
+
+- **OSIV**란: 영속성 컨텍스트(+DB 커넥션)를 **트랜잭션 종료 후에도 View 렌더링(응답 반환)까지 열어두는** 것. Spring Boot 기본값 `spring.jpa.open-in-view=true`.
+- **장점**: 컨트롤러·뷰에서 지연 로딩(lazy) 엔티티를 그대로 접근 가능 → `LazyInitializationException`을 안 만남(편함).
+- **문제(논쟁)**: DB 커넥션을 **응답이 끝날 때까지 붙잡는다** → 트래픽이 많거나 뷰 렌더링·외부 API 호출이 느리면 **커넥션 풀이 오래 점유되어 고갈** 위험. 실시간 트래픽이 큰 서비스에선 `open-in-view=false`로 끄고, 트랜잭션 안에서 필요한 데이터를 미리 로딩(fetch join/DTO 변환)하는 방식을 권장.
+- 면접 포인트: "OSIV를 끄면 왜 성능에 유리하지만 뭘 감수해야 하나" = 커넥션을 트랜잭션 범위로만 짧게 쓰는 대신, 지연 로딩을 트랜잭션 안에서 끝내야 하는 부담(설계 규율).
+
+</details>
+
+## 6. 핵심 포인트 (자주 하는 실수)
+- 🔴 "값 바꾸고 `save()`를 호출해야 UPDATE된다" ❌ — **영속 상태**면 dirty checking으로 자동 UPDATE. `save()`는 신규(persist)나 준영속(merge)에 필요.
+- 🔴 "merge는 넘긴 객체를 영속화한다" ❌ — merge는 **새 영속 인스턴스를 반환**하고 원본은 준영속. 반환값을 써야 함. 부분 수정엔 위험(전체 덮어씀).
+- 🔴 "1차 캐시로 앱 전체 성능이 좋아진다" ❌ — 1차 캐시는 **트랜잭션 범위**만. 전역 캐시는 2차 캐시/`@Cacheable`.
+- 🟡 준영속 엔티티에 lazy 필드 접근 시 `LazyInitializationException` — 트랜잭션 밖(OSIV off)에서 흔함. 트랜잭션 안에서 fetch join·DTO로 미리 로딩.
+- 🟡 flush ≠ commit — flush는 SQL 전송만, 트랜잭션은 계속.
+
+## 7. 예상 면접 질문 + 답변 골격
+**Q1. "영속성 컨텍스트가 뭐고 어떤 이점이 있나요?"**
+> 엔티티를 관리하는 논리적 공간으로 트랜잭션과 생명주기를 같이합니다. 1차 캐시로 같은 트랜잭션 내 같은 id 조회는 DB를 안 가고, 동일성을 보장하며, dirty checking으로 변경을 자동 감지해 UPDATE하고, 쓰기 지연으로 SQL을 모아 flush합니다. 개발자가 SQL을 직접 안 짜도 되게 해주는 JPA의 핵심 메커니즘입니다.
+
+**꼬리 Q1-1. "dirty checking은 어떻게 동작하나요?"**
+> 엔티티가 영속 상태로 들어올 때 최초 값 스냅샷을 떠두고, flush 시점에 현재 값과 스냅샷을 비교해 달라진 필드가 있으면 UPDATE SQL을 자동 생성합니다. 그래서 영속 엔티티는 값만 바꾸면 save() 없이도 반영됩니다. 반대로 준영속·비영속 엔티티는 스냅샷 관리 대상이 아니라 자동 반영되지 않습니다.
+
+**Q2. "persist와 merge의 차이는?"**
+> persist는 비영속 신규 엔티티를 영속화해 INSERT를 예약하고 전달한 객체 자체가 영속 상태가 됩니다. merge는 준영속 엔티티를 다시 영속화할 때 쓰는데, 원본을 영속화하는 게 아니라 DB나 1차 캐시의 영속 엔티티에 값을 복사한 새 인스턴스를 반환합니다. 그래서 merge는 반환값을 써야 하고, 모든 필드를 덮어쓰므로 부분 수정에는 조회 후 dirty checking이 더 안전합니다.
+
+**Q3. "OSIV가 뭐고 왜 끄기도 하나요?"**
+> Open Session In View는 영속성 컨텍스트와 DB 커넥션을 응답 렌더링까지 열어두는 것으로 Spring Boot 기본값입니다. 덕분에 컨트롤러·뷰에서 지연 로딩을 그대로 써서 LazyInitializationException을 안 만나 편합니다. 하지만 커넥션을 응답 끝까지 붙잡아, 트래픽이 많거나 뷰·외부 호출이 느리면 커넥션 풀이 고갈될 수 있습니다. 그래서 트래픽 큰 서비스는 OSIV를 끄고 트랜잭션 안에서 fetch join이나 DTO로 필요한 데이터를 미리 로딩합니다.
+
+---
+
+# S9. Spring Security
+
+**학습 목표**: *"스프링 시큐리티 인증 흐름을 설명해보세요"* / *"인증과 인가의 차이는?"* / *"세션 방식과 JWT 방식의 차이는?"* / *"CSRF가 뭐고 왜 REST API에선 끄기도 하나요?"* 에 필터 체인을 그리며 5분 답할 수 있다.
+> 인증 없는 서비스는 없다. Spring Security의 필터 기반 구조와 인증/인가 흐름은 백엔드 면접 단골.
+
+## 1. 비유 — 건물 출입 통제
+**인증(Authentication) = 신분 확인**("당신 누구세요?" — 사원증 검사). **인가(Authorization) = 권한 확인**("이 층에 들어갈 자격 있나요?" — 사원증에 적힌 등급 확인). 로비의 **보안 검색대 여러 개(필터 체인)** 를 순서대로 통과해야 사무실(컨트롤러)에 도달한다.
+
+## 2. 핵심 구조 — SecurityFilterChain ⭐
+> Spring Security는 **서블릿 필터 체인**으로 동작한다. 요청이 DispatcherServlet에 닿기 전, `FilterChainProxy`가 여러 보안 필터를 순서대로 실행한다.
+
+```
+요청 → [Security Filter Chain]
+         ├ SecurityContextPersistenceFilter (SecurityContext 로드/저장)
+         ├ UsernamePasswordAuthenticationFilter (폼 로그인 인증 시도)
+         ├ (JWT 필터 등 커스텀)
+         ├ ExceptionTranslationFilter (인증/인가 예외 → 401/403)
+         └ FilterSecurityInterceptor/AuthorizationFilter (인가 결정)
+       → DispatcherServlet → Controller
+```
+
+## 3. 인증 흐름 (폼 로그인 기준) ⭐
+```
+① 로그인 요청 → UsernamePasswordAuthenticationFilter가 인증 토큰 생성
+② AuthenticationManager에 위임
+③ AuthenticationManager → AuthenticationProvider가 UserDetailsService로 사용자 조회
+④ PasswordEncoder로 비밀번호 검증(BCrypt 등)
+⑤ 성공 → Authentication 객체를 SecurityContext에 저장 → SecurityContextHolder
+⑥ 이후 요청은 SecurityContext에서 인증 정보를 꺼내 인가 판단
+```
+- **SecurityContextHolder**: 현재 인증 정보(Authentication)를 담는 곳. 기본은 `ThreadLocal` 저장 → 같은 스레드 내 어디서든 `SecurityContextHolder.getContext().getAuthentication()`으로 접근.
+- **인가**: URL 기반(`authorizeHttpRequests`)이나 메서드 기반(`@PreAuthorize("hasRole('ADMIN')")`)으로 권한 검사.
+
+## 4. 세션 vs JWT — 상태 저장 위치 ⭐
+| | 세션(Session) | JWT(토큰) |
+|--|---------------|-----------|
+| 상태 | **서버가 세션 저장**(stateful) | **토큰 자체에 정보**(stateless) |
+| 저장 위치 | 서버 메모리/Redis + 클라 쿠키(세션 ID) | 클라이언트가 토큰 보관, 서버는 서명만 검증 |
+| 확장성 | 서버 확장 시 세션 공유 필요(→ Redis) | 서버 무상태라 수평 확장 쉬움 |
+| 무효화 | 서버에서 세션 삭제로 **즉시 로그아웃** | 만료 전 강제 무효화 어려움(블랙리스트 필요) |
+| 적합 | 전통 웹, 세밀한 세션 제어 | MSA·모바일·SPA, 무상태 API |
+
+- JWT 트레이드오프: 무상태라 확장은 쉽지만 **즉시 무효화가 어렵다** → 짧은 access token + refresh token 조합으로 절충(→ SD1의 stateless 논의와 동일 결).
+
+## 5. CSRF — 왜 REST API에선 끄기도 하나
+- **CSRF(Cross-Site Request Forgery)**: 사용자가 로그인된 상태를 악용해, 악성 사이트가 사용자 몰래 인증된 요청을 보내게 하는 공격. **쿠키 기반 세션 인증**에서 위험(브라우저가 쿠키를 자동 첨부).
+- Spring Security는 기본적으로 CSRF 토큰 검증을 켬. 그런데 **JWT를 헤더로 보내는 무상태 REST API**는 쿠키를 자동 첨부하지 않아 CSRF 위험이 낮고, 토큰 검증이 불필요 → 흔히 `csrf().disable()`. (단 "무조건 끈다"가 아니라 쿠키 인증이 아님을 전제로.)
+
+## 6. 핵심 포인트 (자주 하는 실수)
+- 🔴 "인증과 인가는 같은 것" ❌ — 인증=신원 확인(로그인), 인가=권한 확인(접근 허가). 순서도 인증→인가.
+- 🔴 "JWT는 항상 세션보다 낫다" ❌ — 무상태 확장성은 좋지만 즉시 로그아웃·탈취 대응이 약함. 요구사항에 따라 선택.
+- 🔴 "CSRF는 그냥 끄면 된다" ❌ — 쿠키 기반 인증이면 켜야 함. 끄는 건 헤더 토큰 기반 무상태 API라는 전제하에.
+- 🟡 비밀번호는 반드시 단방향 해시(BCrypt 등 salt+느린 해시). 평문·단순 해시(MD5/SHA) 저장 금지.
+- 🟡 SecurityContext는 ThreadLocal 기반 → 비동기(@Async)나 다른 스레드로 넘어가면 인증 정보가 안 따라감(별도 전파 설정 필요).
+
+## 7. 예상 면접 질문 + 답변 골격
+**Q1. "스프링 시큐리티의 인증 흐름을 설명해보세요."**
+> Spring Security는 서블릿 필터 체인으로 동작합니다. 로그인 요청이 오면 인증 필터가 인증 토큰을 만들어 AuthenticationManager에 위임하고, AuthenticationProvider가 UserDetailsService로 사용자를 조회한 뒤 PasswordEncoder로 비밀번호를 검증합니다. 성공하면 Authentication 객체를 SecurityContext에 저장하고, 이후 요청은 그 컨텍스트에서 인증 정보를 꺼내 URL이나 메서드 단위로 인가를 판단합니다.
+
+**꼬리 Q1-1. "인증과 인가의 차이는?"**
+> 인증은 "당신이 누구인지"를 확인하는 것으로 로그인이 대표적이고, 인가는 인증된 사용자가 "이 리소스에 접근할 자격이 있는지"를 확인하는 것입니다. 순서상 인증이 먼저, 인가가 나중이고, Spring Security에서는 인증 결과를 SecurityContext에 담아 인가 필터가 그걸 보고 권한을 판단합니다.
+
+**Q2. "세션 방식과 JWT 방식의 차이와 선택 기준은?"**
+> 세션은 서버가 상태를 저장하는 stateful 방식이라 즉시 로그아웃 같은 세밀한 제어가 쉽지만, 서버를 확장하면 세션을 Redis 등으로 공유해야 합니다. JWT는 토큰 자체에 정보를 담는 stateless라 서버 확장이 쉽고 MSA·모바일에 적합하지만, 만료 전 강제 무효화가 어렵습니다. 그래서 무상태가 필요하면 JWT를 쓰되 access token을 짧게 하고 refresh token으로 보완합니다.
+
+**Q3. "REST API에서 CSRF를 끄는 경우가 있는데 왜죠?"**
+> CSRF는 브라우저가 쿠키를 자동 첨부하는 걸 악용하는 공격이라 쿠키 기반 세션 인증에서 위험합니다. JWT를 Authorization 헤더로 보내는 무상태 REST API는 쿠키를 자동 첨부하지 않아 CSRF 위험이 낮으므로 토큰 검증을 끄기도 합니다. 다만 쿠키로 인증한다면 REST여도 CSRF를 켜야 하므로, "REST라서 끈다"가 아니라 "쿠키 인증이 아니라서 끈다"가 정확합니다.
+
+---
+
+# S10. @Configuration과 빈 등록 원리
+
+**학습 목표**: *"@Bean과 @Component 차이는?"* / *"@Configuration에 붙는 CGLIB 프록시(proxyBeanMethods)가 뭔가요?"* / *"컴포넌트 스캔은 어떻게 빈을 찾나요?"* 에 답할 수 있다.
+
+## 1. 비유 — 직접 등록 vs 자동 수집
+**@Component + 컴포넌트 스캔** = "이 표시(@Component)가 붙은 사람은 자동으로 명단에 올려"(자동 수집). **@Bean** = 설정 담당자가 "이 객체는 내가 직접 만들어 명단에 올릴게"(수동 등록, 외부 라이브러리 객체처럼 내가 애노테이션 못 붙이는 것에 유용).
+
+## 2. @Bean vs @Component ⭐
+| | @Component (+@Service/@Repository) | @Bean |
+|--|-----------------------------------|-------|
+| 대상 | 내가 만든 클래스(애노테이션 부착 가능) | **외부 라이브러리 객체** 등 직접 제어할 클래스 |
+| 등록 방식 | 컴포넌트 스캔이 자동 감지 | `@Configuration` 클래스의 메서드로 수동 등록 |
+| 위치 | 클래스 선언부 | 메서드(반환 객체가 빈) |
+
+```java
+@Configuration
+public class AppConfig {
+    @Bean
+    public ObjectMapper objectMapper() {   // 외부 라이브러리 → @Component 못 붙임 → @Bean
+        return new ObjectMapper();
+    }
+}
+```
+
+## 3. @Configuration의 CGLIB 프록시 — proxyBeanMethods ⭐
+```java
+@Configuration
+public class AppConfig {
+    @Bean public A a() { return new A(b()); }  // b() 호출
+    @Bean public B b() { return new B(); }     // a()에서 부른 b()와 같은 인스턴스일까?
+}
+```
+- `@Configuration`(기본 `proxyBeanMethods=true`)은 **CGLIB로 설정 클래스를 프록시**한다. 그래서 `a()` 안에서 `b()`를 호출해도 **새 B를 만들지 않고 컨테이너가 관리하는 싱글톤 B를 반환** → 싱글톤 보장.
+- `@Configuration` 없이 `@Bean`만 쓰거나 `proxyBeanMethods=false`(lite 모드)면 프록시가 없어, `b()`가 매번 새 인스턴스를 만들어 싱글톤이 깨진다.
+- 즉 **@Configuration의 프록시가 "설정 메서드 간 호출에서도 싱글톤을 지키는" 장치**. (→ S3/S7의 프록시와 같은 CGLIB 메커니즘.)
+
+## 4. 컴포넌트 스캔
+- `@SpringBootApplication`(내부에 `@ComponentScan`)이 **선언된 패키지 이하**를 스캔해 `@Component` 계열을 빈으로 등록.
+- 그래서 메인 클래스는 보통 최상위 패키지에 둔다(하위 전체 스캔되도록). 다른 패키지의 빈은 스캔 범위 밖 → 등록 안 됨(흔한 "빈을 못 찾음" 원인).
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 "@Bean과 @Component는 아무거나 써도 된다" ❌ — 내가 만든 클래스는 @Component(스캔), 외부 라이브러리 객체는 @Bean(수동). 외부 클래스엔 애노테이션을 못 붙인다.
+- 🔴 "@Configuration 없이 @Bean만 써도 싱글톤 보장" ❌ — 설정 메서드 간 호출에서 프록시(proxyBeanMethods)가 없으면 새 인스턴스가 생겨 싱글톤이 깨질 수 있음.
+- 🟡 컴포넌트 스캔은 메인 클래스 패키지 하위만 → 빈을 못 찾으면 패키지 위치·스캔 범위부터 확인.
+
+## 6. 예상 면접 질문 + 답변 골격
+**Q1. "@Bean과 @Component의 차이는?"**
+> @Component는 내가 만든 클래스에 붙여 컴포넌트 스캔이 자동으로 빈 등록하게 하는 방식이고, @Bean은 @Configuration 클래스의 메서드로 객체를 직접 만들어 등록하는 방식입니다. ObjectMapper 같은 외부 라이브러리 객체는 애노테이션을 붙일 수 없어 @Bean으로 등록합니다.
+
+**꼬리 Q1-1. "@Configuration에 CGLIB 프록시가 붙는 이유는?"**
+> 설정 클래스의 @Bean 메서드끼리 서로 호출할 때도 싱글톤을 보장하기 위해서입니다. proxyBeanMethods가 true면 CGLIB로 설정 클래스를 프록시해서, a() 안에서 b()를 불러도 새 인스턴스가 아니라 컨테이너의 싱글톤 b를 반환합니다. 이 프록시가 없으면 b()가 매번 새 객체를 만들어 싱글톤이 깨집니다.
+
+---
+
+# S11. 예외 처리와 Validation
+
+**학습 목표**: *"전역 예외 처리를 어떻게 하나요?"* / *"@Valid는 어떻게 동작하고 검증 실패는 어떻게 잡나요?"* / *"에러 응답을 어떻게 표준화하나요?"* 에 답할 수 있다.
+
+## 1. 비유 — 고객센터 통합 창구
+각 부서(컨트롤러)가 저마다 다른 양식으로 불만(예외)을 처리하면 고객이 혼란스럽다. **통합 민원 창구(@ControllerAdvice)** 를 두면 모든 예외를 한 곳에서 일관된 양식(에러 응답 DTO)으로 응대한다.
+
+## 2. 전역 예외 처리 — @ControllerAdvice ⭐
+```java
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<ErrorResponse> handle(BusinessException e) {
+        return ResponseEntity.status(e.getStatus())
+            .body(new ErrorResponse(e.getCode(), e.getMessage()));
+    }
+    @ExceptionHandler(MethodArgumentNotValidException.class) // @Valid 실패
+    public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
+        // e.getBindingResult()에서 필드별 에러 추출
+    }
+}
+```
+- `@ControllerAdvice`/`@RestControllerAdvice`는 모든 컨트롤러의 예외를 가로채 **일관된 에러 응답**으로 변환 → 컨트롤러마다 try-catch 반복 제거.
+- (S5 참고) 트랜잭션 롤백 판정은 Service 프록시에서 먼저 일어나고, 예외가 컨트롤러를 거쳐 여기로 전파됨.
+
+## 3. @Valid / Bean Validation ⭐
+```java
+public record SignupRequest(
+    @NotBlank String name,
+    @Email String email,
+    @Min(0) int age
+) {}
+
+@PostMapping("/signup")
+public void signup(@Valid @RequestBody SignupRequest req) { ... }
+// 검증 실패 → MethodArgumentNotValidException → @ControllerAdvice가 잡아 400 응답
+```
+- **Bean Validation**(JSR-380, Hibernate Validator): `@NotNull`·`@NotBlank`·`@Email`·`@Size`·`@Min` 등 애노테이션으로 선언적 검증.
+- `@Valid`(또는 `@Validated`)가 붙은 파라미터를 스프링이 바인딩 후 검증 → 실패 시 `@RequestBody`는 `MethodArgumentNotValidException`, `@ModelAttribute`는 `BindingResult`로 처리.
+- `@Validated`(스프링)는 **그룹 검증**과 클래스 레벨(메서드 파라미터) 검증을 추가 지원.
+
+## 4. 핵심 포인트 (자주 하는 실수)
+- 🔴 "컨트롤러마다 try-catch로 예외 처리" ❌ — `@ControllerAdvice`로 전역 일원화가 유지보수·일관성에 유리.
+- 🔴 "@Valid만 붙이면 검증 실패가 자동으로 예쁜 응답이 된다" ❌ — 실패 예외(`MethodArgumentNotValidException`)를 `@ControllerAdvice`에서 잡아 응답을 표준화해야 함.
+- 🟡 예외를 Service에서 try-catch로 삼키면 @ControllerAdvice까지 전파 안 되고 트랜잭션 롤백도 안 됨(S5·S6 참고).
+- 🟡 에러 응답은 코드·메시지·타임스탬프 등 **일관된 DTO**로 표준화(클라이언트가 파싱하기 쉽게).
+
+## 5. 예상 면접 질문 + 답변 골격
+**Q1. "전역 예외 처리를 어떻게 구현하나요?"**
+> @RestControllerAdvice 클래스에 @ExceptionHandler 메서드를 예외 타입별로 두어, 모든 컨트롤러에서 던진 예외를 한 곳에서 잡아 일관된 에러 응답 DTO로 변환합니다. 컨트롤러마다 try-catch를 반복하지 않아도 되고, 에러 코드·메시지 형식을 표준화할 수 있습니다. 검증 실패인 MethodArgumentNotValidException도 여기서 잡아 400과 필드별 에러를 내려줍니다.
+
+**꼬리 Q1-1. "@Valid 검증은 어떻게 동작하나요?"**
+> DTO 필드에 @NotBlank, @Email 같은 Bean Validation 애노테이션을 선언하고 컨트롤러 파라미터에 @Valid를 붙이면, 스프링이 요청을 바인딩한 뒤 Hibernate Validator로 검증합니다. @RequestBody가 실패하면 MethodArgumentNotValidException이 발생하고, 이를 @ControllerAdvice에서 잡아 BindingResult에서 필드별 에러를 추출해 응답으로 내려줍니다.
+
+---
+
 # 핵심 질문 (Quiz)
 
 > 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
@@ -685,6 +960,40 @@ public class ReportService {
 - `private` 메서드엔 **적용 안 됨** — CGLIB는 상속 오버라이드라 `private`이 안 보이고, JDK 프록시는 인터페이스 메서드만 다룸(경고 없이 조용히 무시 → 위험). 대상 메서드는 반드시 `public`
 - **JDK 동적 프록시**: 인터페이스 구현 프록시(인터페이스 필수), 인터페이스 타입으로만 참조
 - **CGLIB**: 클래스 상속 서브클래스(인터페이스 불필요), `final` 클래스/메서드엔 불가 — Spring Boot 2.0+ 기본값(`proxyTargetClass=true`)
+
+</details>
+
+<details>
+<summary>Q13. 영속성 컨텍스트와 dirty checking을 설명하면? (S8)</summary>
+
+- **영속성 컨텍스트**: 엔티티를 관리하는 논리적 공간(트랜잭션 범위). ① 1차 캐시 ② 동일성 보장 ③ dirty checking ④ 쓰기 지연 ⑤ 지연 로딩.
+- **dirty checking**: 영속 상태로 로드 시 스냅샷을 떠두고, flush 시점에 현재 값과 비교해 달라진 필드만 UPDATE 자동 생성 → `save()` 없이 값만 바꿔도 반영.
+- 1차 캐시는 **트랜잭션 범위**만(전역 캐시 아님). flush ≠ commit(SQL 전송만).
+
+</details>
+
+<details>
+<summary>Q14. persist vs merge, OSIV는? (S8)</summary>
+
+- **persist**: 비영속(신규) 엔티티 영속화(INSERT 예약), 전달 객체가 영속화. **merge**: 준영속 엔티티를 다시 영속화 — 원본이 아니라 **값 복사한 새 영속 인스턴스를 반환**(반환값 사용, 전체 필드 덮어씀 주의).
+- **OSIV**: 영속성 컨텍스트+커넥션을 응답 렌더링까지 유지(Boot 기본 on). 지연 로딩 편하지만 **커넥션을 오래 점유** → 트래픽 크면 off + 트랜잭션 안에서 fetch join/DTO.
+
+</details>
+
+<details>
+<summary>Q15. Spring Security 인증 흐름, 인증 vs 인가, 세션 vs JWT는? (S9)</summary>
+
+- **인증(누구인지)** → **인가(자격 있는지)** 순서. 서블릿 **필터 체인**으로 동작.
+- 흐름: 인증필터 → AuthenticationManager → Provider가 UserDetailsService 조회 → PasswordEncoder(BCrypt) 검증 → Authentication을 SecurityContext(ThreadLocal) 저장 → 이후 인가.
+- **세션**(stateful, 즉시 무효화 쉬움, 확장 시 Redis 공유) vs **JWT**(stateless, 확장 쉬움, 즉시 무효화 어려움→짧은 access+refresh).
+
+</details>
+
+<details>
+<summary>Q16. @Bean vs @Component, @Configuration의 CGLIB 프록시는? (S10)</summary>
+
+- **@Component**: 내 클래스에 붙여 컴포넌트 스캔이 자동 등록. **@Bean**: @Configuration 메서드로 수동 등록(외부 라이브러리 객체처럼 애노테이션 못 붙이는 것).
+- **@Configuration(proxyBeanMethods=true)**: CGLIB로 설정 클래스를 프록시해, @Bean 메서드끼리 호출해도 새 인스턴스가 아닌 **싱글톤 반환**(싱글톤 보장). 없으면 매번 새 객체로 싱글톤 깨짐.
 
 </details>
 
