@@ -2,12 +2,15 @@ import { useMemo, useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { LuArrowRight, LuShuffle, LuTarget } from 'react-icons/lu'
+import { LuArrowRight, LuShuffle, LuTarget, LuRefreshCw } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
-import { extractQuizItems, seededShuffle, hashSeed, weakDomains } from '../lib/quiz'
+import { extractQuizItems, hashSeed, weakDomains, orderDeck } from '../lib/quiz'
 import { useNotePool } from '../hooks/useNotePool'
 import { domainColor } from '../styles/theme'
+import { InfoPopover } from './InfoPopover'
+import { ORDER_LABELS, ORDER_HELP } from '../lib/quizHelp'
 import type { GraphNode } from '../graph/types'
+import type { QuizSettings } from '../lib/quizSettings'
 import './QuizView.css'
 
 function todayStr(): string {
@@ -23,6 +26,10 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const recordReview = useGraphStore((s) => s.recordReview)
   const quizStats = useGraphStore((s) => s.quizStats)
   const requestTrack = useGraphStore((s) => s.requestTrack)
+  const srs = useGraphStore((s) => s.srs)
+  const quizSettings = useGraphStore((s) => s.quizSettings)
+  const setQuizSettings = useGraphStore((s) => s.setQuizSettings)
+  const [nonce, setNonce] = useState(0)
   const [scope, setScope] = useState<string>('all')
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
@@ -37,8 +44,17 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
 
   const deck = useMemo(() => {
     const scoped = scope === 'all' ? pool : pool.filter((i) => i.domain === scope)
-    return seededShuffle(scoped, hashSeed(`${todayStr()}:${scope}`))
-  }, [pool, scope])
+    const weakOrder = weakDomains(quizStats, { limit: 99 }).map((w) => w.domain)
+    const rankOf = (d: string) => { const i = weakOrder.indexOf(d); return i === -1 ? weakOrder.length : i }
+    const seed = quizSettings.order === 'random'
+      ? hashSeed(`${nonce}:${scope}`)
+      : hashSeed(`${todayStr()}:${scope}`)
+    return orderDeck(scoped, quizSettings.order, {
+      seed,
+      srsLapses: (k) => srs[k]?.lapses ?? 0,
+      weakRank: rankOf,
+    })
+  }, [pool, scope, quizSettings.order, nonce, quizStats, srs])
 
   useEffect(() => { setIndex(0); setRevealed(false) }, [scope])
 
@@ -55,6 +71,24 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
 
   return (
     <div className="quiz">
+      <div className="quiz-order">
+        <span className="quiz-order-label">순서</span>
+        <div className="quiz-order-seg">
+          {(Object.keys(ORDER_LABELS) as QuizSettings['order'][]).map((o) => (
+            <button key={o} className="quiz-order-opt" data-active={quizSettings.order === o}
+              onClick={() => setQuizSettings({ order: o })}>
+              {ORDER_LABELS[o]}
+            </button>
+          ))}
+        </div>
+        {quizSettings.order === 'random' && (
+          <button className="quiz-reshuffle" onClick={() => setNonce((n) => n + 1)}>
+            <LuRefreshCw size={13} /> 다시 섞기
+          </button>
+        )}
+        <InfoPopover title="카드 순서" body={ORDER_HELP} />
+      </div>
+
       <div className="quiz-scopes">
         <button className="quiz-scope" data-active={scope === 'all'} onClick={() => setScope('all')}>
           <LuShuffle size={13} /> 전체 랜덤
