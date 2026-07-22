@@ -88,7 +88,7 @@ describe('review', () => {
   })
 })
 
-import { buildReviewDeck, dueCount, NEW_CARD_DAILY_CAP } from './srs'
+import { buildReviewDeck, dueCount, NEW_CARD_DAILY_CAP, GRADE_SETS } from './srs'
 
 type Card = { srsKey: string; domain: string }
 const mk = (n: number, domain = 'net'): Card => ({ srsKey: `k${n}`, domain })
@@ -139,5 +139,44 @@ describe('dueCount', () => {
     const pool = [mk(1)]
     const srs = { k1: { ef: 2.5, interval: 1, reps: 1, lapses: 0, due: '2026-07-25' } }
     expect(dueCount(pool, srs, today)).toBe(0)
+  })
+})
+
+describe('buildReviewDeck cap', () => {
+  const today = '2026-07-22'
+  const pool = Array.from({ length: 25 }, (_, i) => ({ srsKey: `k${i}`, domain: 'os' }))
+
+  it('caps new cards at the given cap', () => {
+    expect(buildReviewDeck(pool, {}, today, [], 10)).toHaveLength(10)
+  })
+
+  it('defaults to NEW_CARD_DAILY_CAP when cap omitted', () => {
+    expect(buildReviewDeck(pool, {}, today, [])).toHaveLength(NEW_CARD_DAILY_CAP)
+  })
+
+  it('Infinity cap returns all new cards', () => {
+    expect(buildReviewDeck(pool, {}, today, [], Infinity)).toHaveLength(25)
+  })
+})
+
+describe('dueCount cap', () => {
+  const today = '2026-07-22'
+  const pool = Array.from({ length: 25 }, (_, i) => ({ srsKey: `k${i}`, domain: 'os' }))
+  it('respects the cap for new cards', () => {
+    expect(dueCount(pool, {}, today, 10)).toBe(10)
+    expect(dueCount(pool, {}, today, Infinity)).toBe(25)
+  })
+})
+
+describe('GRADE_SETS', () => {
+  it('has 2/3/5 button sets with ascending grades', () => {
+    for (const n of [2, 3, 5] as const) {
+      const set = GRADE_SETS[n]
+      expect(set).toHaveLength(n)
+      const grades = set.map((g) => g.grade)
+      expect(grades).toEqual([...grades].sort((a, b) => a - b))
+      expect(grades[0]).toBe(0)
+      expect(grades[grades.length - 1]).toBe(5)
+    }
   })
 })

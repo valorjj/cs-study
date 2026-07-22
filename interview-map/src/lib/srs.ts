@@ -65,6 +65,7 @@ export function buildReviewDeck<T extends { srsKey: string; domain: string }>(
   srs: SrsState,
   today: string,
   weakDomainsOrder: string[],
+  cap: number = NEW_CARD_DAILY_CAP,
 ): T[] {
   const due = pool
     .filter((c) => srs[c.srsKey] && srs[c.srsKey].due <= today)
@@ -77,7 +78,7 @@ export function buildReviewDeck<T extends { srsKey: string; domain: string }>(
   const fresh = pool
     .filter((c) => !srs[c.srsKey])
     .sort((a, b) => rank(a.domain) - rank(b.domain))
-    .slice(0, NEW_CARD_DAILY_CAP)
+    .slice(0, cap)
 
   return [...due, ...fresh]
 }
@@ -87,8 +88,30 @@ export function dueCount<T extends { srsKey: string; domain: string }>(
   pool: T[],
   srs: SrsState,
   today: string,
+  cap: number = NEW_CARD_DAILY_CAP,
 ): number {
   const due = pool.filter((c) => srs[c.srsKey] && srs[c.srsKey].due <= today).length
   const fresh = pool.filter((c) => !srs[c.srsKey]).length
-  return due + Math.min(fresh, NEW_CARD_DAILY_CAP)
+  return due + Math.min(fresh, cap)
+}
+
+// Review-mode difficulty button presets. grade values feed review(); 0..5 with
+// 0 always a lapse and 5 an easy pass. cls maps to .review-g{n} colors.
+export const GRADE_SETS: Record<2 | 3 | 5, { grade: number; label: string; cls: string }[]> = {
+  2: [
+    { grade: 0, label: '모름', cls: 'review-g0' },
+    { grade: 5, label: '알았음', cls: 'review-g5' },
+  ],
+  3: [
+    { grade: 0, label: '모름', cls: 'review-g0' },
+    { grade: 3, label: '애매', cls: 'review-g3' },
+    { grade: 5, label: '쉬움', cls: 'review-g5' },
+  ],
+  5: [
+    { grade: 0, label: '전혀', cls: 'review-g0' },
+    { grade: 2, label: '어렴풋', cls: 'review-g2' },
+    { grade: 3, label: '애매', cls: 'review-g3' },
+    { grade: 4, label: '대략', cls: 'review-g4' },
+    { grade: 5, label: '완벽', cls: 'review-g5' },
+  ],
 }
