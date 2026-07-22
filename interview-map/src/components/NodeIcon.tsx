@@ -14,6 +14,7 @@ import {
   LuBox, LuInfinity, LuActivity, LuCopy, LuSave,
   LuShapes, LuRuler, LuBlocks, LuWorkflow, LuGitMerge, LuShieldAlert,
   LuServerCog, LuSlidersHorizontal, LuShield, LuFileCog, LuBadgeCheck,
+  LuFingerprint, LuTicket, LuUserCheck, LuGlobeLock, LuBug,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -92,6 +93,11 @@ const BY_ID: Record<string, IconType> = {
   'react-render': LuRepeat,
   'react-hooks': LuAnchor,
   'react-state': LuToggleLeft,
+  security: LuFingerprint,
+  'sec-jwt': LuTicket,
+  'sec-authz': LuUserCheck,
+  'sec-cors': LuGlobeLock,
+  'sec-attacks': LuBug,
   design: LuShapes,
   'design-solid': LuRuler,
   'design-creational': LuBlocks,
@@ -151,6 +157,7 @@ const BY_DOMAIN: Record<string, IconType> = {
   systemdesign: LuBuilding2,
   devops: SiDocker,
   design: LuShapes,
+  security: LuFingerprint,
 }
 
 export function NodeIcon({ id, domain, size = 20 }: { id: string; domain: string; size?: number }) {

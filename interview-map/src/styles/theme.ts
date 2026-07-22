@@ -3,7 +3,7 @@ const PALETTE: Record<string, string> = {
   java: '#3b82f6', javascript: '#eab308', dsa: '#8b5cf6',
   spring: '#22c55e', react: '#06b6d4', database: '#ec4899',
   systemdesign: '#f97316', devops: '#14b8a6',
-  design: '#6366f1',
+  design: '#6366f1', security: '#e11d48',
 }
 export function domainColor(domain: string): string {
   return PALETTE[domain] ?? '#64748b'

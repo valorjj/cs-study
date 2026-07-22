@@ -2227,6 +2227,108 @@
         "x": 0,
         "y": 0
       }
+    },
+    {
+      "id": "security",
+      "label": "보안 (Security)",
+      "domain": "security",
+      "level": 0,
+      "icon": "LuFingerprint",
+      "summary": "인증·인가·웹 보안",
+      "keywords": [
+        "인증",
+        "인가",
+        "JWT",
+        "OAuth2"
+      ],
+      "status": "learning",
+      "noteRef": "notes/13-security/security-core.md#sec1-jwt토큰-심층",
+      "position": {
+        "x": 900,
+        "y": -560
+      }
+    },
+    {
+      "id": "sec-jwt",
+      "label": "JWT·토큰 심층",
+      "domain": "security",
+      "level": 1,
+      "icon": "LuTicket",
+      "summary": "구조·서명·claims, access/refresh·rotation, PAT",
+      "keywords": [
+        "JWT",
+        "refresh token",
+        "PAT",
+        "claims",
+        "RS256"
+      ],
+      "status": "learning",
+      "noteRef": "notes/13-security/security-core.md#sec1-jwt토큰-심층",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sec-authz",
+      "label": "인증서버·OAuth2·권한",
+      "domain": "security",
+      "level": 1,
+      "icon": "LuUserCheck",
+      "summary": "Auth Server, OAuth2/OIDC·PKCE, RBAC vs ABAC",
+      "keywords": [
+        "OAuth2",
+        "OIDC",
+        "PKCE",
+        "RBAC",
+        "SSO"
+      ],
+      "status": "learning",
+      "noteRef": "notes/13-security/security-core.md#sec2-인증-서버oauth2권한-모델",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sec-cors",
+      "label": "CORS·동일 출처",
+      "domain": "security",
+      "level": 1,
+      "icon": "LuGlobeLock",
+      "summary": "SOP, Preflight, 자격증명, 흔한 오해",
+      "keywords": [
+        "CORS",
+        "SOP",
+        "Preflight",
+        "동일 출처"
+      ],
+      "status": "learning",
+      "noteRef": "notes/13-security/security-core.md#sec3-cors동일-출처-정책",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sec-attacks",
+      "label": "웹 공격·방어",
+      "domain": "security",
+      "level": 1,
+      "icon": "LuBug",
+      "summary": "XSS·CSRF·SQLi, 비밀번호 해싱",
+      "keywords": [
+        "XSS",
+        "CSRF",
+        "SQL Injection",
+        "bcrypt"
+      ],
+      "status": "learning",
+      "noteRef": "notes/13-security/security-core.md#sec4-웹-공격과-방어-xsscsrfsqli",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
     }
   ],
   "edges": [
@@ -3069,6 +3171,68 @@
       "target": "net-http",
       "type": "crosslink",
       "label": "400 응답"
+    },
+    {
+      "source": "security",
+      "target": "sec-jwt",
+      "type": "hierarchy"
+    },
+    {
+      "source": "security",
+      "target": "sec-authz",
+      "type": "hierarchy"
+    },
+    {
+      "source": "security",
+      "target": "sec-cors",
+      "type": "hierarchy"
+    },
+    {
+      "source": "security",
+      "target": "sec-attacks",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sec-jwt",
+      "target": "spring-security",
+      "type": "crosslink",
+      "label": "Spring 인증"
+    },
+    {
+      "source": "sec-jwt",
+      "target": "net-https",
+      "type": "crosslink",
+      "label": "TLS 전송"
+    },
+    {
+      "source": "sec-authz",
+      "target": "sec-jwt",
+      "type": "crosslink",
+      "label": "토큰 발급"
+    },
+    {
+      "source": "sec-authz",
+      "target": "spring-security",
+      "type": "crosslink",
+      "label": "인가"
+    },
+    {
+      "source": "sec-cors",
+      "target": "net-http",
+      "type": "crosslink",
+      "label": "CORS 헤더"
+    },
+    {
+      "source": "sec-attacks",
+      "target": "spring-security",
+      "type": "crosslink",
+      "label": "CSRF·인증"
+    },
+    {
+      "source": "sec-attacks",
+      "target": "db-index",
+      "type": "crosslink",
+      "label": "SQLi·쿼리"
     }
   ]
 }
