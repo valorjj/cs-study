@@ -33,6 +33,8 @@
 .review-g0 { border-color: #e5484d; color: #e5484d; }
 .review-g3 { border-color: #f5a623; color: #f5a623; }
 .review-g5 { border-color: #30a46c; color: #30a46c; }
+.review-g2 { border-color: #e5844d; color: #e5844d; }
+.review-g4 { border-color: #6cae30; color: #6cae30; }
 
 .review-empty { text-align: center; margin-top: 48px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .review-empty-title { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; margin: 0; }

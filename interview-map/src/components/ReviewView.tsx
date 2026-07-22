@@ -5,7 +5,7 @@ import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuCircleCheck } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { extractQuizItems, weakDomains } from '../lib/quiz'
-import { buildReviewDeck } from '../lib/srs'
+import { buildReviewDeck, GRADE_SETS } from '../lib/srs'
 import { useNotePool } from '../hooks/useNotePool'
 import { domainColor } from '../styles/theme'
 import type { GraphNode } from '../graph/types'
@@ -17,12 +17,6 @@ function todayStr(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-const GRADES = [
-  { grade: 0, label: '모름', cls: 'review-g0' },
-  { grade: 3, label: '애매', cls: 'review-g3' },
-  { grade: 5, label: '쉬움', cls: 'review-g5' },
-]
-
 // Spaced-repetition review: today's due + new cards, graded on a 3-point scale.
 export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
   const select = useGraphStore((s) => s.select)
@@ -30,6 +24,7 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
   const srs = useGraphStore((s) => s.srs)
   const quizStats = useGraphStore((s) => s.quizStats)
   const recordReview = useGraphStore((s) => s.recordReview)
+  const quizSettings = useGraphStore((s) => s.quizSettings)
 
   const { loading, buildItems } = useNotePool(nodes)
   const pool = useMemo(() => buildItems(extractQuizItems), [buildItems])
@@ -37,11 +32,13 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
   // Freeze the deck for the session: grading a card changes `srs`, which would
   // otherwise rebuild the deck and drop the just-graded card mid-run.
   const today = todayStr()
+  const cap = quizSettings.newCardCap === 0 ? Infinity : quizSettings.newCardCap
   const deck = useMemo(() => {
     const weakOrder = weakDomains(quizStats, { limit: 99 }).map((w) => w.domain)
-    return buildReviewDeck(pool, srs, today, weakOrder)
+    return buildReviewDeck(pool, srs, today, weakOrder, cap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pool])
+  const grades = GRADE_SETS[quizSettings.gradeButtons] ?? GRADE_SETS[3]
 
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
@@ -100,7 +97,7 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
           </button>
           {revealed && (
             <div className="review-grades">
-              {GRADES.map((g) => (
+              {grades.map((g) => (
                 <button key={g.grade} className={`review-grade ${g.cls}`} onClick={() => grade(g.grade)}>
                   {g.label}
                 </button>
