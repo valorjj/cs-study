@@ -1847,6 +1847,27 @@
       }
     },
     {
+      "id": "os-pagecache",
+      "label": "Page Cache · fsync",
+      "domain": "os",
+      "level": 1,
+      "icon": "LuSave",
+      "summary": "dirty page·write-back, fsync 내구성, WAL",
+      "keywords": [
+        "page cache",
+        "dirty page",
+        "fsync",
+        "WAL",
+        "durability"
+      ],
+      "status": "learning",
+      "noteRef": "notes/02-os/os-core.md#o10-page-cache와-내구성-fsync",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "devops-k8s-objects",
       "label": "K8s 오브젝트",
       "domain": "devops",
@@ -2370,6 +2391,29 @@
       "source": "os",
       "target": "os-copy",
       "type": "hierarchy"
+    },
+    {
+      "source": "os",
+      "target": "os-pagecache",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-pagecache",
+      "target": "db-tx",
+      "type": "crosslink",
+      "label": "WAL·durability"
+    },
+    {
+      "source": "os-pagecache",
+      "target": "os-copy",
+      "type": "crosslink",
+      "label": "page cache"
+    },
+    {
+      "source": "os-pagecache",
+      "target": "hw-storage",
+      "type": "crosslink",
+      "label": "디스크 캐시·순차쓰기"
     },
     {
       "source": "os-copy",

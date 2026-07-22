@@ -13,6 +13,7 @@
 - [O7. 뮤텍스 · 세마포어 · 모니터](#o7-뮤텍스--세마포어--모니터) — 스핀락 vs 뮤텍스, 모니터, 우선순위 역전
 - [O8. 페이징과 페이지 교체](#o8-페이징과-페이지-교체) — 다단계 페이지 테이블, TLB, 워킹셋·Thrashing
 - [O9. Copy-on-Write와 Zero-copy](#o9-copy-on-write와-zero-copy--불필요한-복사-피하기) — CoW·fork, zero-copy(sendfile/mmap), DMA (↔ Redis RDB·Kafka)
+- [O10. Page Cache와 내구성 (fsync)](#o10-page-cache와-내구성-fsync) — dirty page·write-back, fsync/fdatasync, WAL·그룹 커밋 (↔ DB durability)
 
 ---
 
@@ -834,6 +835,123 @@ Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB
 
 ---
 
+# O10. Page Cache와 내구성 (fsync)
+
+**학습 목표**: *"write()가 성공하면 데이터가 디스크에 안전하게 저장된 건가요?"* / *"write() 했는데 정전으로 데이터가 날아갔습니다. 왜죠?"* / *"DB의 D(durability)는 실제로 어떻게 보장되나요?"* / *"fsync가 왜 그렇게 비싸고, DB는 커밋마다 fsync를 어떻게 감당하나요?"* 에 다이어그램을 그리며 5분 답할 수 있다.
+> 관통하는 한 문장: **`write()`의 성공은 "커널 page cache에 복사됨"일 뿐, "디스크에 도달함"이 아니다.** 성능(page cache로 버퍼링)과 내구성(fsync로 강제 반영) 사이의 트레이드오프가 이 노드의 전부다. `os-copy`가 "읽기·전송의 복사 회피"였다면, 여기는 "쓰기가 언제 진짜 안전해지나".
+
+## 1. 비유 — 화이트보드 초안과 서류 캐비닛
+직원이 메모를 **화이트보드(page cache)** 에 빠르게 적는다 — 즉시 끝난 것처럼 보인다. 하지만 이건 아직 **휘발성**이다(정전되면 지워짐). 진짜 보관은 나중에 **서류 캐비닛(디스크)** 으로 옮겨 적을 때 완성된다. `write()` = 화이트보드에 적기(빠름, 아직 안전하지 않음). `fsync()` = "지금 당장 캐비닛에 옮겨 적고, 다 됐는지 확인될 때까지 기다려" = 내구성 확정.
+
+## 2. Page Cache — write()는 왜 즉시 리턴하나 ⭐
+> **Page Cache** = OS가 **남는 물리 메모리를 파일 데이터 캐시로** 쓰는 것. 읽기는 최근 읽은 파일 블록을 캐싱해 디스크 재접근을 피하고(read cache), 쓰기는 일단 메모리에 받아두고 나중에 디스크로 내린다(write buffering).
+
+- `write(fd, buf, n)` 호출 시 커널은 데이터를 page cache의 페이지에 복사하고 **바로 리턴**한다. 이때 그 페이지는 "메모리에는 최신, 디스크에는 아직 안 반영"된 **dirty page(더티 페이지)** 상태.
+- 그래서 `write()`가 성공해도 **디스크에는 아직 없을 수 있다** — 이게 성능의 핵심(디스크 I/O를 매 write마다 기다리지 않음)이자 내구성의 함정.
+- 읽기도 마찬가지: 한 번 읽은 파일은 page cache에 남아 다음 읽기가 메모리 속도로 처리됨. 리눅스가 "free 메모리가 항상 거의 0"인 이유 — 남는 메모리를 죄다 page cache로 쓰다가 필요하면 반환("메모리가 비어 있으면 낭비").
+
+## 3. Dirty Page가 디스크로 내려가는 시점 — Write-back
+dirty page는 다음 계기에 커널의 flusher 스레드가 디스크로 내린다(write-back):
+
+```
+write() ──▶ [page cache] dirty page  (메모리에만 최신, 리턴됨)
+                  │
+      다음 중 하나로 flush(write-back):
+      ① 주기적: dirty가 된 지 일정 시간 경과(dirty_expire)
+      ② 압박: dirty 페이지 비율이 임계치 초과(dirty_ratio)
+      ③ 명시적: fsync/fdatasync/sync 호출
+      ④ 메모리 회수 필요 시
+                  │
+                  ▼
+             [디스크]  ← 이제서야 실제 반영
+```
+
+- **Write-back vs Write-through**: write-back = 일단 캐시만 갱신 후 나중에 디스크(기본값, 빠름·위험). write-through = write마다 디스크까지 즉시 반영(느림·안전). 범용 파일 시스템은 write-back.
+- **데이터 유실 창(window)**: `write()` 성공 후 flush 전에 **정전·커널 패닉**이 나면, 애플리케이션은 "저장됐다"고 믿는데 디스크엔 없어 **데이터가 사라진다**. 이 창을 없애려면 fsync가 필요.
+
+<details class="deep">
+<summary>심화: write-back 튜닝 노브 (dirty_ratio · dirty_background_ratio · dirty_expire)</summary>
+
+리눅스는 dirty page 양을 커널 파라미터로 조절한다(`/proc/sys/vm/`):
+
+| 파라미터 | 의미 |
+|----------|------|
+| `dirty_background_ratio` | dirty가 이 비율(전체 메모리 대비 %) 넘으면 **백그라운드 flusher**가 조용히 내리기 시작 |
+| `dirty_ratio` | dirty가 이 비율 넘으면 **write하는 프로세스 자신이 블록**되어 직접 flush에 동원됨(throttling) |
+| `dirty_expire_centisecs` | dirty page가 이 시간(1/100초) 넘게 묵으면 flush 대상 |
+| `dirty_writeback_centisecs` | flusher 스레드가 깨어나는 주기 |
+
+- dirty_ratio를 크게 두면 쓰기 버스트를 잘 흡수하지만 유실 창이 커지고, flush가 몰릴 때 **I/O 스톨**(대량 dirty가 한꺼번에 디스크로 쏟아져 지연 스파이크)이 생긴다. DB·저지연 서비스는 이 값을 낮춰 flush를 자주·조금씩 하도록 조정하기도 한다.
+- 대량 배치 쓰기 후 응답 지연이 튀는 현상의 흔한 원인이 이 "dirty page가 임계치에 닿아 프로세스가 강제로 flush에 끌려가는" throttling.
+
+</details>
+
+## 4. fsync — 내구성을 강제하는 명령 ⭐
+> **`fsync(fd)`** = 해당 파일의 **dirty page + 메타데이터**를 디스크에 **실제로 반영될 때까지 블록**하고 리턴하는 시스템 콜. 이게 리턴돼야 "정전이 나도 데이터가 남는다"가 보장된다.
+
+| 호출 | 무엇을 보장하나 |
+|------|----------------|
+| `write()` | page cache에 복사만. **내구성 보장 없음** |
+| `fsync(fd)` | 파일 데이터 + 메타데이터(크기·수정시각 등)까지 디스크 반영 |
+| `fdatasync(fd)` | 데이터 + **꼭 필요한 메타데이터만**(파일 크기 등). 불필요한 메타(atime 등) 생략 → fsync보다 약간 빠름 |
+| `O_SYNC`/`O_DSYNC` (open 플래그) | 매 write가 자동으로 fsync/fdatasync처럼 동작 |
+| `O_DIRECT` | page cache를 **우회**해 애플리케이션 버퍼↔디스크 직접(DB가 자체 캐시를 가질 때. 정렬 제약 있음) |
+
+<details class="deep">
+<summary>심화: fsync가 디스크 캐시까지 뚫어야 하는 이유 (write barrier · FUA)</summary>
+
+- fsync가 dirty page를 디스크 컨트롤러로 보냈다고 끝이 아니다. **디스크(HDD/SSD) 자체에도 휘발성 쓰기 캐시(DRAM)** 가 있어, 컨트롤러가 "받았다"고 응답해도 실제 플래터/NAND에는 아직 안 앉았을 수 있다. 정전 시 이 디스크 캐시 내용도 날아간다.
+- 그래서 진짜 내구성을 위해 fsync는 디스크에 **캐시 flush 명령(FLUSH CACHE)** 또는 **FUA(Force Unit Access, 이 쓰기는 캐시 우회해 매체에 직접)** 를 내려 매체까지 도달을 강제해야 한다. 파일 시스템의 **write barrier**가 이 순서(로그 → flush → 커밋 레코드)를 보장한다.
+- 함정: 일부 소비자용 디스크나 잘못된 설정은 FLUSH를 무시하거나 거짓 보고(lying disk)해, fsync가 성공해도 실제로는 안 앉는 경우가 있다 — DB가 특정 스토리지에서 내구성 문제를 겪는 저수준 원인.
+
+</details>
+
+<details class="deep">
+<summary>심화: fsyncgate (2018) — fsync 실패를 애플리케이션이 놓치는 문제</summary>
+
+- 2018년 PostgreSQL 커뮤니티가 밝힌 문제: **fsync가 실패(EIO 등)했을 때 리눅스가 해당 dirty page의 "dirty" 표시를 지워버려**, 다음 fsync 재시도는 "flush할 dirty가 없다"며 **성공(0)** 을 반환한다. 애플리케이션은 데이터가 안전하다고 오해하지만 실제로는 유실.
+- 근본 이슈: fsync 에러 처리의 의미가 OS·파일시스템·커널 버전마다 달랐다. 이후 PostgreSQL은 fsync 실패 시 **패닉(크래시) 후 WAL로 복구**하는 쪽으로 바꿨다(에러를 삼키느니 재시작이 안전).
+- 교훈: "fsync를 불렀다"가 아니라 "fsync가 성공했고, 실패 시 어떻게 대응하는가"까지가 내구성 설계. 대규모 DB·스토리지 엔지니어링에서 실제로 중요한 디테일.
+
+</details>
+
+## 5. DB 내구성과의 직결 — WAL · 그룹 커밋 ⭐ (`db-tx` 크로스링크)
+ACID의 **D(Durability)** 는 결국 "커밋된 트랜잭션은 fsync로 디스크에 도달했다"로 구현된다.
+
+- **WAL(Write-Ahead Log)**: 데이터 파일을 직접 고치기 전에, 변경 내역을 **로그에 먼저 append하고 그 로그를 fsync**한다. 로그만 안전하면 크래시 후 재생(replay)으로 복구 가능 → 무거운 데이터 파일 fsync를 매번 안 해도 됨. 로그는 **순차 쓰기**라 랜덤 쓰기보다 빠름(→ `hw-storage`의 순차 vs 랜덤).
+- **커밋마다 fsync는 비싸다**: fsync는 디스크 왕복이라 수 ms. 초당 수천 커밋이면 병목. 그래서 **그룹 커밋(group commit)** — 짧은 순간의 여러 트랜잭션 커밋을 모아 **fsync 한 번**으로 처리해 throughput을 올린다.
+- **튜닝 노브(내구성 vs 성능)**:
+  - MySQL InnoDB `innodb_flush_log_at_trx_commit`: `1`(커밋마다 fsync, 완전 내구성·기본) / `2`(커밋 시 OS 캐시엔 쓰되 fsync는 1초마다 — OS 크래시 시 1초 유실) / `0`(1초마다, 가장 빠르고 위험).
+  - PostgreSQL `synchronous_commit=off`: 커밋 응답을 fsync 전에 돌려줌(지연↓, 크래시 시 최근 커밋 일부 유실 가능하나 **일관성은 유지**).
+- Redis도 같은 축: AOF의 `appendfsync always`(매 write fsync, 안전·느림) / `everysec`(1초마다, 기본) / `no`(OS에 맡김). → `db-redis`의 영속성과 동일한 트레이드오프.
+
+## 6. 핵심 포인트 (자주 하는 실수)
+- 🔴 "`write()`가 성공하면 디스크에 저장된 것" ❌ — page cache에 복사됐을 뿐. dirty page 상태라 flush 전 정전 시 유실. 내구성은 **fsync**가 리턴돼야 보장.
+- 🔴 "fsync는 파일 데이터만 내린다" ❌ — 데이터 + 메타데이터. `fdatasync`가 불필요 메타를 생략한 경량 버전.
+- 🔴 "fsync를 부르면 무조건 안전" ❌ — 디스크 자체 휘발성 캐시가 있어 FLUSH/FUA로 매체까지 강제해야 하고, lying disk·fsyncgate 같은 함정도 존재.
+- 🟡 page cache 때문에 리눅스 free 메모리는 거의 0으로 보인다 — 이건 정상(캐시는 필요 시 반환). "메모리 부족"으로 오판 말 것.
+- 🟡 DB durability = WAL(순차 로그 append + fsync) + 그룹 커밋. "커밋마다 개별 fsync"라고 답하면 그룹 커밋을 모르는 것.
+- 🟡 `innodb_flush_log_at_trx_commit=2/0`, `synchronous_commit=off`, AOF `everysec`은 전부 "내구성 조금 양보하고 throughput 얻기"라는 같은 결의 선택.
+
+## 7. 예상 면접 질문 + 답변 골격
+
+**Q1. "`write()`가 성공하면 데이터가 디스크에 안전하게 저장된 건가요?"**
+> 아닙니다. `write()`는 데이터를 커널 page cache에 복사하고 바로 리턴할 뿐이고, 그 페이지는 메모리에만 최신인 dirty page 상태입니다. 실제 디스크 반영은 커널 flusher가 나중에 write-back할 때 일어나고요. 그래서 write() 성공 후 flush 전에 정전이 나면 데이터가 유실됩니다. 내구성을 확정하려면 `fsync`를 불러 dirty page가 디스크에 실제 반영될 때까지 기다려야 합니다.
+
+**꼬리 Q1-1. "그럼 fsync만 부르면 100% 안전한가요?"**
+> 원칙적으로는 그게 목표지만 함정이 있습니다. 디스크 컨트롤러에도 휘발성 캐시가 있어, fsync는 FLUSH CACHE나 FUA 명령으로 매체까지 도달을 강제해야 하고 파일시스템 write barrier가 순서를 보장해야 합니다. 또 과거 리눅스는 fsync 실패 시 dirty 표시를 지워 재시도가 거짓 성공하는 fsyncgate 문제가 있었고, PostgreSQL은 이후 fsync 실패 시 패닉 후 WAL 복구로 대응하도록 바꿨습니다. 즉 "fsync 호출"이 아니라 "성공 확인 + 실패 대응"까지가 내구성입니다.
+
+**Q2. "DB의 Durability는 실제로 어떻게 보장되나요?"**
+> WAL입니다. 데이터 파일을 직접 고치기 전에 변경 내역을 로그에 먼저 append하고 그 로그를 fsync합니다. 로그만 디스크에 안전하면 크래시 후 재생으로 복구할 수 있어, 무거운 데이터 파일을 매번 fsync하지 않아도 됩니다. 로그는 순차 쓰기라 랜덤보다 빠른 것도 이점이고요. 커밋마다 fsync가 비싸므로 여러 커밋을 모아 한 번에 fsync하는 그룹 커밋으로 처리량을 올립니다.
+
+**꼬리 Q2-1. "커밋마다 fsync가 부담되면 어떤 선택지가 있나요?"**
+> 내구성을 조금 양보해 처리량을 얻는 노브들이 있습니다. MySQL InnoDB는 `innodb_flush_log_at_trx_commit`을 2나 0으로 두면 커밋마다가 아니라 1초 주기로 fsync해 OS/전원 크래시 시 최대 1초를 유실할 수 있습니다. PostgreSQL은 `synchronous_commit=off`로 fsync 완료 전에 커밋 응답을 돌려주되 일관성은 유지합니다. Redis AOF의 `everysec`도 같은 결입니다. 금융처럼 유실이 허용 안 되면 완전 fsync(값 1, always), 로그·분석성이면 완화하는 식으로 요구사항에 맞춰 고릅니다.
+
+**Q3. "리눅스에서 free 메모리가 거의 0인데 괜찮은 건가요?"**
+> 정상입니다. 리눅스는 남는 물리 메모리를 page cache로 활용해 파일 읽기/쓰기를 가속하고, 애플리케이션이 메모리를 요구하면 즉시 캐시를 반환합니다. `free` 명령의 available 항목이 실제 가용량이고, used에 캐시가 포함돼 보일 뿐입니다. 캐시를 비워둔다면 오히려 메모리를 놀리는 것이라, "free가 낮다=메모리 부족"으로 단정하면 안 됩니다.
+
+---
+
 # 핵심 질문 (Quiz)
 
 > 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
@@ -1021,5 +1139,43 @@ Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB
 - 없으면(PIO) CPU가 바이트를 하나씩 옮겨 I/O 내내 묶임.
 - DMA 덕에 I/O 대기 중 CPU가 다른 스레드를 돌릴 수 있음 → 블로킹 I/O 상황의 동시성(O5)·스레드 스케줄링(O1)의 하드웨어적 토대.
 - 완료 인터럽트는 top-half(급한 최소 처리)/bottom-half(나중 무거운 처리)로 나눠 인터럽트를 오래 막지 않음.
+
+</details>
+
+<details>
+<summary>Q19. write()가 성공하면 데이터가 디스크에 저장된 것인가?</summary>
+
+- ❌ 아님. `write()`는 데이터를 커널 **page cache에 복사하고 바로 리턴** → 그 페이지는 메모리에만 최신인 **dirty page** 상태.
+- 실제 디스크 반영은 커널 flusher의 **write-back**(주기·dirty 임계치·명시적 fsync·메모리 회수 시)에 일어남.
+- write() 성공 후 flush 전 **정전·패닉 시 유실** → 내구성은 `fsync`가 리턴돼야 보장.
+- fsync도 디스크 자체 휘발성 캐시가 있어 FLUSH/FUA로 매체까지 강제해야 진짜 안전(+ fsyncgate 같은 함정).
+
+</details>
+
+<details>
+<summary>Q20. fsync / fdatasync / O_DIRECT의 차이는?</summary>
+
+- `fsync(fd)`: 파일의 dirty page **데이터 + 메타데이터**를 디스크 반영될 때까지 블록.
+- `fdatasync(fd)`: 데이터 + **꼭 필요한 메타데이터만**(파일 크기 등), atime 같은 불필요 메타 생략 → fsync보다 약간 빠름.
+- `O_SYNC`/`O_DSYNC`: open 플래그로 매 write를 자동 fsync/fdatasync처럼.
+- `O_DIRECT`: **page cache 우회**, 앱 버퍼↔디스크 직접(DB가 자체 캐시를 가질 때. 정렬 제약).
+
+</details>
+
+<details>
+<summary>Q21. DB의 Durability(D)는 어떻게 보장되며, 커밋마다 fsync 부담은 어떻게 줄이는가?</summary>
+
+- **WAL(Write-Ahead Log)**: 데이터 파일 수정 전 변경 내역을 로그에 먼저 append하고 **그 로그를 fsync**. 로그만 안전하면 크래시 후 replay로 복구 → 무거운 데이터 파일 fsync 회피. 로그는 **순차 쓰기**라 빠름.
+- **그룹 커밋(group commit)**: 짧은 순간의 여러 트랜잭션 커밋을 모아 **fsync 한 번**으로 → throughput↑.
+- **내구성↔성능 노브**: MySQL `innodb_flush_log_at_trx_commit`(1=커밋마다 fsync / 2·0=1초 주기), PostgreSQL `synchronous_commit=off`, Redis AOF `everysec` — 모두 "내구성 조금 양보하고 처리량 얻기".
+
+</details>
+
+<details>
+<summary>Q22. 리눅스에서 free 메모리가 거의 0인데 괜찮은가?</summary>
+
+- 정상. 리눅스는 남는 물리 메모리를 **page cache**로 활용(파일 읽기/쓰기 가속)하다가 앱이 요구하면 즉시 반환.
+- `free`의 **available**이 실제 가용량. used에 캐시가 포함돼 보일 뿐.
+- 캐시를 비워두면 오히려 메모리를 놀리는 것 → "free 낮다 = 메모리 부족"은 오판.
 
 </details>
