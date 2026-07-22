@@ -248,6 +248,44 @@
       }
     },
     {
+      "id": "java-hashmap",
+      "label": "HashMap",
+      "domain": "java",
+      "level": 2,
+      "icon": "LuHash",
+      "summary": "해시 기반 O(1) 맵 — 내부 동작·충돌·treeify",
+      "keywords": [
+        "HashMap",
+        "해시",
+        "treeify"
+      ],
+      "status": "learning",
+      "noteRef": "notes/01-java-jvm/hashmap-internals.md#hashmap",
+      "position": {
+        "x": -320,
+        "y": 340
+      }
+    },
+    {
+      "id": "java-treemap",
+      "label": "TreeMap · RB트리",
+      "domain": "java",
+      "level": 2,
+      "icon": "LuListTree",
+      "summary": "정렬 맵 — Red-Black Tree 기반 O(log N)",
+      "keywords": [
+        "TreeMap",
+        "RB트리",
+        "정렬맵"
+      ],
+      "status": "learning",
+      "noteRef": "notes/01-java-jvm/hashmap-internals.md#treemap--red-black-tree",
+      "position": {
+        "x": -200,
+        "y": 340
+      }
+    },
+    {
       "id": "concurrency",
       "label": "Concurrency (JMM)",
       "domain": "java",
@@ -2187,6 +2225,28 @@
       "source": "react-useeffect",
       "target": "js-closure",
       "type": "crosslink"
+    },
+    {
+      "source": "collections",
+      "target": "java-hashmap",
+      "type": "hierarchy"
+    },
+    {
+      "source": "collections",
+      "target": "java-treemap",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-hash",
+      "target": "java-hashmap",
+      "type": "crosslink",
+      "label": "HashMap 구현"
+    },
+    {
+      "source": "dsa-bst",
+      "target": "java-treemap",
+      "type": "crosslink",
+      "label": "RB트리"
     }
   ]
 }

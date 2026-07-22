@@ -23,6 +23,8 @@ const BY_ID: Record<string, IconType> = {
   'jvm-classloader': LuPackage,
   'jvm-memory': LuBrain,
   collections: LuLibrary,
+  'java-hashmap': LuHash,
+  'java-treemap': LuListTree,
   concurrency: LuShuffle,
   'generics-stream': LuWaves,
   javascript: SiJavascript,
