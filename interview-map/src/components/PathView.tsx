@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import type { IconType } from 'react-icons'
-import { LuArrowRight, LuCheck, LuCircleCheck, LuTarget, LuZap, LuPuzzle } from 'react-icons/lu'
+import { LuArrowRight, LuCheck, LuCircleCheck, LuTarget, LuZap, LuPuzzle, LuShield, LuNetwork } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { CURATED_TRACKS } from '../graph/tracks'
 import { buildDomainTracks, trackProgress, nextStepIndex, type Track } from '../lib/tracks'
@@ -11,7 +11,7 @@ import type { GraphNode, GraphEdge } from '../graph/types'
 import './PathView.css'
 
 // Vector icons for the hand-curated courses (keyed by Track.icon).
-const CURATED_ICON: Record<string, IconType> = { target: LuTarget, zap: LuZap, puzzle: LuPuzzle }
+const CURATED_ICON: Record<string, IconType> = { target: LuTarget, zap: LuZap, puzzle: LuPuzzle, shield: LuShield, network: LuNetwork }
 
 // A course's icon: domain courses reuse the domain's node icon; curated courses
 // map their icon key to a lucide glyph. Keeps the path list emoji-free.
