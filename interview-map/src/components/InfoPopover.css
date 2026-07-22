@@ -1,0 +1,19 @@
+.infopop { position: relative; display: inline-flex; }
+.infopop-btn { display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
+  background: none; color: var(--text-dim); cursor: pointer; padding: 0; }
+.infopop-btn:hover { color: var(--text); background: var(--bg-elev); }
+.infopop-card { position: absolute; top: 28px; z-index: 50; width: min(320px, 78vw);
+  background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.32); padding: 10px 12px; }
+.infopop-card[data-align="left"] { left: 0; }
+.infopop-card[data-align="right"] { right: 0; }
+.infopop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.infopop-title { font-weight: 700; font-size: 13px; color: var(--text-strong); }
+.infopop-close { background: none; border: none; color: var(--text-dim); cursor: pointer;
+  display: inline-flex; padding: 2px; border-radius: 5px; }
+.infopop-close:hover { color: var(--text); background: var(--bg-panel); }
+.infopop-body { font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.infopop-body ul { margin: 0; padding-left: 16px; }
+.infopop-body li { margin: 4px 0; }
+.infopop-body b { color: var(--text-strong); }
