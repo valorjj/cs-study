@@ -12,6 +12,7 @@
 - [O6. 데드락 (Deadlock)](#o6-데드락-deadlock) — 진단·회복 실무, DB 데드락, JVM 스레드 덤프
 - [O7. 뮤텍스 · 세마포어 · 모니터](#o7-뮤텍스--세마포어--모니터) — 스핀락 vs 뮤텍스, 모니터, 우선순위 역전
 - [O8. 페이징과 페이지 교체](#o8-페이징과-페이지-교체) — 다단계 페이지 테이블, TLB, 워킹셋·Thrashing
+- [O9. Copy-on-Write와 Zero-copy](#o9-copy-on-write와-zero-copy--불필요한-복사-피하기) — CoW·fork, zero-copy(sendfile/mmap), DMA (↔ Redis RDB·Kafka)
 
 ---
 
@@ -701,6 +702,138 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 
 ---
 
+# O9. Copy-on-Write와 Zero-copy — 불필요한 복사 피하기
+
+**학습 목표**: *"fork()가 부모 메모리를 통째로 복사하나요?"* / *"Redis가 RDB 스냅샷 뜰 때 fork를 왜 쓰죠?"* / *"Kafka·Netty가 어떻게 그 처리량을 내나요?"* / *"read()+write()로 파일을 네트워크에 보낼 때 데이터가 메모리에서 몇 번 복사되나요?"* 에 다이어그램을 그리며 5분 답할 수 있다.
+> 관통하는 한 문장: **OS는 "정말 필요할 때까지 복사를 미루거나 아예 없앤다".** 메모리 복사를 미루는 게 CoW, I/O 복사를 없애는 게 zero-copy. 둘 다 "복사는 비싸다"(CPU 사이클 + 메모리 대역폭 + 캐시 오염)는 같은 문제의식에서 나왔고, 실무에선 Redis·Kafka·Netty의 성능 비결로 직결된다.
+
+## 1. 왜 복사가 비싼가 (공통 전제)
+데이터 한 덩이를 메모리 A→B로 옮기려면 CPU가 바이트를 읽어 쓰는 동안 ① CPU 사이클을 소모하고 ② 메모리 대역폭을 먹고 ③ 캐시를 그 데이터로 오염(다른 유용한 데이터 쫓아냄)시킨다. 큰 파일·대량 트래픽에서는 이 "복사 자체"가 병목이 된다. 그래서 OS는 두 방향으로 복사를 줄인다 — **미루기(CoW)** 와 **건너뛰기(zero-copy)**.
+
+---
+
+## 2. Copy-on-Write (CoW) — 복사를 "쓰기 직전"까지 미루기
+
+### 2-1. 비유 — 공유 문서, 고칠 때만 사본
+팀원 5명이 같은 원본 문서를 "본다". 아무도 안 고치면 사본을 만들 이유가 없다 — 다 같은 원본을 가리키면 된다. 누군가 **연필을 대는 순간**, 그 사람 몫만 사본을 떠서 거기에 쓴다. 나머지는 여전히 원본 공유. "읽기만 하면 공유, 쓰는 순간 복사(copy-on-write)".
+
+### 2-2. fork()의 진실 — 주소 공간을 통째로 복사하지 않는다 ⭐
+`fork()`로 자식 프로세스를 만들 때, 순진하게는 부모의 전체 주소 공간(수 GB 힙 포함)을 복사해야 한다. 하지만 대부분 자식은 곧바로 `exec()`로 다른 프로그램을 덮어쓰거나 일부만 읽는다 → 통째 복사는 낭비.
+
+> 실제 동작: fork 시 **페이지 테이블만 복사**하고, 부모·자식의 모든 페이지를 **read-only로 표시해 물리 프레임을 공유**한다. 어느 쪽이든 페이지에 **write를 시도하면 protection fault(page fault)** 가 발생 → 커널이 그 페이지 **하나만** 복사해 쓰는 쪽에 read-write로 넘겨준다. 안 건드린 페이지는 계속 공유.
+
+```
+fork 직후 (아무도 안 씀):
+  부모 페이지테이블 ─┐
+                    ├─▶ [물리 프레임 P]  (read-only 공유)
+  자식 페이지테이블 ─┘
+
+자식이 그 페이지에 write:
+  ① write 시도 → CPU가 read-only 위반 감지 → page fault(트랩)
+  ② 커널이 프레임 P를 새 프레임 P'로 복사
+  ③ 자식 페이지테이블만 P'(read-write)로 갱신, 부모는 P 유지
+  부모 ─▶ [P]        자식 ─▶ [P']   ← 이제 갈라짐(그 페이지만!)
+```
+
+### 2-3. 실무 직결 — Redis RDB 스냅샷 (`db-redis`와 크로스링크) ⭐
+Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB 데이터를 디스크에 스냅샷(RDB) 뜨는가? → **fork + CoW**.
+- `BGSAVE`: Redis가 `fork()`로 자식을 만든다. 자식은 fork 시점의 메모리를 그대로 "본다"(CoW 공유).
+- 자식은 그 스냅샷을 느긋하게 디스크에 쓰고, **부모(메인 프로세스)는 계속 클라이언트 요청을 처리**한다.
+- CoW 덕분에 스냅샷 시작 시 메모리를 2배로 복사하지 않는다 — 변경된 페이지만 갈라진다.
+- **함정(면접 킬러 포인트):** 스냅샷 도중 부모가 **write를 많이** 하면(write-heavy 워크로드) 그만큼 페이지가 계속 갈라져 **메모리 사용량이 급증**한다(최악엔 2배). 이게 Redis의 메모리 스파이크·`fork` 지연(큰 페이지 테이블 복사)으로 인한 latency 튐의 실제 원인. 그래서 `vm.overcommit_memory=1` 설정을 권고한다.
+
+<details class="deep">
+<summary>심화: CoW의 대가 — page fault 비용, overcommit, fork 지연</summary>
+
+- **write마다 page fault**: CoW는 공짜가 아니다. 공유 페이지에 첫 write를 할 때마다 트랩→복사→테이블 갱신 비용이 든다. 대부분 read라면 이득이 압도적이지만, 공유 직후 대량 write가 몰리면 폴트 폭풍이 난다.
+- **메모리 overcommit**: fork 순간엔 실제 메모리를 안 늘리지만, 이론상 자식이 모든 페이지를 write하면 2배가 필요하다. 리눅스는 "설마 다 쓰겠어"라며 **실제 없는 메모리도 할당 성공시키는**(overcommit) 정책이 있고, 정말 부족해지면 **OOM Killer**가 프로세스를 죽인다. Redis가 `overcommit_memory=1`을 권하는 이유 — 안 그러면 BGSAVE용 fork 자체가 메모리 부족으로 실패할 수 있다.
+- **fork 지연**: fork는 페이지 "내용"은 안 복사해도 **페이지 테이블은 복사**해야 한다. 힙이 수십 GB면 테이블도 커서 fork 자체가 수십~수백 ms 걸리고, 단일 스레드 Redis는 그동안 멈춘다(latency spike). huge page를 켜면 테이블 엔트리가 줄어 fork는 빨라지지만, CoW 단위가 커져(2MB) write 시 갈라지는 양이 늘어 오히려 메모리 낭비 → Redis는 THP(Transparent Huge Page) **비활성화**를 권고한다.
+- **다른 CoW 사례**: `fork`+`exec` 조합, 스냅샷 파일시스템(ZFS/Btrfs), 컨테이너 이미지 레이어(overlayfs의 upper/lower), 언어 런타임의 문자열/컬렉션 공유. "읽기 공유, 쓰기 분기"라는 패턴은 도처에 있다.
+
+</details>
+
+---
+
+## 3. Zero-copy — I/O 복사를 아예 건너뛰기
+
+### 3-1. 비유 — 창고에서 트럭으로 직접 상차
+파일을 읽어 네트워크로 보내는 건 "창고(디스크) 물건을 트럭(네트워크)에 싣는" 일이다. 전통 방식은 창고→**내 사무실 책상(user 버퍼)**→다시 트럭으로 두 번 나른다. 사무실에서 물건을 가공하지도 않을 거면서. Zero-copy = **창고에서 트럭으로 바로 상차**, 사무실을 건너뛴다.
+
+### 3-2. 전통 read()+write() 경로 — 복사 4번, 컨텍스트 스위치 4번 ⭐
+`read(file)` 후 `write(socket)`로 파일을 그대로 전송할 때:
+
+```
+① 디스크 ──DMA──▶ 커널 page cache        (read syscall: user→kernel 전환)
+② page cache ──CPU 복사──▶ user 버퍼      (read 리턴: kernel→user 전환)
+③ user 버퍼 ──CPU 복사──▶ 커널 socket 버퍼 (write syscall: user→kernel 전환)
+④ socket 버퍼 ──DMA──▶ NIC(네트워크 카드)  (write 리턴: kernel→user 전환)
+
+→ 데이터 복사 4회 (그중 ②③은 CPU가 직접, 순수 낭비) + 컨텍스트 스위치 4회
+  데이터를 user 공간에서 건드리지도 않는데 ②③을 위해 굳이 올렸다 내림
+```
+
+### 3-3. sendfile() — user 공간을 건너뛴다
+```
+① 디스크 ──DMA──▶ 커널 page cache
+② page cache ──▶ socket 버퍼   (커널 내부에서 처리, user 공간 안 거침)
+③ socket 버퍼 ──DMA──▶ NIC
+→ sendfile 한 번(컨텍스트 스위치 2회). CPU 복사 ②만 남음
+```
+- 더 나아가 **scatter-gather DMA**(하드웨어 지원) + `sendfile`이면 ② CPU 복사도 사라진다 → page cache에서 NIC로 **DMA가 직접** 긁어감. 이게 진짜 "CPU 복사 0회"의 zero-copy.
+- **mmap + write**: 파일을 user 주소 공간에 매핑하면 page cache를 user가 직접 가리켜 ② 복사가 사라진다(대신 write 시 socket 버퍼로의 복사는 남음). 데이터를 조금 손봐야 할 때 쓰는 절충안.
+
+### 3-4. 실무 직결 — Kafka · Netty ⭐
+- **Kafka**: 컨슈머가 메시지를 당겨갈 때, 브로커는 로그 세그먼트 파일을 **`sendfile`로 컨슈머 소켓에 직접** 흘려보낸다 — 메시지를 브로커의 user 공간(JVM 힙)으로 **올리지 않는다**. 디스크 로그의 순차 저장 + zero-copy 전송이 Kafka 처리량의 핵심. (`FileChannel.transferTo()`가 내부적으로 `sendfile` 호출.)
+- **Netty**: `FileRegion` / `DefaultFileRegion`이 `transferTo` 기반 zero-copy 파일 전송. 또 Netty의 `CompositeByteBuf`는 여러 버퍼를 **복사 없이 논리적으로 합쳐** 보는 "또 다른 결의 zero-copy"(메모리 복사 회피).
+
+<details class="deep">
+<summary>심화: zero-copy가 깨지는 경우, splice·io_uring·kTLS</summary>
+
+- **zero-copy가 불가능한 경우**: 데이터를 **CPU가 만져야** 하면(압축, 암호화, 포맷 변환) 반드시 user 공간(또는 CPU 레지스터)으로 올려야 하므로 zero-copy가 깨진다. 대표적으로 **TLS(HTTPS)** — 암호화 때문에 CPU가 바이트를 건드려야 한다. 그래서 평문 파일 전송은 sendfile이 먹지만 HTTPS 전송은 원칙적으로 안 된다 → 커널이 암호화를 대신 해주는 **kTLS(kernel TLS)** 로 zero-copy를 부분 복원한다.
+- **splice()**: 두 파일 디스크립터 사이를 커널 파이프 버퍼를 통해 잇는 더 일반적인 zero-copy(파일↔소켓만이 아니라 임의 fd 쌍).
+- **io_uring**: 리눅스의 최신 비동기 I/O 인터페이스. 제출·완료 큐를 user/kernel이 공유 메모리로 두어 **syscall 횟수 자체를 줄이고**(배치), 등록된 버퍼로 복사를 줄인다. epoll의 뒤를 잇는 고성능 I/O의 현재. (→ O5 I/O 모델의 "비동기(AIO)"가 실전화된 형태.)
+- **정리**: zero-copy는 "데이터를 CPU가 손대지 않고 통과만 시킬 때" 가장 강력하다. 프록시·정적 파일 서버·메시지 브로커처럼 "받아서 그대로 전달"하는 워크로드의 최적화.
+
+</details>
+
+---
+
+## 4. DMA — zero-copy 다이어그램의 "DMA" 화살표
+위 다이어그램의 `──DMA──▶`가 무엇인지 짚고 넘어가자.
+> **DMA(Direct Memory Access)** = CPU를 거치지 않고 **장치(디스크·NIC)와 메모리가 직접** 데이터를 주고받게 해주는 하드웨어(DMA 컨트롤러). CPU는 "이 주소에서 저 장치로 N바이트 옮겨라"라고 **지시만** 하고 다른 일을 한다. 전송이 끝나면 장치가 **인터럽트**로 CPU에 완료를 알린다.
+- DMA가 없다면 CPU가 디스크에서 바이트를 하나씩 읽어 메모리에 넣어야 한다(PIO, programmed I/O) → CPU가 I/O에 묶여버림. DMA 덕분에 I/O 대기 중 CPU가 다른 스레드를 돌릴 수 있고, 이게 O5의 "블로킹 I/O 중 다른 스레드 실행"이 가능한 하드웨어적 토대.
+- **인터럽트 처리**: 장치가 완료 인터럽트를 보내면 커널이 하던 일을 멈추고 인터럽트 핸들러를 실행한다. 핸들러는 보통 **top-half**(인터럽트 즉시 처리하는 최소한의 급한 일 — 예: "데이터 도착 표시")와 **bottom-half**(나중에 여유 있을 때 처리하는 무거운 일 — 예: 실제 데이터 가공, softirq/tasklet/workqueue)로 나눠, 인터럽트를 오래 막지 않도록 한다.
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 "`fork()`는 부모 메모리를 통째로 복사한다" ❌ — 페이지 테이블만 복사하고 프레임은 read-only로 **공유**, write하는 페이지만 그때 복사(CoW).
+- 🔴 "CoW는 항상 이득" ❌ — 공유 후 **write가 많으면** 페이지가 계속 갈라져 메모리·폴트 비용이 급증(Redis write-heavy 중 BGSAVE가 대표 사례).
+- 🔴 "zero-copy면 복사가 완전히 0" ❌ — `sendfile`도 scatter-gather DMA가 없으면 CPU 복사 1회가 남는다. "0"은 하드웨어 지원 시. mmap은 user 복사만 없앤다.
+- 🔴 "zero-copy는 어디에나 쓸 수 있다" ❌ — 데이터를 **CPU가 만지면(암호화·압축·변환) 불가능**. HTTPS 전송이 대표적 제약(→ kTLS로 완화).
+- 🟡 전통 read+write는 데이터를 user 공간에서 **건드리지도 않으면서** 커널↔user를 왕복(복사 4회·스위치 4회)한다는 게 낭비의 핵심 — "그대로 전달"이면 sendfile.
+- 🟡 DMA·인터럽트가 있어 I/O 대기 중 CPU가 다른 일을 할 수 있다 — 블로킹 I/O 동시성(O5)과 스레드 스케줄링(O1)의 하드웨어 전제.
+
+## 6. 예상 면접 질문 + 답변 골격
+
+**Q1. "`fork()`를 하면 부모의 메모리가 다 복사되나요?"**
+> 아닙니다. 페이지 테이블만 복사하고, 부모·자식이 물리 프레임을 read-only로 공유합니다. 어느 쪽이든 페이지에 write하는 순간 protection fault가 나서 그 페이지만 복사해 넘겨줍니다(Copy-on-Write). 대부분의 자식은 곧 exec으로 덮어쓰거나 일부만 읽으므로, 통째 복사를 피해 fork를 싸게 만드는 최적화입니다.
+
+**꼬리 Q1-1. "Redis가 RDB 스냅샷 뜰 때 fork를 쓰는 이유와, 그 부작용을 설명해보세요."**
+> Redis는 단일 스레드라 스냅샷을 직접 뜨면 그동안 요청을 못 받습니다. 그래서 `fork`로 자식을 만들어 자식이 fork 시점 메모리를 CoW로 공유한 채 디스크에 쓰고, 부모는 계속 요청을 처리합니다. 부작용은 스냅샷 도중 부모가 write를 많이 하면 그 페이지들이 계속 갈라져 메모리가 최악 2배까지 치솟고, 힙이 크면 fork의 페이지 테이블 복사 자체가 수십~수백 ms 멈춤(latency spike)을 유발한다는 점입니다. 그래서 `vm.overcommit_memory=1`과 THP 비활성화를 권고합니다.
+
+**Q2. "파일을 읽어 네트워크로 보낼 때 데이터가 메모리에서 몇 번 복사되나요? zero-copy는 이걸 어떻게 줄이나요?"**
+> 전통 read+write는 4번입니다. 디스크→page cache(DMA), page cache→user 버퍼(CPU), user 버퍼→socket 버퍼(CPU), socket 버퍼→NIC(DMA). 이 중 가운데 두 번의 CPU 복사는 user 공간에서 데이터를 건드리지도 않는데 발생하는 순수 낭비입니다. `sendfile`은 user 공간을 건너뛰어 page cache에서 socket 버퍼로 커널 내부에서 바로 넘기고, scatter-gather DMA가 있으면 그 CPU 복사마저 없애 page cache에서 NIC로 DMA가 직접 긁어갑니다. 컨텍스트 스위치도 4회에서 2회로 줍니다.
+
+**꼬리 Q2-1. "그럼 Kafka가 빠른 이유를 zero-copy로 설명해보세요."**
+> Kafka 브로커는 컨슈머에게 메시지를 보낼 때 로그 세그먼트 파일을 `sendfile`(자바의 `FileChannel.transferTo`)로 컨슈머 소켓에 직접 흘려보냅니다. 메시지를 브로커의 JVM 힙(user 공간)으로 올렸다 내리지 않아 CPU 복사와 GC 부담을 피합니다. 여기에 로그를 디스크에 순차 저장(순차 I/O가 랜덤보다 빠름)하는 설계가 더해져 높은 처리량이 나옵니다.
+
+**꼬리 Q2-2. "zero-copy를 못 쓰는 경우도 있나요?"**
+> 데이터를 CPU가 만져야 하면 불가능합니다. 압축·암호화·포맷 변환이 필요하면 데이터를 user 공간(또는 CPU)으로 올려야 하니까요. 대표적으로 TLS(HTTPS) 전송은 암호화 때문에 평문 sendfile이 안 됩니다. 이를 완화하려고 커널이 암호화를 대신하는 kTLS가 나왔습니다. 즉 zero-copy는 "받아서 그대로 전달"하는 프록시·정적 파일·메시지 브로커 워크로드에서 가장 강력합니다.
+
+**Q3. "DMA가 뭔가요? 없으면 어떻게 되나요?"**
+> CPU를 거치지 않고 디스크·NIC 같은 장치와 메모리가 직접 데이터를 주고받게 하는 하드웨어입니다. CPU는 전송을 지시만 하고 다른 일을 하다가 완료 인터럽트를 받습니다. DMA가 없으면 CPU가 바이트를 하나씩 옮겨야 해서(PIO) I/O 내내 CPU가 묶입니다. DMA 덕분에 I/O 대기 중 CPU가 다른 스레드를 돌릴 수 있고, 이게 블로킹 I/O 상황에서도 동시성이 가능한 하드웨어적 토대입니다.
+
+---
+
 # 핵심 질문 (Quiz)
 
 > 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
@@ -847,5 +980,46 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 - **증상**: CPU 사용률은 낮은데 디스크 I/O(스왑)가 극도로 높음. `vmstat`의 `si`/`so`가 지속적으로 큼.
 - **해결**: ① 다중 프로그래밍 정도(동시 프로세스 수)를 낮춤 ② 물리 메모리 증설 ③ 워킹셋 모델·PFF로 프로세스별 최소 프레임 보장.
 - JVM이라면 힙을 물리 메모리에 맞게 재설정하고 GC 폭주와 스와핑을 구분.
+
+</details>
+
+<details>
+<summary>Q15. fork()는 부모 메모리를 통째로 복사하는가? (Copy-on-Write)</summary>
+
+- ❌ 아님. **페이지 테이블만 복사**하고 물리 프레임은 부모·자식이 **read-only로 공유**.
+- 어느 쪽이든 페이지에 **write하는 순간 protection fault** → 커널이 **그 페이지만** 복사해 쓰는 쪽에 넘김(Copy-on-Write).
+- 대부분 자식은 곧 `exec`으로 덮어쓰거나 일부만 읽으므로 통째 복사가 낭비 → fork를 싸게 만드는 최적화.
+- 단, 공유 후 **write가 많으면** 페이지가 계속 갈라져 메모리·폴트 비용 급증(항상 이득 아님).
+
+</details>
+
+<details>
+<summary>Q16. Redis가 RDB 스냅샷에 fork를 쓰는 이유와 부작용은?</summary>
+
+- 단일 스레드라 스냅샷을 직접 뜨면 그동안 요청 처리 불가 → `fork`한 자식이 CoW로 메모리를 공유한 채 디스크에 쓰고, **부모는 계속 요청 처리**.
+- CoW 덕에 시작 시 메모리 2배 복사 안 함(변경된 페이지만 갈라짐).
+- **부작용**: 스냅샷 도중 write가 많으면 페이지가 계속 갈라져 메모리 최악 2배 급증 + 힙이 크면 fork의 페이지 테이블 복사로 수십~수백 ms 멈춤(latency spike).
+- 권고: `vm.overcommit_memory=1`(fork 실패 방지), THP(Transparent Huge Page) 비활성화.
+
+</details>
+
+<details>
+<summary>Q17. read()+write()로 파일을 네트워크에 보내면 복사가 몇 번? zero-copy는?</summary>
+
+- 전통 경로 **복사 4회 + 컨텍스트 스위치 4회**: 디스크→page cache(DMA) → user 버퍼(CPU) → socket 버퍼(CPU) → NIC(DMA). 가운데 CPU 복사 2회는 user 공간에서 데이터를 건드리지도 않는 순수 낭비.
+- **sendfile**: user 공간 건너뜀 → page cache→socket 버퍼(커널 내부)→NIC. 스위치 2회. scatter-gather DMA면 CPU 복사마저 0.
+- **mmap+write**: page cache를 user에 매핑해 user 복사만 제거.
+- 실무: Kafka(`FileChannel.transferTo`=sendfile로 로그를 컨슈머 소켓 직송), Netty `FileRegion`.
+- 한계: 데이터를 CPU가 만지면(압축·암호화) 불가 → HTTPS는 kTLS로 완화.
+
+</details>
+
+<details>
+<summary>Q18. DMA가 무엇이고, 왜 I/O 동시성의 전제가 되는가?</summary>
+
+- **DMA(Direct Memory Access)**: CPU를 거치지 않고 장치(디스크·NIC)↔메모리가 직접 데이터 전송. CPU는 지시만 하고 완료는 인터럽트로 통지받음.
+- 없으면(PIO) CPU가 바이트를 하나씩 옮겨 I/O 내내 묶임.
+- DMA 덕에 I/O 대기 중 CPU가 다른 스레드를 돌릴 수 있음 → 블로킹 I/O 상황의 동시성(O5)·스레드 스케줄링(O1)의 하드웨어적 토대.
+- 완료 인터럽트는 top-half(급한 최소 처리)/bottom-half(나중 무거운 처리)로 나눠 인터럽트를 오래 막지 않음.
 
 </details>

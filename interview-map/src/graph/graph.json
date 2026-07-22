@@ -1827,6 +1827,26 @@
       }
     },
     {
+      "id": "os-copy",
+      "label": "CoW · Zero-copy",
+      "domain": "os",
+      "level": 1,
+      "icon": "LuCopy",
+      "summary": "복사 회피 — fork/CoW, sendfile, DMA",
+      "keywords": [
+        "Copy-on-Write",
+        "zero-copy",
+        "sendfile",
+        "DMA"
+      ],
+      "status": "learning",
+      "noteRef": "notes/02-os/os-core.md#o9-copy-on-write와-zero-copy--불필요한-복사-피하기",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "devops-k8s-objects",
       "label": "K8s 오브젝트",
       "domain": "devops",
@@ -2345,6 +2365,29 @@
       "source": "hw",
       "target": "hw-ram",
       "type": "hierarchy"
+    },
+    {
+      "source": "os",
+      "target": "os-copy",
+      "type": "hierarchy"
+    },
+    {
+      "source": "os-copy",
+      "target": "db-redis",
+      "type": "crosslink",
+      "label": "RDB fork·zero-copy"
+    },
+    {
+      "source": "os-copy",
+      "target": "os-io",
+      "type": "crosslink",
+      "label": "sendfile·DMA"
+    },
+    {
+      "source": "os-copy",
+      "target": "os-process",
+      "type": "crosslink",
+      "label": "fork·주소공간"
     },
     {
       "source": "hw-ram",

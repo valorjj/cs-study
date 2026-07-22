@@ -11,7 +11,7 @@ import {
   LuTrendingUp, LuList, LuHash, LuNetwork, LuArrowDownWideNarrow,
   LuComponent, LuRepeat, LuAnchor, LuToggleLeft,
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
-  LuBox, LuInfinity, LuActivity,
+  LuBox, LuInfinity, LuActivity, LuCopy,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -56,6 +56,7 @@ const BY_ID: Record<string, IconType> = {
   'os-memory': LuMemoryStick,
   'os-sync': LuLockKeyhole,
   'os-io': LuArrowDownUp,
+  'os-copy': LuCopy,
   network: LuGlobe,
   'net-osi': LuLayers,
   'net-tcp': LuArrowRightLeft,
