@@ -47,9 +47,6 @@
 .np-note p, .np-note li { color: var(--text); }
 .np-note table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; display: block; overflow-x: auto; }
 .np-note th, .np-note td { border: 1px solid var(--border); padding: 6px 10px; }
-.np-note code { background: var(--bg-elev); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
-.np-note pre { background: var(--bg-elev); padding: 12px; border-radius: 8px; overflow-x: auto; }
-.np-note pre code { background: none; padding: 0; }
 .np-dim { color: var(--text-dim); }
 
 /* Folded quiz answers (<details>) */

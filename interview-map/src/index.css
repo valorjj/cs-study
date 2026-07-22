@@ -110,3 +110,36 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Rendered-markdown code (notes, quiz, drill, review). The base `code` rule
+   above keys its colours off the OS color-scheme (--text-h/--code-bg), so a
+   dark app theme on a light OS renders near-black text on a dark block. These
+   rules re-key code colours to the ACTIVE app theme tokens so contrast holds
+   in every theme. */
+.np-note code, .drill-a code, .review-a code, .quiz-a code {
+  display: inline;
+  background: var(--bg-elev);
+  color: var(--text-strong);
+  border: 1px solid var(--border);
+  padding: 0.5px 5px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.np-note pre, .drill-a pre, .review-a pre, .quiz-a pre {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.np-note pre code, .drill-a pre code, .review-a pre code, .quiz-a pre code {
+  display: inline;
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+}

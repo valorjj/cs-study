@@ -26,7 +26,6 @@
 .quiz-a :first-child { margin-top: 0; }
 .quiz-a table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13px; display: block; overflow-x: auto; }
 .quiz-a th, .quiz-a td { border: 1px solid var(--border); padding: 5px 9px; }
-.quiz-a code { background: var(--bg-elev); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
 
 .quiz-actions { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; }
 .quiz-link, .quiz-next { display: inline-flex; align-items: center; gap: 6px; border-radius: 10px;
