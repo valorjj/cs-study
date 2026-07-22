@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useGraphStore } from './graphStore'
+import { QUIZSETTINGS_KEY, DEFAULT_QUIZ_SETTINGS } from '../lib/quizSettings'
 
 describe('recordReview', () => {
   beforeEach(() => {
@@ -33,5 +34,26 @@ describe('recordReview', () => {
   it('setSrs replaces state', () => {
     useGraphStore.getState().setSrs({ x: { ef: 2.5, interval: 6, reps: 2, lapses: 0, due: '2026-07-30' } })
     expect(Object.keys(useGraphStore.getState().srs)).toEqual(['x'])
+  })
+})
+
+describe('setQuizSettings', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useGraphStore.setState({ quizSettings: { ...DEFAULT_QUIZ_SETTINGS } })
+  })
+
+  it('merges a partial patch over current settings', () => {
+    useGraphStore.getState().setQuizSettings({ order: 'random' })
+    expect(useGraphStore.getState().quizSettings).toEqual({
+      order: 'random', newCardCap: 15, gradeButtons: 3,
+    })
+  })
+
+  it('persists to localStorage', () => {
+    useGraphStore.getState().setQuizSettings({ newCardCap: 30 })
+    expect(JSON.parse(localStorage.getItem(QUIZSETTINGS_KEY)!)).toEqual({
+      order: 'daily', newCardCap: 30, gradeButtons: 3,
+    })
   })
 })

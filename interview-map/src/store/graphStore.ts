@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
 import { review, type SrsState } from '../lib/srs'
+import { QuizSettings, DEFAULT_QUIZ_SETTINGS, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path'
 
@@ -60,6 +61,8 @@ interface GraphState {
   srs: SrsState                             // 카드별 간격반복 상태 (localStorage/클라우드)
   setSrs: (srs: SrsState) => void
   recordReview: (srsKey: string, item: { domain: string }, grade: number, today: string) => void
+  quizSettings: QuizSettings                // 퀴즈 순서·SRS 취향값 (localStorage 전용)
+  setQuizSettings: (patch: Partial<QuizSettings>) => void
   pathTrackId: string | null                // 퀴즈 약점 칩 → 경로 코스 열기 요청
   requestTrack: (trackId: string) => void
   clearPathTrack: () => void
@@ -100,6 +103,12 @@ export const useGraphStore = create<GraphState>((set) => ({
       [item.domain]: { correct: cur.correct + (grade >= 3 ? 1 : 0), seen: cur.seen + 1 },
     }
     return { srs: nextSrs, quizStats: nextStats }
+  }),
+  quizSettings: readQuizSettings(),
+  setQuizSettings: (patch) => set((s) => {
+    const next = { ...s.quizSettings, ...patch }
+    try { localStorage.setItem(QUIZSETTINGS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+    return { quizSettings: next }
   }),
   pathTrackId: null,
   requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
