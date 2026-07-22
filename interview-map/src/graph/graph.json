@@ -1260,10 +1260,13 @@
       "domain": "devops",
       "level": 1,
       "icon": "activity",
-      "summary": "로그·메트릭·트레이싱",
+      "summary": "로그·메트릭·트레이싱, OpenTelemetry, 감사로그",
       "keywords": [
         "모니터링",
-        "트레이싱"
+        "트레이싱",
+        "OpenTelemetry",
+        "분산추적",
+        "감사로그"
       ],
       "status": "learning",
       "noteRef": "notes/07-devops/devops-core.md#do4-observability",

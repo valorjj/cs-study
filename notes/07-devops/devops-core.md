@@ -714,6 +714,89 @@ Canary:  트래픽 100% → v1
 **Q4. "메트릭만으로 부족한 이유는?"**
 > ① 메트릭은 집계된 숫자라 개별 요청의 상세 컨텍스트가 소실됨 → ② 특정 유저·특정 요청만 느린 outlier는 평균에 묻혀 안 보임 → ③ 트레이싱으로 개별 요청 경로를 따라가야 원인 확인 가능.
 
+## 9. 분산 추적 심화 — Trace · Span · Context 전파 ⭐
+
+> 혼동 주의: **분산 추적 ≠ Prometheus.** Prometheus는 metrics(숫자 집계), 분산 추적은 별개 축(요청 경로). **OpenTelemetry(telemetry)** 는 이 둘 다를 실어 나르는 수집 표준이다.
+
+### 9-1. 비유 — 택배 송장
+하나의 주문(**Trace**)이 여러 물류센터를 거치고, 각 센터의 처리 기록(**Span**)이 송장번호(trace id)로 묶여 전 구간을 이어 볼 수 있다. "어느 센터에서 며칠 묵었는지"가 곧 병목 구간.
+
+### 9-2. 핵심 개념
+> **Trace** = 한 요청의 전체 여정(여러 서비스 걸침). 하나의 **trace id**로 식별.
+> **Span** = trace 안의 개별 작업 단위(한 서비스의 처리, DB 쿼리 등). `span id` + `parent span id`로 **부모-자식 트리**를 이루고, start/end 타임스탬프로 각 구간 지연을 계산.
+> **Context 전파(propagation)** = 서비스 A가 B를 호출할 때 **HTTP 헤더에 trace context를 실어** 보내고 B가 이어받아 자식 span을 만드는 것. 표준은 **W3C Trace Context**의 `traceparent` 헤더.
+
+```
+Client ──(traceparent: 00-<trace_id>-<span_id>-01)──► Service A
+                                                        │  span A (root)
+        A가 B 호출 시 traceparent에 자기 span_id를 부모로 넣어 전파
+                                                        ▼
+                                                     Service B
+                                                        │  span B (parent=A)
+                                                        ▼
+                                                     Service C  span C (parent=B)
+
+한 Trace 트리:  A[120ms]
+                 └─ B[300ms]  ← 여기가 병목
+                     └─ C[50ms]
+```
+
+### 9-3. 샘플링 — 왜, 어떻게
+모든 요청을 추적하면 오버헤드·저장비용이 폭발 → **일부만 샘플링**한다.
+| 방식 | 결정 시점 | 트레이드오프 |
+|------|-----------|-------------|
+| **Head-based** | 요청 **진입 시** 추적 여부 결정 | 단순·저비용, 하지만 나중에 느려진/에러난 요청을 놓칠 수 있음 |
+| **Tail-based** | 요청 **끝난 뒤** 결과(느림·에러) 보고 결정 | 문제 요청만 집중 수집, 하지만 모든 span을 임시 보관해야 해 비쌈 |
+
+<details class="deep">
+<summary>심화: OpenTelemetry 아키텍처 — 계측은 한 번, 백엔드는 자유</summary>
+
+- **OpenTelemetry(OTel)** = 벤더 중립 관측성 **표준**(API + SDK + Collector + **OTLP** 프로토콜). 예전엔 Jaeger·Zipkin·Prometheus마다 계측 라이브러리가 달라 lock-in이 심했는데, OTel로 **계측 코드는 한 번만** 짜고 백엔드는 자유롭게 교체한다.
+- 데이터 흐름:
+  ```
+  앱(OTel SDK로 계측) ──OTLP──► OTel Collector(수집·가공·라우팅) ──► 백엔드
+                                                                    ├ Jaeger/Tempo (trace)
+                                                                    ├ Prometheus     (metric)
+                                                                    └ Loki/ELK       (log)
+  ```
+- **자동 계측(auto-instrumentation)**: 자바는 `-javaagent`로 코드 수정 없이 Spring MVC·JDBC·HTTP 클라이언트의 span을 자동 생성. 수동 계측은 비즈니스 구간에만 추가.
+- 스프링 생태계: **Micrometer**(metrics facade, `MeterRegistry`)가 Prometheus로, **Micrometer Tracing**(구 Sleuth)이 OTel/Zipkin으로 연동. trace id를 로그 MDC에 자동으로 넣어 **로그↔트레이스 상관관계**를 잇는다.
+- 한 줄 정리: **Prometheus=metric 저장/조회, Jaeger=trace 저장/조회, OTel=그 앞단에서 셋을 표준 규격으로 계측·수집하는 파이프라인.**
+
+</details>
+
+## 10. 감사 로그 (Audit Log) — 관측성 로그와 다른 것 ⭐
+
+### 10-1. 비유 — 디버그 로그 = 블랙박스, 감사 로그 = 출입기록부
+애플리케이션 로그가 "시스템이 **무엇을 했나**"(디버깅·운영용)라면, **감사 로그는 "누가 언제 무엇을 했나"**(책임 추적·법적 증거용)다. 은행 CCTV/출입기록부처럼 나중에 "이 계좌를 누가 언제 조회했나"를 추적·증명하는 것이 목적.
+
+### 10-2. 개념 정의
+> **감사 로그(Audit Log)** = 보안·컴플라이언스 목적으로 **누가(who)·언제(when)·무엇을(what/대상)·어디서(where/IP)·결과(성공/실패)** 를 기록하는 **불변(immutable) 이력**. 대상 예: 로그인/로그아웃, 권한 변경, 민감 데이터 조회·수정·삭제, 결제·환불.
+
+### 10-3. 애플리케이션 로그 vs 감사 로그 ⭐
+| | 애플리케이션 로그 | 감사 로그 |
+|--|------------------|-----------|
+| 목적 | 디버깅·운영("왜 느렸나") | 책임 추적·컴플라이언스("누가 했나") |
+| 독자 | 개발/운영자 | 보안·감사·법무 팀 |
+| 내용 | 스택트레이스·상태·지표 | 행위자·대상·시각·IP·결과 |
+| 무결성 | 유실 일부 허용 | **변조 불가**(append-only, tamper-evident) |
+| 보존 기간 | 짧음(수일~수주) | 김(수개월~수년, 규제가 강제) |
+| 저장 | ELK/Loki(운영 로그와 함께) | **분리된 안전 저장**(권한 분리, WORM) |
+
+### 10-4. 핵심 포인트 (자주 하는 실수)
+- 🔴 "감사 로그는 그냥 로그 레벨 INFO로 남기면 된다" ❌ — 앱 로그와 **저장·권한·보존을 분리**해야 신뢰성 확보. 섞으면 운영자가 지울 수 있어 감사 증거로서 가치 훼손.
+- 🔴 "많이 남길수록 좋다" ❌ — 감사 로그에 **비밀번호·카드번호 원문**을 남기면 그 자체가 유출 리스크 → 마스킹/해시, 필요한 행위 기록만.
+- 🟡 **변조 방지**: append-only + 해시 체인/전자서명 + 접근권한 분리(로그를 쓰는 주체가 삭제·수정 못 하게).
+- 🟡 규제가 항목·보존기간을 **법적으로 강제**(개인정보보호법, PCI-DSS 결제, SOX 회계 등) — "얼마나 오래, 무엇을" 남길지는 컴플라이언스 요구가 결정.
+- 🟢 Spring 실무: `Spring Data JPA Auditing`(`@CreatedBy`/`@LastModifiedBy`/`@CreatedDate`)로 엔티티 변경 주체·시각 자동 기록, `Hibernate Envers`로 엔티티 버전 히스토리, Spring Security 인증 이벤트로 로그인 감사.
+
+### 10-5. 예상 면접 질문
+**Q. "감사 로그와 일반 애플리케이션 로그의 차이는?"**
+> 목적과 요구사항이 다릅니다. 앱 로그는 디버깅·운영이 목적이라 유실이 일부 허용되고 보존기간이 짧습니다. 감사 로그는 "누가 언제 무엇을 했나"를 책임 추적·컴플라이언스 목적으로 남기는 것이라, 변조가 불가능해야 하고(append-only·서명) 보존기간이 규제로 강제되며 접근 권한도 분리합니다. 그래서 저장소·권한을 앱 로그와 분리하고, 비밀번호 같은 민감정보는 마스킹해서 남깁니다.
+
+**꼬리 Q. "감사 로그의 변조를 어떻게 막나요?"**
+> append-only로만 쓰게 하고, 이전 레코드의 해시를 다음 레코드에 포함하는 해시 체인이나 전자서명으로 변조를 탐지 가능하게 합니다. 무엇보다 로그를 생성하는 애플리케이션 계정과 로그 저장소를 관리·삭제하는 권한을 분리해, 기록 주체가 자기 흔적을 지우지 못하게 하는 게 핵심입니다. 규제 환경에선 WORM(Write Once Read Many) 스토리지를 쓰기도 합니다.
+
 ---
 
 # DO5. K8s 오브젝트 (Pod · Deployment · Service)
@@ -970,5 +1053,35 @@ desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭)
 - 메트릭: 숫자를 시계열로 집계 → 전체 상태·추세 파악에 효율적이지만 "왜"는 설명 못 함(개별 요청 정보 소실)
 - 트레이싱: 요청 하나가 여러 서비스를 거치는 경로를 추적 → 분산 시스템에서 병목 구간을 정확히 특정
 - 모니터링 = 미리 정의한 지표·임계값 감시(known-unknowns) / 옵저버빌리티 = 예측 못 한 문제도 로그+메트릭+트레이스를 조합해 사후 탐색·추론(unknown-unknowns) — 옵저버빌리티가 더 상위·포괄적 개념
+
+</details>
+
+<details>
+<summary>Q9. 분산 추적은 Prometheus와 같은 건가? Trace·Span·context 전파를 설명하면?</summary>
+
+- ❌ 다름. **Prometheus=metrics(숫자 집계)**, **분산 추적=trace(요청 경로, 별개 축)**, **OpenTelemetry=telemetry 수집 표준**(둘 다 실어 나름).
+- **Trace**: 한 요청의 전체 여정(trace id 하나). **Span**: trace 안 개별 작업 단위(span id + parent span id로 부모-자식 트리, start/end로 구간 지연).
+- **Context 전파**: A→B 호출 시 HTTP 헤더(W3C `traceparent`)에 trace context를 실어 B가 자식 span 생성. 이게 끊기면(비동기 큐 경계 등) 추적 체인 단절.
+- **샘플링**: head-based(진입 시 결정, 단순·문제요청 놓칠 수) vs tail-based(끝난 뒤 결과 보고 결정, 문제요청 집중·비쌈).
+
+</details>
+
+<details>
+<summary>Q10. OpenTelemetry는 Prometheus·Jaeger와 무슨 관계인가?</summary>
+
+- OTel = 벤더 중립 관측성 **표준**(API+SDK+Collector+OTLP). 계측 코드는 한 번만, 백엔드는 자유 교체(lock-in 해소).
+- 흐름: 앱(OTel SDK 계측) → OTLP → **OTel Collector** → 백엔드(Jaeger=trace, Prometheus=metric, Loki=log).
+- 즉 **Prometheus/Jaeger=저장·조회 백엔드**, **OTel=그 앞단 계측·수집 파이프라인**.
+- 스프링: Micrometer(metrics)+Micrometer Tracing(구 Sleuth)이 OTel/Zipkin 연동, trace id를 로그 MDC에 넣어 로그↔트레이스 상관.
+
+</details>
+
+<details>
+<summary>Q11. 감사 로그(Audit Log)와 애플리케이션 로그의 차이는?</summary>
+
+- **앱 로그**: 디버깅·운영 목적("왜 느렸나"), 유실 일부 허용, 보존 짧음.
+- **감사 로그**: 책임추적·컴플라이언스("누가 언제 무엇을 했나"), **변조 불가**(append-only·해시체인·서명), 보존기간 규제 강제, 저장·권한 분리.
+- 민감정보(비번·카드번호) 원문 금지 → 마스킹/해시. 로그 쓰는 주체가 삭제 못 하게 권한 분리(WORM).
+- Spring: JPA Auditing(@CreatedBy 등), Hibernate Envers, Security 인증 이벤트.
 
 </details>
