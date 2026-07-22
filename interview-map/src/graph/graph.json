@@ -2065,6 +2065,87 @@
         "x": 0,
         "y": 0
       }
+    },
+    {
+      "id": "devops-k8s-arch",
+      "label": "K8s 아키텍처",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuServerCog",
+      "summary": "control plane: API server·etcd·scheduler·kubelet",
+      "keywords": [
+        "control plane",
+        "etcd",
+        "API server",
+        "kubelet"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do7-k8s-아키텍처-control-plane",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-k8s-resources",
+      "label": "리소스·스케줄링",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuSlidersHorizontal",
+      "summary": "requests/limits, QoS·OOMKilled, affinity·taint",
+      "keywords": [
+        "requests",
+        "limits",
+        "OOMKilled",
+        "QoS",
+        "taint"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do8-리소스-관리와-스케줄링",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-k8s-storage",
+      "label": "StatefulSet·볼륨",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuHardDrive",
+      "summary": "StatefulSet vs Deployment, PV/PVC/StorageClass",
+      "keywords": [
+        "StatefulSet",
+        "PV",
+        "PVC",
+        "StorageClass"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do9-statefulset과-영속-볼륨",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "devops-k8s-network",
+      "label": "K8s 네트워킹",
+      "domain": "devops",
+      "level": 2,
+      "icon": "LuNetwork",
+      "summary": "kube-proxy·CNI·CoreDNS·NetworkPolicy",
+      "keywords": [
+        "kube-proxy",
+        "CNI",
+        "CoreDNS",
+        "NetworkPolicy"
+      ],
+      "status": "learning",
+      "noteRef": "notes/07-devops/devops-core.md#do10-k8s-네트워킹-kube-proxy--cni--coredns",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
     }
   ],
   "edges": [
@@ -2801,6 +2882,62 @@
       "target": "sd-cache-strategy",
       "type": "crosslink",
       "label": "캐시 전략"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-k8s-arch",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-k8s-resources",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-k8s-storage",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s",
+      "target": "devops-k8s-network",
+      "type": "hierarchy"
+    },
+    {
+      "source": "devops-k8s-arch",
+      "target": "sd-cap",
+      "type": "crosslink",
+      "label": "etcd·Raft 합의"
+    },
+    {
+      "source": "devops-k8s-resources",
+      "target": "devops-docker",
+      "type": "crosslink",
+      "label": "cgroup 격리"
+    },
+    {
+      "source": "devops-k8s-resources",
+      "target": "devops-probe",
+      "type": "crosslink",
+      "label": "requests·HPA"
+    },
+    {
+      "source": "devops-k8s-storage",
+      "target": "devops-k8s-objects",
+      "type": "crosslink",
+      "label": "vs Deployment"
+    },
+    {
+      "source": "devops-k8s-network",
+      "target": "net-dns",
+      "type": "crosslink",
+      "label": "CoreDNS"
+    },
+    {
+      "source": "devops-k8s-network",
+      "target": "devops-k8s-objects",
+      "type": "crosslink",
+      "label": "Service 구현"
     }
   ]
 }

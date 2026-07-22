@@ -10,6 +10,10 @@
 - [DO4. Observability](#do4-observability) — 로그·메트릭·트레이싱
 - [DO5. K8s 오브젝트 (Pod · Deployment · Service)](#do5-k8s-오브젝트-pod--deployment--service) — 최소 배포 단위, 롤링업데이트, Service 타입 3종
 - [DO6. 헬스 프로브와 오토스케일링(HPA)](#do6-헬스-프로브와-오토스케일링hpa) — liveness/readiness/startup 오설정 사고, HPA 스케일링
+- [DO7. K8s 아키텍처 (Control Plane)](#do7-k8s-아키텍처-control-plane) — API server·etcd·scheduler·controller·kubelet·kube-proxy, reconciliation
+- [DO8. 리소스 관리와 스케줄링](#do8-리소스-관리와-스케줄링) — requests/limits, QoS·OOMKilled, taint/toleration·affinity
+- [DO9. StatefulSet과 영속 볼륨](#do9-statefulset과-영속-볼륨) — StatefulSet vs Deployment, PV/PVC/StorageClass
+- [DO10. K8s 네트워킹](#do10-k8s-네트워킹-kube-proxy--cni--coredns) — kube-proxy·CNI·CoreDNS·NetworkPolicy
 
 ---
 
@@ -964,6 +968,249 @@ desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭)
 
 ---
 
+# DO7. K8s 아키텍처 (Control Plane)
+
+**학습 목표**: *"쿠버네티스 아키텍처를 설명해보세요"* / *"desired state를 내부적으로 어떻게 유지하나요?"* / *"`kubectl apply`를 하면 내부에서 무슨 일이 일어나나요?"* / *"etcd는 왜 필요하고 왜 홀수 개죠?"* 에 컴포넌트 흐름을 그리며 5분 답할 수 있다.
+> DO2~DO6이 "k8s를 어떻게 쓰나"였다면, 여기는 **k8s 자체가 내부에서 어떻게 동작하나**. tight 면접의 단골.
+
+## 1. 비유 — 회사의 본사(Control Plane)와 지점(Worker Node)
+**Control Plane = 본사 경영진**: 방침을 접수하는 접수처(API Server), 모든 계약서 원본 보관소(etcd), 신규 인력을 어느 지점에 보낼지 정하는 인사팀(Scheduler), "인원 3명 유지" 같은 방침을 실제로 맞추는 관리팀(Controller Manager). **Worker Node = 지점**: 지점장(kubelet)이 본사 지시대로 직원(컨테이너)을 배치·관리하고, 지점 안내데스크(kube-proxy)가 손님을 올바른 직원에게 연결.
+
+## 2. 컴포넌트 구성 ⭐
+```
+┌──────────────── Control Plane (마스터) ────────────────┐
+│  ┌──────────────┐   모든 통신의 관문(유일한 etcd 접근자)  │
+│  │  API Server  │◄──── kubectl / 컨트롤러 / kubelet 전부 여기로
+│  └──────┬───────┘                                       │
+│         │ 읽기/쓰기                                       │
+│  ┌──────▼───────┐   클러스터의 유일한 상태 저장소          │
+│  │     etcd     │  (분산 KV, Raft 합의, desired+current) │
+│  └──────────────┘                                       │
+│  ┌──────────────┐   Pod를 어느 노드에 놓을지 결정          │
+│  │  Scheduler   │                                        │
+│  └──────────────┘                                       │
+│  ┌──────────────────┐  ReplicaSet/Deployment 등 컨트롤러  │
+│  │ Controller Mgr   │  현재→desired 수렴(reconcile)       │
+│  └──────────────────┘                                    │
+└──────────────────────────────────────────────────────────┘
+        │ (API Server 통해서만 통신)
+┌───────▼─────── Worker Node ────────┐   ┌──── Worker Node ────┐
+│  kubelet (Pod 스펙대로 컨테이너 실행) │   │  kubelet            │
+│  kube-proxy (Service→Pod 라우팅)     │   │  kube-proxy         │
+│  container runtime (containerd)     │   │  containerd         │
+│   └─ Pod ─ Pod                       │   │   └─ Pod            │
+└──────────────────────────────────────┘   └─────────────────────┘
+```
+
+| 컴포넌트 | 위치 | 역할 |
+|---------|------|------|
+| **API Server** | Control Plane | 모든 요청의 **단일 관문**(REST). 인증·인가·검증 후 etcd에 반영. etcd에 직접 접근하는 유일한 컴포넌트 |
+| **etcd** | Control Plane | 클러스터의 **유일한 상태 저장소**(분산 KV). Raft 합의로 일관성 유지 |
+| **Scheduler** | Control Plane | 아직 노드가 안 정해진 Pod를 보고 **어느 노드에 배치**할지 결정(리소스·affinity·taint 고려) |
+| **Controller Manager** | Control Plane | 각종 컨트롤러(ReplicaSet, Deployment, Node…)를 돌리며 **현재→desired로 수렴**(reconcile loop) |
+| **kubelet** | Worker | 노드의 에이전트. API Server에서 받은 Pod 스펙대로 **컨테이너 실행·감시**(프로브도 여기서) |
+| **kube-proxy** | Worker | Service 추상화를 **iptables/IPVS 규칙**으로 구현해 Pod로 라우팅 |
+| **container runtime** | Worker | 실제 컨테이너 실행(containerd, CRI-O) |
+
+## 3. `kubectl apply` 한 줄의 내부 흐름 ⭐
+```
+① kubectl apply → API Server (인증·인가·admission 검증) → etcd에 "desired: Pod 3개" 저장
+② Deployment 컨트롤러가 변화 감지 → ReplicaSet 생성 → etcd에 Pod 3개 "생성 요청" 기록
+③ Scheduler가 노드 미할당 Pod 발견 → 적절한 노드 선정 → Pod에 nodeName 기록(API Server 통해)
+④ 해당 노드의 kubelet이 "내 노드에 배정된 Pod" 감지 → containerd로 컨테이너 실행
+⑤ kubelet이 상태를 API Server에 보고 → etcd의 current state 갱신
+   → controller가 current vs desired 계속 비교(reconcile). 하나 죽으면 다시 ②~④
+```
+- 핵심: **모든 컴포넌트는 서로 직접 호출하지 않고 API Server를 통해서만** 통신하고, etcd의 상태를 **watch**하며 자기 일을 한다(level-triggered reconciliation). 이 느슨한 결합이 확장성·복원력의 근원.
+
+<details class="deep">
+<summary>심화: etcd·고가용성·watch 메커니즘</summary>
+
+- **etcd는 Raft 합의**로 여러 노드에 복제되며, 과반수(quorum)가 살아야 쓰기가 가능 → 그래서 **홀수 개(3, 5)** 로 구성(짝수는 장애 내성 이점 없이 비용만↑). 3개면 1대, 5개면 2대 장애까지 견딤.
+- etcd가 죽으면 클러스터의 상태 저장소가 사라지는 것 → **control plane 전체가 사실상 마비**(단, 이미 떠 있는 Pod는 계속 돎). 그래서 etcd 백업이 재해복구의 핵심.
+- **watch**: 컨트롤러·kubelet은 폴링이 아니라 API Server의 watch 스트림으로 "관심 리소스가 바뀌면 통지" 받아 즉시 반응 → 대규모에서도 효율적.
+- **컨트롤러 패턴**: 각 컨트롤러는 "현재 상태를 관찰 → desired와 diff → 조정 액션 → 반복"하는 무한 루프(control loop). 이 패턴을 사용자가 확장한 게 **Operator/CRD**(커스텀 리소스 + 커스텀 컨트롤러로 앱 운영 지식을 코드화, 예: Prometheus Operator).
+
+</details>
+
+## 4. 핵심 포인트 (자주 하는 실수)
+- 🔴 "컴포넌트끼리 서로 직접 호출한다" ❌ — **모든 통신은 API Server 경유**. etcd엔 API Server만 접근. 이 중앙 관문이 인증·검증·감사 지점.
+- 🔴 "Scheduler가 컨테이너를 실행한다" ❌ — Scheduler는 **어느 노드에 놓을지 결정만**. 실제 실행은 그 노드의 kubelet.
+- 🟡 etcd는 홀수 개(quorum) — 상태 저장소이자 SPOF급 중요도라 백업·HA 필수.
+- 🟡 control plane이 다 죽어도 **이미 실행 중인 Pod와 kube-proxy 라우팅은 유지**된다(데이터플레인은 살아있음) — 다만 새 배포·자가복구·스케일은 멈춤.
+
+## 5. 예상 면접 질문 + 답변 골격
+**Q1. "쿠버네티스 아키텍처를 설명해보세요."**
+> 크게 Control Plane과 Worker Node로 나뉩니다. Control Plane엔 모든 요청의 단일 관문인 API Server, 유일한 상태 저장소인 etcd, Pod 배치를 정하는 Scheduler, 현재를 desired로 수렴시키는 Controller Manager가 있습니다. Worker엔 Pod 스펙대로 컨테이너를 실행·감시하는 kubelet, Service를 iptables 규칙으로 구현하는 kube-proxy, 실제 실행을 맡는 컨테이너 런타임이 있습니다. 모든 컴포넌트는 서로 직접 호출하지 않고 API Server를 통해서만 통신하며 etcd 상태를 watch합니다.
+
+**꼬리 Q1-1. "`kubectl apply`를 하면 내부에서 무슨 일이 일어나나요?"**
+> API Server가 인증·인가·admission 검증을 거쳐 desired 상태를 etcd에 저장합니다. 그러면 Deployment 컨트롤러가 변화를 감지해 ReplicaSet과 Pod 생성을 기록하고, Scheduler가 노드 미할당 Pod를 발견해 적절한 노드를 정해 배정합니다. 그 노드의 kubelet이 자기에게 배정된 Pod를 감지해 컨테이너 런타임으로 실행하고 상태를 다시 API Server에 보고합니다. 이후 컨트롤러가 current와 desired를 계속 비교하며 어긋나면 다시 조정합니다.
+
+**꼬리 Q1-2. "etcd는 왜 홀수 개로 두나요?"**
+> etcd는 Raft 합의로 복제되어 과반수가 살아야 쓰기가 가능하기 때문입니다. 3개면 1대, 5개면 2대 장애까지 견디는데, 짝수로 두면 장애 내성은 안 늘고 quorum 비용만 커져 홀수가 최적입니다. etcd는 클러스터의 유일한 상태 저장소라 죽으면 control plane이 마비되므로 백업과 HA가 필수입니다.
+
+---
+
+# DO8. 리소스 관리와 스케줄링
+
+**학습 목표**: *"requests와 limits의 차이는?"* / *"Pod가 왜 OOMKilled 되나요?"* / *"QoS 클래스가 뭐고 eviction 순서에 어떻게 영향을 주나요?"* / *"특정 노드에만 Pod를 배치하려면?"* 에 5분 답할 수 있다.
+> 실운영 트러블슈팅(OOMKilled·eviction·pending Pod)의 근원. tight 면접이 "왜 죽었나"로 파고드는 자리.
+
+## 1. 비유 — 사무실 좌석 배정과 예산
+**requests = 예약석**(이 Pod는 최소 이만큼 자원이 보장돼야 함 — 스케줄러가 이 값으로 자리를 잡음). **limits = 상한선**(이보다 더 쓰면 제재). CPU는 상한 넘으면 **throttling(속도 제한)**, 메모리는 상한 넘으면 **OOMKilled(강제 종료)** — 메모리는 압축 불가능한 자원이라 뺏을 수 없어 죽이는 것.
+
+## 2. requests vs limits ⭐
+| | requests | limits |
+|--|----------|--------|
+| 의미 | **보장** 최소 자원(스케줄링 기준) | **최대** 허용 자원 |
+| Scheduler | 이 값으로 노드 배치 결정(합이 노드 용량 초과 X) | 스케줄링엔 미사용 |
+| CPU 초과 | — | **throttling**(압축 가능 자원, 느려질 뿐) |
+| 메모리 초과 | — | **OOMKilled**(압축 불가, 컨테이너 강제 종료·재시작) |
+
+- **OOMKilled**: 컨테이너가 memory limit을 넘으면 커널 OOM killer가 프로세스를 죽임 → `kubectl describe pod`에 `OOMKilled`, 반복되면 CrashLoopBackOff. 원인: limit이 실제 사용량보다 작음(→ 힙 튜닝·limit 상향), 또는 메모리 누수.
+- JVM 함정: 컨테이너 memory limit과 JVM 힙을 따로 안 맞추면, JVM이 호스트 전체 메모리 기준으로 힙을 잡아 limit 초과 → OOMKilled. `-XX:MaxRAMPercentage` 또는 최신 JVM의 컨테이너 인식으로 해결.
+
+## 3. QoS 클래스와 eviction ⭐
+노드 메모리가 부족하면 kubelet이 Pod를 **축출(evict)** 하는데, 순서는 QoS 클래스로 정해진다.
+| QoS 클래스 | 조건 | eviction 우선순위 |
+|-----------|------|------------------|
+| **Guaranteed** | 모든 컨테이너가 requests=limits(CPU·메모리 다) | 가장 나중(잘 안 쫓겨남) |
+| **Burstable** | requests < limits(일부라도 설정) | 중간 |
+| **BestEffort** | requests·limits 아예 없음 | **가장 먼저 축출** |
+
+- 노드가 메모리 압박을 받으면 **BestEffort → Burstable(초과분 큰 순) → Guaranteed** 순으로 쫓아낸다. 중요한 워크로드는 Guaranteed로 두는 이유.
+
+<details class="deep">
+<summary>심화: 스케줄링 제어 — nodeSelector · affinity · taint/toleration</summary>
+
+- **nodeSelector**: Pod를 특정 라벨의 노드에만(`disktype: ssd`). 가장 단순.
+- **Node Affinity**: nodeSelector의 확장 — required(반드시)/preferred(선호) + 표현식. "GPU 노드에 반드시" 같은 규칙.
+- **Pod Affinity/Anti-Affinity**: "이 Pod는 캐시 Pod와 같은 노드에"(affinity, 지연↓) 또는 "복제본은 서로 다른 노드에"(anti-affinity, 가용성↑).
+- **Taint & Toleration**: **노드가** "나는 특별하니 아무나 오지 마"라고 taint를 붙이면, 그 taint를 **toleration**으로 견디는 Pod만 배치됨. 예: GPU 노드에 taint → GPU 워크로드만 toleration을 갖게 해 독점. (nodeSelector가 "Pod가 노드를 고르는" 것이면, taint는 "노드가 Pod를 거부하는" 반대 방향.)
+- **Pending Pod 디버깅**: Pod가 계속 Pending이면 대개 ① 어떤 노드도 requests를 만족 못 함(자원 부족) ② taint를 견딜 toleration이 없음 ③ affinity 규칙을 만족하는 노드 없음. `kubectl describe pod`의 Events에 스케줄러가 이유를 남긴다.
+
+</details>
+
+## 4. 핵심 포인트 (자주 하는 실수)
+- 🔴 "requests와 limits는 같은 것" ❌ — requests=보장·스케줄링 기준, limits=상한. CPU 초과는 throttling, 메모리 초과는 OOMKilled.
+- 🔴 "limit만 높이면 OOM 해결" ❌ — 누수면 limit을 올려도 다시 참. 실제 사용량·힙을 봐야 함. JVM은 컨테이너 인식 설정 필수.
+- 🟡 requests를 안 주면 BestEffort라 메모리 압박 시 **가장 먼저 쫓겨남** — 중요 워크로드는 requests/limits를 명시.
+- 🟡 requests를 실제보다 크게 잡으면 노드가 실제론 놀아도 스케줄러는 "꽉 찼다"고 봐 자원 낭비(스케줄링은 requests 기준).
+
+## 5. 예상 면접 질문 + 답변 골격
+**Q1. "requests와 limits의 차이, 그리고 Pod가 OOMKilled 되는 이유는?"**
+> requests는 스케줄러가 노드에 배치할 때 기준으로 삼는 보장 최소 자원이고, limits는 최대 허용치입니다. CPU는 limit을 넘으면 압축 가능한 자원이라 throttling으로 느려질 뿐이지만, 메모리는 압축 불가라 limit을 넘으면 커널이 컨테이너를 강제 종료합니다. 이게 OOMKilled입니다. 원인은 limit이 실제 사용량보다 작거나 메모리 누수인데, JVM이라면 컨테이너 메모리 limit과 힙 설정을 맞추지 않아 호스트 전체 기준으로 힙을 잡는 경우가 흔합니다.
+
+**꼬리 Q1-1. "QoS 클래스가 eviction에 어떻게 영향을 주나요?"**
+> requests=limits면 Guaranteed, 일부만 설정하면 Burstable, 아무것도 없으면 BestEffort입니다. 노드 메모리가 부족해지면 kubelet이 BestEffort부터, 그다음 요청 초과가 큰 Burstable, 마지막으로 Guaranteed 순으로 축출합니다. 그래서 중요한 워크로드는 requests와 limits를 같게 줘 Guaranteed로 두면 잘 쫓겨나지 않습니다.
+
+**Q2. "특정 노드에만 Pod를 배치하거나, 특정 노드를 특정 워크로드 전용으로 하려면?"**
+> 배치를 원하는 쪽은 nodeSelector나 Node Affinity로 "이 라벨의 노드에"라고 지정합니다. 반대로 노드를 전용화하려면 taint를 붙여 아무 Pod나 못 오게 막고, 그 노드를 쓸 워크로드에만 toleration을 줍니다. 예를 들어 GPU 노드에 taint를 걸고 GPU 잡만 toleration을 갖게 하면 그 노드를 독점시킬 수 있습니다. 복제본을 여러 노드에 흩뿌리려면 Pod Anti-Affinity를 씁니다.
+
+---
+
+# DO9. StatefulSet과 영속 볼륨
+
+**학습 목표**: *"StatefulSet은 Deployment와 뭐가 다른가요?"* / *"DB를 k8s에 올린다면 무엇을 고려하나요?"* / *"PV와 PVC의 관계는?"* 에 5분 답할 수 있다.
+> Deployment는 "서로 구별 없는 stateless Pod"를 전제한다. DB·Kafka·ZooKeeper처럼 **각 인스턴스가 고유 정체성과 자기 디스크**를 가져야 하는 워크로드는 다른 오브젝트가 필요하다.
+
+## 1. 비유 — 아르바이트생 vs 지정석 정직원
+Deployment의 Pod는 **교대 알바**(누가 오든 같은 유니폼, 이름표 없음, 사물함 공유 안 함 — 죽으면 아무나 대체). StatefulSet의 Pod는 **지정석 정직원**(각자 고유 사번 `db-0`, `db-1`, 자기 전용 사물함=볼륨, 순서대로 입사·퇴사). DB 복제본은 "누가 마스터인지" 같은 고유 정체성이 필요해 후자여야 한다.
+
+## 2. StatefulSet vs Deployment ⭐
+| | Deployment | StatefulSet |
+|--|-----------|-------------|
+| Pod 정체성 | 무작위 이름(`web-7d9f-x2k`), 구별 없음 | **안정적 이름**(`db-0`,`db-1`, 순번 고정) |
+| 생성/삭제 순서 | 동시·무순서 | **순서 보장**(0→1→2 생성, 역순 삭제) |
+| 볼륨 | 보통 공유/무상태 | **Pod별 전용 PVC**(db-0은 늘 자기 볼륨에 재연결) |
+| 네트워크 | Service 로드밸런싱 | **headless Service** + Pod별 안정 DNS(`db-0.svc…`) |
+| 용도 | stateless 앱(웹·API) | DB·메시지 브로커·분산 저장(정체성·순서·디스크 필요) |
+
+- 핵심: StatefulSet은 **"각 Pod가 재시작·재스케줄돼도 같은 이름·같은 볼륨·같은 DNS로 돌아옴"**을 보장 → 마스터/슬레이브 구분, 복제 클러스터 멤버십이 유지됨.
+
+## 3. PV · PVC · StorageClass ⭐
+컨테이너는 기본적으로 **휘발성**(재시작하면 파일 사라짐). 영속 저장은 볼륨 추상화로 분리한다.
+```
+Pod ──마운트──► PVC (PersistentVolumeClaim: "10Gi SSD 주세요" — 사용자의 요청)
+                     │  바인딩
+                     ▼
+                PV (PersistentVolume: 실제 스토리지 조각 — 관리자/동적 프로비저닝)
+                     │
+                     ▼
+                실제 백엔드(EBS, NFS, Ceph…)
+
+StorageClass: "어떤 종류의 스토리지를 동적으로 만들지" 템플릿
+  → PVC가 StorageClass를 지정하면 PV를 자동 생성(동적 프로비저닝)
+```
+- **PVC**(요청)와 **PV**(실제 볼륨)를 분리 → 개발자는 "얼마나·어떤 성능"만 요청하고, 실제 스토리지 프로비저닝은 인프라가 담당(관심사 분리).
+- **StorageClass**: PVC가 올 때마다 PV를 **동적 생성**(클라우드 디스크 자동 프로비저닝). 없으면 관리자가 PV를 미리 만들어둬야(정적).
+- **Reclaim Policy**: PVC 삭제 시 PV를 어떻게 할지 — `Retain`(보존, 데이터 안전)/`Delete`(삭제). DB는 보통 Retain.
+
+## 4. 핵심 포인트 (자주 하는 실수)
+- 🔴 "DB도 그냥 Deployment로 올리면 된다" ❌ — Deployment Pod는 정체성·전용 볼륨이 없어, 복제본이 서로를 식별 못 하고 재시작 시 엉뚱한 볼륨에 붙을 수 있음. 상태 저장은 StatefulSet.
+- 🔴 "PV와 PVC는 같은 것" ❌ — PVC=사용자의 **요청**, PV=실제 **볼륨**. 바인딩으로 연결. StorageClass가 PV를 동적 생성.
+- 🟡 StatefulSet은 순서·정체성을 보장하지만 그만큼 롤아웃이 느리고 운영이 복잡 — 정말 상태가 필요한지 먼저 판단(가능하면 관리형 DB를 클러스터 밖에서).
+- 🟡 컨테이너 재시작=파일 소실이 기본 → 영속 데이터는 반드시 PVC로. `emptyDir`은 Pod 수명과 함께 사라지는 임시 볼륨.
+
+## 5. 예상 면접 질문 + 답변 골격
+**Q1. "StatefulSet은 Deployment와 뭐가 다른가요?"**
+> Deployment는 서로 구별되지 않는 stateless Pod를 전제해 이름이 무작위이고 볼륨을 공유하지 않으며 순서 없이 생성됩니다. StatefulSet은 각 Pod가 db-0, db-1처럼 안정적인 이름과 Pod별 전용 볼륨, 안정적인 DNS를 갖고 순서대로 생성·삭제됩니다. DB나 메시지 브로커처럼 각 인스턴스가 고유 정체성과 자기 디스크를 유지해야 하는 워크로드에 씁니다. 재스케줄돼도 같은 이름·같은 볼륨으로 돌아오는 게 핵심입니다.
+
+**꼬리 Q1-1. "PV와 PVC의 관계를 설명해보세요."**
+> PVC는 사용자가 "10기가 SSD가 필요하다"고 내는 요청이고, PV는 실제 스토리지 조각입니다. PVC가 조건에 맞는 PV에 바인딩되어 Pod가 그 볼륨을 마운트합니다. StorageClass를 지정하면 PVC가 올 때마다 PV를 동적으로 자동 생성하고, 없으면 관리자가 미리 PV를 만들어둬야 합니다. 이렇게 요청과 실제 볼륨을 분리해 개발자는 용량·성능만 요청하고 프로비저닝은 인프라가 담당합니다.
+
+---
+
+# DO10. K8s 네트워킹 (kube-proxy · CNI · CoreDNS)
+
+**학습 목표**: *"Service로 보낸 요청이 실제 Pod까지 어떻게 도달하나요?"* / *"Pod끼리는 어떻게 통신하나요?"* / *"특정 Pod 간 통신만 막으려면?"* 에 5분 답할 수 있다.
+> DO5에서 Service를 "고정 진입점"으로 개괄했다면, 여기는 **그 추상화가 실제로 어떻게 구현되나**.
+
+## 1. 비유 — 대표번호와 교환원
+Service의 ClusterIP는 **회사 대표번호**(실체 없는 가상 번호). 손님이 대표번호로 걸면 **교환원(kube-proxy)** 이 지금 자리에 있는 상담원(Pod) 중 하나로 연결한다. 상담원이 바뀌어도(Pod 재생성) 교환원이 최신 명단(endpoints)을 보고 연결하므로 대표번호는 그대로. "누가 어느 자리인지" 이름 안내는 사내 전화번호부(CoreDNS)가 담당.
+
+## 2. 4가지 네트워킹 계층 ⭐
+| 계층 | 담당 | 핵심 |
+|------|------|------|
+| **Pod ↔ Pod** | **CNI 플러그인**(Calico, Cilium…) | 모든 Pod는 고유 IP, NAT 없이 서로 직접 통신(k8s 네트워크 모델의 전제) |
+| **Service → Pod** | **kube-proxy** | ClusterIP(가상 IP)를 **iptables/IPVS 규칙**으로 실제 Pod IP들에 로드밸런싱 |
+| **이름 해석** | **CoreDNS** | `svc명.namespace.svc.cluster.local` → ClusterIP 변환 |
+| **외부 → 클러스터** | Service(LoadBalancer/NodePort), Ingress | (DO2 §10, DO5 §5) |
+
+## 3. Service 요청이 Pod까지 가는 실제 경로 ⭐
+```
+Pod A가 "order-svc"를 호출:
+① CoreDNS: "order-svc.default.svc.cluster.local" → ClusterIP 10.96.0.7 반환
+② Pod A가 10.96.0.7로 패킷 전송
+③ 노드의 kube-proxy가 심어둔 iptables/IPVS 규칙이 이 가상 IP를
+   실제 백엔드 Pod IP들 중 하나로 DNAT(목적지 주소 변환) + 로드밸런싱
+④ CNI 네트워크를 통해 그 Pod로 전달
+  → ClusterIP는 실존 인터페이스가 아니라 "iptables 규칙상의 가상 IP"일 뿐
+```
+- 핵심: **Service(ClusterIP)는 물리적 실체가 없다.** kube-proxy가 각 노드에 심은 iptables/IPVS 규칙이 그 가상 IP를 살아있는 Pod로 바꿔주는 것. Pod가 바뀌면 endpoints가 갱신되고 kube-proxy가 규칙을 다시 씀.
+
+## 4. NetworkPolicy — Pod 간 통신 방화벽
+- 기본적으로 k8s는 **모든 Pod가 서로 통신 가능**(open). 프로덕션에선 위험 → **NetworkPolicy**로 "어떤 Pod가 어떤 Pod와 통신 가능한지"를 라벨 기반으로 제한(예: frontend만 backend에 접근, DB는 backend만).
+- 주의: NetworkPolicy는 **CNI 플러그인이 지원해야** 동작(Calico·Cilium은 O, 일부 기본 CNI는 무시). 리소스만 만들고 CNI가 미지원이면 아무 효과 없음.
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 "ClusterIP는 실제 네트워크 인터페이스" ❌ — **가상 IP**일 뿐, kube-proxy의 iptables/IPVS 규칙으로 실제 Pod에 DNAT된다.
+- 🔴 "Pod 간 통신은 기본 차단" ❌ — 기본은 **전부 허용**. 격리하려면 NetworkPolicy를 명시적으로 적용(+지원 CNI).
+- 🟡 Service DNS 이름은 `svc.namespace` 형태 — 같은 네임스페이스면 `order-svc`만으로도 되지만 다른 네임스페이스는 `order-svc.other-ns`.
+- 🟡 iptables 모드는 규칙이 많아지면 성능 저하 → 대규모 클러스터는 **IPVS 모드** 사용.
+
+## 6. 예상 면접 질문 + 답변 골격
+**Q1. "Service로 보낸 요청이 실제 Pod까지 어떻게 도달하나요?"**
+> 먼저 CoreDNS가 서비스 이름을 ClusterIP라는 가상 IP로 변환합니다. Pod가 그 가상 IP로 패킷을 보내면, 각 노드의 kube-proxy가 미리 심어둔 iptables나 IPVS 규칙이 그 가상 IP를 살아있는 백엔드 Pod IP 중 하나로 DNAT하며 로드밸런싱합니다. 그 패킷은 CNI 네트워크를 통해 해당 Pod로 전달됩니다. 즉 ClusterIP는 실존 인터페이스가 아니라 규칙상의 가상 IP이고, Pod가 바뀌면 endpoints가 갱신되어 kube-proxy가 규칙을 다시 씁니다.
+
+**꼬리 Q1-1. "Pod끼리는 어떻게 통신하나요?"**
+> 쿠버네티스 네트워크 모델은 모든 Pod가 고유 IP를 갖고 NAT 없이 서로 직접 통신할 수 있어야 한다는 걸 전제합니다. 이걸 실제로 구현하는 게 CNI 플러그인(Calico, Cilium 등)이고, 노드에 걸쳐 Pod 네트워크를 연결합니다. Service를 거치지 않고 Pod IP로 직접도 가능하지만, Pod IP는 휘발성이라 보통 Service를 통합니다.
+
+**Q2. "특정 Pod 간 통신만 허용하거나 막으려면?"**
+> NetworkPolicy를 씁니다. 기본적으로 모든 Pod가 서로 통신 가능하므로, 라벨 기반으로 "frontend 라벨을 가진 Pod만 backend에 접근 가능" 같은 규칙을 정의해 화이트리스트로 좁힙니다. 단 NetworkPolicy는 CNI 플러그인이 지원해야 실제로 적용되므로 Calico나 Cilium 같은 지원 CNI를 써야 하고, 미지원 CNI에서는 리소스를 만들어도 무시됩니다.
+
+---
+
 # 핵심 질문 (Quiz)
 
 > 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
@@ -1083,5 +1330,42 @@ desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭)
 - **감사 로그**: 책임추적·컴플라이언스("누가 언제 무엇을 했나"), **변조 불가**(append-only·해시체인·서명), 보존기간 규제 강제, 저장·권한 분리.
 - 민감정보(비번·카드번호) 원문 금지 → 마스킹/해시. 로그 쓰는 주체가 삭제 못 하게 권한 분리(WORM).
 - Spring: JPA Auditing(@CreatedBy 등), Hibernate Envers, Security 인증 이벤트.
+
+</details>
+
+<details>
+<summary>Q12. 쿠버네티스 아키텍처(control plane)를 설명하면?</summary>
+
+- **Control Plane**: API Server(모든 요청의 단일 관문·유일한 etcd 접근자) · etcd(유일한 상태 저장소, Raft·홀수개) · Scheduler(Pod 노드 배치 결정) · Controller Manager(현재→desired 수렴).
+- **Worker**: kubelet(Pod 스펙대로 컨테이너 실행·감시) · kube-proxy(Service→Pod iptables 라우팅) · container runtime(containerd).
+- 모든 컴포넌트는 **API Server 경유로만** 통신하고 etcd 상태를 watch. `kubectl apply`→etcd 저장→컨트롤러 감지→Scheduler 배치→kubelet 실행→상태 보고(reconcile).
+
+</details>
+
+<details>
+<summary>Q13. requests/limits 차이, OOMKilled, QoS 클래스는?</summary>
+
+- **requests**=보장 최소(스케줄링 기준), **limits**=최대 허용. CPU 초과=throttling(느려짐), 메모리 초과=**OOMKilled**(강제 종료, 메모리는 압축 불가).
+- JVM 함정: 컨테이너 memory limit과 힙을 안 맞추면 호스트 기준으로 힙 잡아 OOMKilled(`-XX:MaxRAMPercentage`).
+- **QoS**: requests=limits→Guaranteed(늦게 축출) / 일부 설정→Burstable / 없음→BestEffort(**먼저 축출**). 노드 메모리 압박 시 BestEffort→Burstable→Guaranteed 순 eviction.
+- 배치 제어: nodeSelector/affinity(Pod가 노드 선택), taint/toleration(노드가 Pod 거부).
+
+</details>
+
+<details>
+<summary>Q14. StatefulSet vs Deployment, PV/PVC는?</summary>
+
+- **Deployment**: stateless, 무작위 이름, 볼륨 공유·무순서. **StatefulSet**: 안정적 이름(db-0/db-1)·Pod별 전용 PVC·안정 DNS·순서 보장 → DB·브로커 등 정체성/디스크 필요 워크로드.
+- **PVC**(사용자 요청 "10Gi SSD") ↔ **PV**(실제 볼륨) 바인딩. **StorageClass**가 PVC마다 PV 동적 생성. Reclaim: Retain(보존)/Delete.
+- 컨테이너는 휘발성 → 영속 데이터는 PVC(emptyDir은 Pod 수명 임시 볼륨).
+
+</details>
+
+<details>
+<summary>Q15. Service 요청이 Pod까지 가는 경로와 NetworkPolicy는?</summary>
+
+- ① CoreDNS: 서비스명→ClusterIP(가상 IP) → ② Pod가 ClusterIP로 전송 → ③ **kube-proxy**가 심은 iptables/IPVS 규칙이 실제 Pod IP로 DNAT+로드밸런싱 → ④ CNI 네트워크로 전달.
+- **ClusterIP는 실존 인터페이스 아님** — 규칙상의 가상 IP. Pod 바뀌면 endpoints 갱신→규칙 재작성.
+- Pod↔Pod는 **CNI**(Calico/Cilium)가 NAT 없이 연결. 기본은 전부 허용 → **NetworkPolicy**로 라벨 기반 격리(지원 CNI 필요).
 
 </details>

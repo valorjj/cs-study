@@ -13,6 +13,7 @@ import {
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
   LuBox, LuInfinity, LuActivity, LuCopy, LuSave,
   LuShapes, LuRuler, LuBlocks, LuWorkflow, LuGitMerge, LuShieldAlert,
+  LuServerCog, LuSlidersHorizontal,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -127,6 +128,10 @@ const BY_ID: Record<string, IconType> = {
   'hw-coherence': LuZap,
   'devops-k8s-objects': LuBoxes,
   'devops-probe': LuActivity,
+  'devops-k8s-arch': LuServerCog,
+  'devops-k8s-resources': LuSlidersHorizontal,
+  'devops-k8s-storage': LuHardDrive,
+  'devops-k8s-network': LuNetwork,
 }
 
 const BY_DOMAIN: Record<string, IconType> = {
