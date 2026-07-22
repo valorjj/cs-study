@@ -204,6 +204,74 @@ target
 </details>
 
 <details class="deep">
+<summary>심화: 컨테이너 간 통신 — bridge·내장 DNS·Compose·멀티호스트</summary>
+
+## 컨테이너 간 통신 (Container-to-Container) ⭐
+
+**핵심 2줄**
+- 같은 Docker 네트워크에 있으면 **컨테이너 이름으로 바로 통신**(Docker 내장 DNS가 이름→IP 해석). **포트 매핑(-p) 필요 없음**.
+- `-p 8080:80`은 **외부(호스트)→컨테이너**용일 뿐, 컨테이너끼리 통신엔 안 쓴다.
+
+### 기본 bridge vs 사용자 정의 bridge (면접 함정 ⭐)
+| | 기본 `bridge`(docker0) | 사용자 정의 bridge (`docker network create`) |
+|---|---|---|
+| 이름으로 통신(DNS) | ❌ **안 됨** (IP로만, 레거시 `--link` 필요) | ✅ **내장 DNS로 컨테이너 이름 해석** |
+| 격리 | 모든 컨테이너가 한 네트워크에 섞임 | 네트워크 단위로 분리 |
+| 실무 | 지양 | **표준** |
+
+```bash
+docker network create mynet
+docker run -d --name db  --network mynet postgres
+docker run -d --name app --network mynet myapp
+# 이제 app 컨테이너 안에서 host 'db'로 접속:  jdbc:postgresql://db:5432/...
+```
+- 내장 DNS 주소는 `127.0.0.11`(컨테이너 내부). 이름은 **컨테이너명** 또는 `--network-alias`로 부여한 별칭.
+
+### Docker Compose — 실무에서 제일 흔한 패턴
+Compose는 프로젝트마다 네트워크를 자동 생성하고, **서비스 이름**을 호스트명으로 해석한다.
+```yaml
+services:
+  app:
+    image: myapp
+    environment:
+      DB_HOST: db          # ← 서비스 이름으로 접속 (IP·포트매핑 불필요)
+  db:
+    image: postgres
+```
+→ `app`은 `db:5432`로 바로 붙는다. 서비스 이름이 곧 DNS 이름.
+
+### `localhost` 함정 (매우 흔한 실수)
+- 컨테이너 안의 `localhost`/`127.0.0.1`는 **그 컨테이너 자신**이다. 다른 컨테이너나 호스트가 아니다.
+- 그래서 app 컨테이너에서 `localhost:5432`로 DB 컨테이너에 붙으려 하면 **실패** → `db:5432`(컨테이너/서비스 이름)로 접속해야 함.
+- 반대로 컨테이너에서 **호스트 머신**의 서비스에 접근하려면 `host.docker.internal`(Docker Desktop) 또는 게이트웨이 IP를 사용.
+
+### 다른 호스트(서버) 간 통신 — 멀티호스트
+- bridge는 **단일 호스트 내부**만 커버한다. 여러 노드에 흩어진 컨테이너끼리 통신하려면:
+  - **overlay 네트워크**(Docker Swarm) — 여러 호스트를 하나의 가상 네트워크로.
+  - **Kubernetes** — Pod 간은 CNI 네트워크, 안정적 접근은 **Service(ClusterIP)** + CoreDNS로 `서비스명.네임스페이스` 해석. (→ K8s 오브젝트)
+
+### 드라이버 요약
+| 드라이버 | 범위 | 용도 |
+|----------|------|------|
+| `bridge`(사용자 정의) | 단일 호스트 | 기본 컨테이너 간 통신(DNS) |
+| `host` | 단일 호스트 | 격리 없이 호스트 네트워크 직접(성능·포트충돌 위험) |
+| `none` | — | 네트워크 완전 차단 |
+| `overlay` | 멀티 호스트 | Swarm/멀티노드 |
+| `macvlan` | 단일 호스트 | 컨테이너에 실 LAN MAC/IP 부여 |
+
+**핵심 포인트**
+- 🔴 "컨테이너끼리 통신하려면 `-p`로 포트를 열어야 한다" ❌ — 같은 네트워크면 이름으로 바로 통신, `-p`는 외부 노출용.
+- 🔴 "기본 bridge에서도 이름으로 찾을 수 있다" ❌ — 사용자 정의 네트워크에서만 내장 DNS 동작.
+- 🟡 컨테이너에서 DB에 `localhost`로 붙는 코드 → 컨테이너화하면 깨짐. 호스트명을 설정으로 주입.
+
+**꼬리 질문**
+- "app 컨테이너에서 db 컨테이너의 DB에 어떻게 접속하나요?" (같은 사용자 정의 네트워크 + `db:5432`)
+- "왜 기본 bridge 대신 사용자 정의 네트워크를 만드나요?" (내장 DNS·격리)
+- "다른 서버에 있는 컨테이너와 통신하려면?" (overlay / k8s Service)
+
+</details>
+
+<details class="deep">
 <summary>심화: 컨테이너 격리의 실제 — namespace · cgroup · overlayfs</summary>
 
 ## 11. 컨테이너 격리의 실제 — namespace · cgroup · overlayfs ⭐
