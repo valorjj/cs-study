@@ -230,18 +230,19 @@
     },
     {
       "id": "collections",
-      "label": "Collections",
+      "label": "Collections 개요",
       "domain": "java",
       "level": 1,
-      "icon": "📚",
-      "summary": "List/Map/Set 자료구조",
+      "icon": "LuLibrary",
+      "summary": "List·Map·Set·Queue 큰 그림과 선택 기준",
       "keywords": [
         "List",
         "Map",
-        "Set"
+        "Set",
+        "Queue"
       ],
       "status": "learning",
-      "noteRef": "notes/01-java-jvm/hashmap-internals.md",
+      "noteRef": "notes/01-java-jvm/collections.md#자바-컬렉션-개요-list--map--set--queue",
       "position": {
         "x": -260,
         "y": 260
@@ -282,6 +283,64 @@
       "noteRef": "notes/01-java-jvm/hashmap-internals.md#treemap--red-black-tree",
       "position": {
         "x": -200,
+        "y": 340
+      }
+    },
+    {
+      "id": "java-list",
+      "label": "ArrayList · LinkedList",
+      "domain": "java",
+      "level": 2,
+      "icon": "LuList",
+      "summary": "List 두 구현체 — 동적 배열 vs 연결 리스트",
+      "keywords": [
+        "ArrayList",
+        "LinkedList",
+        "List"
+      ],
+      "status": "learning",
+      "noteRef": "notes/01-java-jvm/collections-list.md#arraylist-vs-linkedlist",
+      "position": {
+        "x": -440,
+        "y": 340
+      }
+    },
+    {
+      "id": "java-set",
+      "label": "Set 구현체",
+      "domain": "java",
+      "level": 2,
+      "icon": "LuBoxes",
+      "summary": "HashSet · LinkedHashSet · TreeSet 차이",
+      "keywords": [
+        "HashSet",
+        "TreeSet",
+        "Set"
+      ],
+      "status": "learning",
+      "noteRef": "notes/01-java-jvm/collections-set.md#set-구현체-hashset--linkedhashset--treeset",
+      "position": {
+        "x": -140,
+        "y": 340
+      }
+    },
+    {
+      "id": "java-queue",
+      "label": "Queue · Deque",
+      "domain": "java",
+      "level": 2,
+      "icon": "LuArrowRightLeft",
+      "summary": "ArrayDeque·PriorityQueue — 스택/큐/우선순위",
+      "keywords": [
+        "Queue",
+        "Deque",
+        "ArrayDeque",
+        "PriorityQueue"
+      ],
+      "status": "learning",
+      "noteRef": "notes/01-java-jvm/collections-queue.md#queue--deque-arraydeque--priorityqueue",
+      "position": {
+        "x": -80,
         "y": 340
       }
     },
@@ -2247,6 +2306,33 @@
       "target": "java-treemap",
       "type": "crosslink",
       "label": "RB트리"
+    },
+    {
+      "source": "collections",
+      "target": "java-list",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-array",
+      "target": "java-list",
+      "type": "crosslink",
+      "label": "구현"
+    },
+    {
+      "source": "collections",
+      "target": "java-set",
+      "type": "hierarchy"
+    },
+    {
+      "source": "collections",
+      "target": "java-queue",
+      "type": "hierarchy"
+    },
+    {
+      "source": "dsa-heap",
+      "target": "java-queue",
+      "type": "crosslink",
+      "label": "PriorityQueue"
     }
   ]
 }
