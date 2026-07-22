@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractQuizItems, seededShuffle, hashSeed, weakDomains, extractDrillChains } from './quiz'
+import { extractQuizItems, seededShuffle, hashSeed, weakDomains, extractDrillChains, orderDeck, type OrderCtx } from './quiz'
 
 describe('extractQuizItems', () => {
   it('pairs a **Q...** line with its following blockquote answer', () => {
@@ -160,5 +160,44 @@ describe('extractDrillChains', () => {
   it('returns [] when there are no follow-ups anywhere', () => {
     const body = ['**Q1. "질문?"**', '> 답.'].join('\n')
     expect(extractDrillChains(body)).toEqual([])
+  })
+})
+
+describe('orderDeck', () => {
+  const items = [
+    { srsKey: 'a', domain: 'os' },
+    { srsKey: 'b', domain: 'net' },
+    { srsKey: 'c', domain: 'db' },
+    { srsKey: 'd', domain: 'os' },
+  ]
+  const ctx = (over: Partial<OrderCtx> = {}): OrderCtx => ({
+    seed: 1, srsLapses: () => 0, weakRank: () => 0, ...over,
+  })
+
+  it('sequential keeps input order and does not mutate input', () => {
+    const input = items.slice()
+    const out = orderDeck(input, 'sequential', ctx())
+    expect(out.map((i) => i.srsKey)).toEqual(['a', 'b', 'c', 'd'])
+    expect(input.map((i) => i.srsKey)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('daily/random are deterministic for a seed and differ across seeds', () => {
+    const s1 = orderDeck(items, 'random', ctx({ seed: 111 })).map((i) => i.srsKey)
+    const s1again = orderDeck(items, 'random', ctx({ seed: 111 })).map((i) => i.srsKey)
+    const s2 = orderDeck(items, 'random', ctx({ seed: 222 })).map((i) => i.srsKey)
+    expect(s1).toEqual(s1again)
+    expect(s1).not.toEqual(s2)
+  })
+
+  it('weak puts previously-wrong cards (lapses>0) first, then weakest domain', () => {
+    const lapses: Record<string, number> = { c: 2, d: 1 }
+    const rank: Record<string, number> = { db: 0, os: 1, net: 2 }
+    const out = orderDeck(items, 'weak', ctx({
+      srsLapses: (k) => lapses[k] ?? 0,
+      weakRank: (d) => rank[d] ?? 99,
+    })).map((i) => i.srsKey)
+    // lapsed first (c domain=db rank0, d domain=os rank1) → c, d;
+    // then non-lapsed by weakRank (b domain=net rank2, a domain=os rank1) → a, b
+    expect(out).toEqual(['c', 'd', 'a', 'b'])
   })
 })

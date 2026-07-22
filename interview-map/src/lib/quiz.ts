@@ -156,6 +156,39 @@ export function seededShuffle<T>(items: T[], seed: number): T[] {
   return out
 }
 
+import type { QuizSettings } from './quizSettings'
+
+export interface OrderCtx {
+  seed: number                            // daily/random 셔플 시드
+  srsLapses: (srsKey: string) => number   // 카드별 이전 오답 횟수 (weak용)
+  weakRank: (domain: string) => number    // 약점 도메인 순위 (낮을수록 약함)
+}
+
+// Flashcard deck ordering by user setting. Pure; input array is never mutated.
+//   daily/random → seeded Fisher-Yates (caller varies the seed)
+//   sequential   → note order (input order) unchanged
+//   weak         → previously-wrong cards first, then weakest domain first
+export function orderDeck<T extends { srsKey: string; domain: string }>(
+  scoped: T[], order: QuizSettings['order'], ctx: OrderCtx,
+): T[] {
+  if (order === 'sequential') return scoped.slice()
+  if (order === 'weak') {
+    return scoped
+      .map((item, i) => ({ item, i }))
+      .sort((a, b) => {
+        const aw = ctx.srsLapses(a.item.srsKey) > 0 ? 0 : 1
+        const bw = ctx.srsLapses(b.item.srsKey) > 0 ? 0 : 1
+        if (aw !== bw) return aw - bw
+        const ar = ctx.weakRank(a.item.domain)
+        const br = ctx.weakRank(b.item.domain)
+        if (ar !== br) return ar - br
+        return a.i - b.i // stable
+      })
+      .map((x) => x.item)
+  }
+  return seededShuffle(scoped, ctx.seed) // daily & random
+}
+
 export interface WeakDomain {
   domain: string
   correct: number
