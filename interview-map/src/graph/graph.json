@@ -1868,6 +1868,104 @@
       }
     },
     {
+      "id": "design",
+      "label": "디자인 패턴",
+      "domain": "design",
+      "level": 0,
+      "icon": "LuShapes",
+      "summary": "OOP 설계 원칙과 GoF 패턴",
+      "keywords": [
+        "SOLID",
+        "디자인패턴",
+        "OOP"
+      ],
+      "status": "learning",
+      "noteRef": "notes/12-design/design-core.md#dp1-solid-원칙",
+      "position": {
+        "x": 900,
+        "y": 560
+      }
+    },
+    {
+      "id": "design-solid",
+      "label": "SOLID 원칙",
+      "domain": "design",
+      "level": 1,
+      "icon": "LuRuler",
+      "summary": "SRP·OCP·LSP·ISP·DIP, DI와의 관계",
+      "keywords": [
+        "SOLID",
+        "OCP",
+        "DIP",
+        "의존성역전"
+      ],
+      "status": "learning",
+      "noteRef": "notes/12-design/design-core.md#dp1-solid-원칙",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "design-creational",
+      "label": "생성 패턴",
+      "domain": "design",
+      "level": 1,
+      "icon": "LuBlocks",
+      "summary": "Singleton·Factory·Builder, 스레드 안전성",
+      "keywords": [
+        "싱글톤",
+        "팩토리",
+        "빌더",
+        "DCL"
+      ],
+      "status": "learning",
+      "noteRef": "notes/12-design/design-core.md#dp2-생성-패턴-creational",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "design-structural",
+      "label": "구조 패턴",
+      "domain": "design",
+      "level": 1,
+      "icon": "LuComponent",
+      "summary": "Adapter·Decorator·Proxy·Facade",
+      "keywords": [
+        "데코레이터",
+        "프록시",
+        "어댑터",
+        "AOP"
+      ],
+      "status": "learning",
+      "noteRef": "notes/12-design/design-core.md#dp3-구조-패턴-structural",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "design-behavioral",
+      "label": "행위 패턴",
+      "domain": "design",
+      "level": 1,
+      "icon": "LuWorkflow",
+      "summary": "Strategy·Observer·Template Method",
+      "keywords": [
+        "전략",
+        "옵저버",
+        "템플릿메서드"
+      ],
+      "status": "learning",
+      "noteRef": "notes/12-design/design-core.md#dp4-행위-패턴-behavioral",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "devops-k8s-objects",
       "label": "K8s 오브젝트",
       "domain": "devops",
@@ -2396,6 +2494,50 @@
       "source": "os",
       "target": "os-pagecache",
       "type": "hierarchy"
+    },
+    {
+      "source": "design",
+      "target": "design-solid",
+      "type": "hierarchy"
+    },
+    {
+      "source": "design",
+      "target": "design-creational",
+      "type": "hierarchy"
+    },
+    {
+      "source": "design",
+      "target": "design-structural",
+      "type": "hierarchy"
+    },
+    {
+      "source": "design",
+      "target": "design-behavioral",
+      "type": "hierarchy"
+    },
+    {
+      "source": "design-solid",
+      "target": "spring-ioc",
+      "type": "crosslink",
+      "label": "DIP·DI"
+    },
+    {
+      "source": "design-creational",
+      "target": "concurrency",
+      "type": "crosslink",
+      "label": "싱글톤 스레드안전"
+    },
+    {
+      "source": "design-structural",
+      "target": "spring-proxy",
+      "type": "crosslink",
+      "label": "AOP 프록시"
+    },
+    {
+      "source": "design-behavioral",
+      "target": "sd-mq",
+      "type": "crosslink",
+      "label": "옵저버·pub-sub"
     },
     {
       "source": "os-pagecache",

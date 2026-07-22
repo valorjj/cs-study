@@ -12,6 +12,7 @@ import {
   LuComponent, LuRepeat, LuAnchor, LuToggleLeft,
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
   LuBox, LuInfinity, LuActivity, LuCopy, LuSave,
+  LuShapes, LuRuler, LuBlocks, LuWorkflow,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -86,6 +87,11 @@ const BY_ID: Record<string, IconType> = {
   'react-render': LuRepeat,
   'react-hooks': LuAnchor,
   'react-state': LuToggleLeft,
+  design: LuShapes,
+  'design-solid': LuRuler,
+  'design-creational': LuBlocks,
+  'design-structural': LuComponent,
+  'design-behavioral': LuWorkflow,
   devops: SiDocker,
   'devops-docker': LuBox,
   'devops-k8s': SiKubernetes,
@@ -132,6 +138,7 @@ const BY_DOMAIN: Record<string, IconType> = {
   database: LuDatabase,
   systemdesign: LuBuilding2,
   devops: SiDocker,
+  design: LuShapes,
 }
 
 export function NodeIcon({ id, domain, size = 20 }: { id: string; domain: string; size?: number }) {

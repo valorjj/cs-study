@@ -8,8 +8,8 @@ const data = graphData as GraphData
 describe('buildTree (real graph)', () => {
   const tree = buildTree(data.nodes, data.edges)
 
-  it('produces 11 domain roots (all level 0)', () => {
-    expect(tree).toHaveLength(11)
+  it('produces 12 domain roots (all level 0)', () => {
+    expect(tree).toHaveLength(12)
     expect(tree.every((t) => t.node.level === 0)).toBe(true)
   })
 
