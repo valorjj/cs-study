@@ -64,6 +64,7 @@ const BY_ID: Record<string, IconType> = {
   'net-dns': LuServer,
   hw: LuCpu,
   'hw-cpu': LuGauge,
+  'hw-ram': LuMemoryStick,
   'hw-cache': LuZap,
   'hw-locality': LuLayoutGrid,
   'hw-storage': LuHardDrive,

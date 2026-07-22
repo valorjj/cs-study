@@ -1807,6 +1807,26 @@
       }
     },
     {
+      "id": "hw-ram",
+      "label": "RAM (주기억장치)",
+      "domain": "hw",
+      "level": 1,
+      "icon": "LuMemoryStick",
+      "summary": "DRAM vs SRAM, refresh, row buffer·타이밍",
+      "keywords": [
+        "DRAM",
+        "SRAM",
+        "refresh",
+        "row buffer"
+      ],
+      "status": "learning",
+      "noteRef": "notes/08-hardware/hardware-core.md#h6-ram--main-memory-dram",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "devops-k8s-objects",
       "label": "K8s 오브젝트",
       "domain": "devops",
@@ -2320,6 +2340,23 @@
       "source": "hw-cache",
       "target": "hw-coherence",
       "type": "hierarchy"
+    },
+    {
+      "source": "hw",
+      "target": "hw-ram",
+      "type": "hierarchy"
+    },
+    {
+      "source": "hw-ram",
+      "target": "hw-cache",
+      "type": "crosslink",
+      "label": "SRAM vs DRAM·계층"
+    },
+    {
+      "source": "hw-ram",
+      "target": "os-memory",
+      "type": "crosslink",
+      "label": "가상메모리·페이지폴트"
     },
     {
       "source": "devops-k8s",
