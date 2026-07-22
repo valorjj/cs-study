@@ -49,6 +49,7 @@ const BY_ID: Record<string, IconType> = {
   'db-lock': LuKeyRound,
   'db-normalization': LuTable2,
   'db-nosql': LuBoxes,
+  'db-redis': LuZap,
   os: LuMonitor,
   'os-process': LuGitFork,
   'os-scheduling': LuCalendarClock,

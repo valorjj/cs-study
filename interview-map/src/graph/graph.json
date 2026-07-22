@@ -815,6 +815,27 @@
       }
     },
     {
+      "id": "db-redis",
+      "label": "Redis 심층",
+      "domain": "database",
+      "level": 2,
+      "icon": "LuZap",
+      "summary": "자료구조·단일스레드·영속성(RDB/AOF)·Cluster·분산락",
+      "keywords": [
+        "Redis",
+        "Sorted Set",
+        "RDB/AOF",
+        "Cluster",
+        "분산락"
+      ],
+      "status": "learning",
+      "noteRef": "notes/04-database/database-core.md#redis-심층--자료구조--영속성--고가용성--분산락",
+      "position": {
+        "x": 360,
+        "y": 760
+      }
+    },
+    {
       "id": "spring-ioc",
       "label": "IoC / DI",
       "domain": "spring",
@@ -2389,6 +2410,23 @@
       "target": "net-socket",
       "type": "crosslink",
       "label": "I/O 모델"
+    },
+    {
+      "source": "db-nosql",
+      "target": "db-redis",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sd-cache",
+      "target": "db-redis",
+      "type": "crosslink",
+      "label": "캐시 구현"
+    },
+    {
+      "source": "db-redis",
+      "target": "sd-cache-strategy",
+      "type": "crosslink",
+      "label": "캐시 전략"
     }
   ]
 }

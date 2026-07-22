@@ -620,6 +620,132 @@ SELECT * FROM users WHERE email = 'a@x.com';   -- email에 보조 인덱스
 
 ---
 
+# Redis 심층 — 자료구조 · 영속성 · 고가용성 · 분산락
+
+**학습 목표**: "Redis는 캐시죠?"에서 멈추지 않고, *자료구조·단일 스레드 모델·영속성(RDB/AOF)·만료/축출·복제/Sentinel/Cluster·분산락*까지 **엄격한 기술 면접에서 파고드는 지점**을 5분+ 답할 수 있다. (내부는 아래 **심화** 블록.)
+
+## 1. 비유 — 사무실 화이트보드
+DB가 지하 문서고(디스크, 느리지만 영구)라면 Redis는 **책상 위 화이트보드**(메모리, 초고속·즉시). 전원이 꺼지면 지워질 수 있어(휘발성) 필요하면 사진을 찍어둔다(영속성=RDB/AOF).
+
+## 2. 개념 정의 (1줄)
+> **Redis** = 인메모리 **key-value 저장소**이자 **자료구조 서버**. 명령을 **단일 스레드**로 순차 처리해 원자성이 자연스럽고, 캐시·세션·랭킹·큐·분산락·pub/sub 등에 쓰인다.
+
+## 3. 자료구조와 용도 ⭐ (면접 1순위)
+| 타입 | 대표 명령 | 용도 |
+|------|-----------|------|
+| **String** | `SET/GET/INCR` | 캐시, 카운터, 분산락(`SET NX`) |
+| **Hash** | `HSET/HGET` | 객체(필드-값), 세션 |
+| **List** | `LPUSH/RPOP/BRPOP` | 큐·스택, 최근 목록 |
+| **Set** | `SADD/SISMEMBER` | 유니크 집합, 태그, 교집합 |
+| **Sorted Set(ZSet)** | `ZADD/ZRANGE/ZRANK` | **랭킹·리더보드**, 우선순위 큐, 시간순 |
+| **Bitmap** | `SETBIT/BITCOUNT` | 출석·플래그(메모리 극소) |
+| **HyperLogLog** | `PFADD/PFCOUNT` | **근사 유니크 카운트**(수억을 12KB로) |
+| **Stream** | `XADD/XREADGROUP` | 이벤트 로그, 컨슈머 그룹(Kafka 유사) |
+| **Geo** | `GEOADD/GEOSEARCH` | 위치 기반(주변 검색) |
+
+→ "랭킹을 어떻게 구현?" = **Sorted Set** `ZADD`/`ZREVRANGE`. "실시간 유니크 방문자 수?" = **HyperLogLog**. 이런 매핑이 면접 포인트.
+
+## 4. 왜 빠른가 — 단일 스레드 + 인메모리
+- **인메모리**(디스크 왕복 없음) + **효율적 자료구조** + **I/O 멀티플렉싱**(epoll)으로 한 스레드가 수많은 커넥션 처리.
+- **단일 스레드**라 명령이 순차 실행 → 개별 명령은 **원자적**(락 없이). 대신 **O(n) 명령 하나가 전체를 블로킹**한다.
+- 🔴 그래서 운영 DB에서 `KEYS *`·`FLUSHALL`·큰 `ZRANGE` 금지 → 서버 전체가 그 시간만큼 멈춤. 순회는 **`SCAN`**(커서 기반, 논블로킹).
+
+## 5. 핵심 포인트 (자주 하는 실수)
+- 🔴 "Redis는 캐시일 뿐" — 자료구조 서버다(랭킹·큐·락·스트림).
+- 🔴 "단일 스레드라 느리다" — 오히려 락 경합이 없어 단순·빠름. 단 O(n) 명령·CPU 무거운 Lua는 조심.
+- 🔴 `KEYS *`를 운영에서 사용 — `SCAN`으로.
+- 🟡 "메모리에만 있으니 무조건 휘발" — RDB/AOF로 영속 가능(트레이드오프 있음).
+
+## 6. 예상 면접 질문 + 답변 골격 (핵심 노출)
+
+**Q1. "Redis를 캐시 말고 어디에 쓰나요?"**
+> 세션 저장, Sorted Set 기반 실시간 랭킹, List 기반 큐, `SET NX` 분산락, pub/sub·Stream 메시징, HyperLogLog 근사 카운팅 등. 자료구조 서버라 용도가 넓습니다.
+
+**Q2. "Redis가 왜 빠른가요? 단일 스레드인데 괜찮나요?"**
+> 인메모리 + I/O 멀티플렉싱으로 한 스레드가 많은 연결을 처리하고, 단일 스레드라 명령이 순차·원자적이라 락 경합이 없습니다. 다만 O(n) 명령 하나가 전체를 막으므로 KEYS 대신 SCAN을 쓰고 무거운 연산을 피해야 합니다.
+
+**Q3. "실시간 랭킹 보드를 Redis로 어떻게 만드나요?"**
+> Sorted Set에 `ZADD board <score> <user>`로 넣고 `ZREVRANGE board 0 9 WITHSCORES`로 상위 10명을, `ZREVRANK`로 특정 유저 순위를 O(log N)에 얻습니다.
+
+<details class="deep">
+<summary>심화: 영속성 — RDB vs AOF (휘발성을 어떻게 극복하나)</summary>
+
+| | **RDB**(스냅샷) | **AOF**(append-only 로그) |
+|---|---|---|
+| 방식 | 특정 시점 메모리를 통째로 덤프(`.rdb`) | 쓰기 명령을 로그로 계속 추가 |
+| 복구 속도 | 빠름(파일 로드) | 느림(명령 재생) |
+| 데이터 유실 | 마지막 스냅샷 이후분 유실 가능 | `fsync` 정책에 따라 최소(기본 1초) |
+| 파일 크기 | 작음(압축) | 큼(주기적 rewrite로 압축) |
+| 트레이드오프 | 성능↑·유실 위험 | 내구성↑·오버헤드 |
+
+- `appendfsync`: `always`(매 명령 fsync, 안전·느림) / `everysec`(1초, 기본·균형) / `no`(OS 위임, 빠름·위험).
+- **하이브리드**(Redis 4+): RDB로 베이스 + 이후 AOF 로그 → 복구 빠르고 유실 적음(실무 권장).
+- 🔴 순수 캐시로만 쓰면 영속성 꺼서 성능 확보, **저장소로 쓰면 AOF(하이브리드) 필수**.
+
+</details>
+
+<details class="deep">
+<summary>심화: 만료(expire)와 메모리 축출(eviction) 정책</summary>
+
+- **만료 처리 2단계**: ① **lazy** — 접근할 때 만료됐으면 그때 삭제. ② **active** — 주기적으로 무작위 샘플링해 만료 키 정리. (둘을 병행 → 즉시성과 CPU 균형)
+- `maxmemory` 도달 시 **축출 정책**(`maxmemory-policy`):
+  | 정책 | 동작 |
+  |------|------|
+  | `noeviction` | 축출 안 함 — 쓰기 에러(기본, 데이터 유실 방지) |
+  | `allkeys-lru` / `allkeys-lfu` | 전체 키에서 LRU/LFU로 축출(캐시용 권장) |
+  | `volatile-lru`/`-lfu`/`-ttl` | **TTL 있는 키**만 대상으로 LRU/LFU/짧은TTL 축출 |
+  | `allkeys-random` | 무작위 |
+- 🟡 캐시면 `allkeys-lru`(또는 4.0+ `lfu`), 캐시+영속 혼용이면 `volatile-*`로 "만료 지정한 것만" 축출.
+
+</details>
+
+<details class="deep">
+<summary>심화: 고가용성 — Replication · Sentinel · Cluster(16384 해시 슬롯)</summary>
+
+- **Replication**: master→replica 비동기 복제. 읽기 분산·장애 대비. 비동기라 **복제 지연 중 master 다운 시 최근 쓰기 유실 가능**.
+- **Sentinel**: master 감시 → 다운 감지 시 replica를 새 master로 **자동 failover** + 클라이언트에 새 master 통지. (HA, 샤딩은 아님)
+- **Cluster**: 데이터를 **16384개 해시 슬롯**으로 나눠 여러 master에 분산(수평 확장). 키의 CRC16 % 16384로 슬롯 결정.
+  - 클라이언트가 엉뚱한 노드에 요청하면 **`MOVED`/`ASK` 리다이렉트**로 올바른 노드 안내.
+  - **멀티키 연산 제약**: 서로 다른 슬롯의 키를 한 트랜잭션/명령에 못 씀 → **hash tag** `{user1}:profile`처럼 `{}`로 같은 슬롯에 묶음.
+- 정리: 단일 장애 대비=**Sentinel**, 용량·처리량 수평 확장=**Cluster**.
+
+</details>
+
+<details class="deep">
+<summary>심화: 분산 락 — SET NX PX · Redlock 논쟁 · Lua 안전 해제</summary>
+
+- 기본형: `SET lock <랜덤토큰> NX PX 30000` — 없을 때만(NX) 만료(PX) 함께 원자적으로 설정.
+  - **만료(PX) 필수**: 락 잡은 노드가 죽어도 자동 해제(데드락 방지).
+  - **해제는 내 토큰일 때만** — `DEL`을 그냥 하면 남의 락을 풀 수 있음. **Lua로 GET==토큰이면 DEL**을 원자 실행.
+```
+if redis.call("get", KEYS[1]) == ARGV[1] then return redis.call("del", KEYS[1]) else return 0 end
+```
+- **Redlock**(멀티 노드 과반 획득): 단일 노드 SPOF를 줄이려는 알고리즘이지만, GC pause·시계 문제로 **안전성 논쟁**(Martin Kleppmann 비판)이 있음 → "임계 correctness가 필요하면 Redis 락에 의존 말고 fencing token/합의 시스템"이 정석. 면접에선 이 논쟁을 아는지 물을 수 있음.
+
+</details>
+
+<details class="deep">
+<summary>심화: 트랜잭션 · Lua · 파이프라이닝 (원자성과 성능)</summary>
+
+- **MULTI/EXEC**: 명령을 큐에 모아 한 번에 실행. **롤백 없음**(중간 실패해도 나머지 실행) — RDBMS 트랜잭션과 다름.
+- **WATCH**: 낙관적 락 — WATCH한 키가 EXEC 전에 바뀌면 트랜잭션 취소 → 재시도(CAS 패턴).
+- **Lua 스크립트**: 서버에서 스크립트 전체가 **원자적**으로 실행(중간에 다른 명령 안 끼어듦) → 복합 원자 연산의 정석(분산락 해제, 재고 차감 등).
+- **파이프라이닝**: 여러 명령을 한 번에 보내 **RTT를 절약**(원자성과는 무관, 순수 네트워크 최적화). 트랜잭션과 혼동 금지.
+
+</details>
+
+<details class="deep">
+<summary>심화: 운영 함정 — hot key · big key · 캐시 스탬피드</summary>
+
+- **Hot key**: 특정 키에 트래픽 집중 → 그 슬롯 노드만 과부하. 로컬 캐시 병행·키 분산으로 완화.
+- **Big key**: 하나의 키에 수십만 원소(큰 Hash/ZSet) → 그 키 연산이 O(n)으로 서버 블로킹·마이그레이션 지연. 분할 저장.
+- **캐시 스탬피드**(동시 만료 쇄도): 스코프별 TTL 지터, 뮤텍스(단일 재계산), 논블로킹 재갱신으로 방어. (→ 시스템 디자인 캐시 전략 노드와 연결)
+- **캐시 관통(penetration)**: 없는 키 반복 조회 → DB 직격. 음수 캐싱(빈 값 짧은 TTL)·블룸필터.
+
+</details>
+
+---
+
 # 핵심 질문 (Quiz)
 
 > 답변을 먼저 떠올린 뒤 펼쳐서 확인하세요.
