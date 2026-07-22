@@ -1868,6 +1868,66 @@
       }
     },
     {
+      "id": "sd-distributed-tx",
+      "label": "분산 트랜잭션",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "LuGitMerge",
+      "summary": "Saga·2PC·Outbox, 보상 트랜잭션",
+      "keywords": [
+        "Saga",
+        "2PC",
+        "Outbox",
+        "보상 트랜잭션"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd8-분산-트랜잭션-saga--2pc--outbox",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-resilience",
+      "label": "장애 격리 · 회복",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "LuShieldAlert",
+      "summary": "Circuit Breaker·Retry·Timeout·Bulkhead",
+      "keywords": [
+        "Circuit Breaker",
+        "Retry",
+        "Bulkhead",
+        "연쇄 장애"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd9-장애-격리와-회복-circuit-breaker",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "sd-msa",
+      "label": "MSA 아키텍처",
+      "domain": "systemdesign",
+      "level": 1,
+      "icon": "LuNetwork",
+      "summary": "모놀리식 vs MSA, API Gateway, 디스커버리",
+      "keywords": [
+        "MSA",
+        "API Gateway",
+        "서비스 디스커버리",
+        "BFF"
+      ],
+      "status": "learning",
+      "noteRef": "notes/06-system-design/system-design-core.md#sd10-msa-아키텍처-api-gateway서비스-디스커버리",
+      "position": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
       "id": "design",
       "label": "디자인 패턴",
       "domain": "design",
@@ -2494,6 +2554,51 @@
       "source": "os",
       "target": "os-pagecache",
       "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-distributed-tx",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-resilience",
+      "type": "hierarchy"
+    },
+    {
+      "source": "systemdesign",
+      "target": "sd-msa",
+      "type": "hierarchy"
+    },
+    {
+      "source": "sd-distributed-tx",
+      "target": "sd-mq",
+      "type": "crosslink",
+      "label": "이벤트·Outbox"
+    },
+    {
+      "source": "sd-distributed-tx",
+      "target": "db-tx",
+      "type": "crosslink",
+      "label": "로컬 ACID"
+    },
+    {
+      "source": "sd-resilience",
+      "target": "sd-msa",
+      "type": "crosslink",
+      "label": "연쇄 장애 차단"
+    },
+    {
+      "source": "sd-msa",
+      "target": "sd-lb",
+      "type": "crosslink",
+      "label": "API Gateway"
+    },
+    {
+      "source": "sd-msa",
+      "target": "devops-k8s",
+      "type": "crosslink",
+      "label": "서비스 디스커버리"
     },
     {
       "source": "design",

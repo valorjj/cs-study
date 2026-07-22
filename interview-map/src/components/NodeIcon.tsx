@@ -12,7 +12,7 @@ import {
   LuComponent, LuRepeat, LuAnchor, LuToggleLeft,
   LuArchive, LuSplit, LuMessageSquare, LuTriangle,
   LuBox, LuInfinity, LuActivity, LuCopy, LuSave,
-  LuShapes, LuRuler, LuBlocks, LuWorkflow,
+  LuShapes, LuRuler, LuBlocks, LuWorkflow, LuGitMerge, LuShieldAlert,
   LuBraces, LuGitBranch, LuType, LuPackage2,
 } from 'react-icons/lu'
 
@@ -121,6 +121,9 @@ const BY_ID: Record<string, IconType> = {
   'react-useeffect': LuAnchor,
   'sd-cache-strategy': LuArchive,
   'sd-replication': LuServer,
+  'sd-distributed-tx': LuGitMerge,
+  'sd-resilience': LuShieldAlert,
+  'sd-msa': LuNetwork,
   'hw-coherence': LuZap,
   'devops-k8s-objects': LuBoxes,
   'devops-probe': LuActivity,
