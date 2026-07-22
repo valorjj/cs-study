@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { LuMic, LuRepeat } from 'react-icons/lu'
 import { QuizView } from './QuizView'
 import { DrillView } from './DrillView'
 import { ReviewView } from './ReviewView'
@@ -34,11 +35,11 @@ export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
         </button>
         <button className="quiztab-mode" role="tab" aria-selected={mode === 'drill'}
           data-active={mode === 'drill'} onClick={() => setMode('drill')}>
-          🎤 드릴다운
+          <LuMic size={14} /> 드릴다운
         </button>
         <button className="quiztab-mode" role="tab" aria-selected={mode === 'review'}
           data-active={mode === 'review'} onClick={() => setMode('review')}>
-          🔁 복습{due > 0 && <span className="quiztab-badge">{due}</span>}
+          <LuRepeat size={14} /> 복습{due > 0 && <span className="quiztab-badge">{due}</span>}
         </button>
       </div>
       {mode === 'flash' && <QuizView nodes={nodes} />}

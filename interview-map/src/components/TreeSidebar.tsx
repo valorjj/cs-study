@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { LuChevronRight } from 'react-icons/lu'
+import { LuChevronRight, LuCheck } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { ancestorsOf, type TreeNode } from '../lib/tree'
 import { domainProgress } from '../lib/tracks'
@@ -56,7 +56,7 @@ function Row({ item, depth, expanded, toggle, rowRef, studied, domainProg }: {
         <span className="tsb-icon"><NodeIcon id={node.id} domain={node.domain} size={depth === 0 ? 18 : 15} /></span>
         <span className="tsb-label">{node.label}</span>
         {prog && prog.done > 0 && <span className="tsb-count">{prog.done}/{prog.total}</span>}
-        {isDone && <span className="tsb-check" aria-label="완료">✓</span>}
+        {isDone && <span className="tsb-check" aria-label="완료"><LuCheck size={11} strokeWidth={3} /></span>}
       </button>
       {hasChildren && isOpen && children.map((c) => (
         <Row key={c.node.id} item={c} depth={depth + 1} expanded={expanded} toggle={toggle} rowRef={rowRef} studied={studied} domainProg={domainProg} />

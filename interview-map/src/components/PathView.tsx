@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { LuArrowRight, LuCheck } from 'react-icons/lu'
+import type { IconType } from 'react-icons'
+import { LuArrowRight, LuCheck, LuCircleCheck, LuTarget, LuZap, LuPuzzle } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { CURATED_TRACKS } from '../graph/tracks'
 import { buildDomainTracks, trackProgress, nextStepIndex, type Track } from '../lib/tracks'
@@ -8,6 +9,20 @@ import { domainColor } from '../styles/theme'
 import { NodeIcon } from './NodeIcon'
 import type { GraphNode, GraphEdge } from '../graph/types'
 import './PathView.css'
+
+// Vector icons for the hand-curated courses (keyed by Track.icon).
+const CURATED_ICON: Record<string, IconType> = { target: LuTarget, zap: LuZap, puzzle: LuPuzzle }
+
+// A course's icon: domain courses reuse the domain's node icon; curated courses
+// map their icon key to a lucide glyph. Keeps the path list emoji-free.
+function TrackIcon({ track, size }: { track: Track; size: number }) {
+  if (track.id.startsWith('domain:')) {
+    const d = track.id.slice('domain:'.length)
+    return <NodeIcon id={d} domain={d} size={size} />
+  }
+  const Icon = CURATED_ICON[track.icon] ?? LuTarget
+  return <Icon size={size} />
+}
 
 // Study-path view: choose a course (curated or per-domain) and work through its
 // ordered concepts, checking each off (persisted) and jumping to its note.
@@ -55,7 +70,7 @@ export function PathView({ nodes, edges, nodesById }: {
     const p = trackProgress(t, studied)
     return (
       <button key={t.id} className="path-track" data-active={t.id === selectedId} onClick={() => pickTrack(t.id)}>
-        <span className="path-track-icon">{t.icon}</span>
+        <span className="path-track-icon"><TrackIcon track={t} size={16} /></span>
         <span className="path-track-title">{t.title}</span>
         <span className="path-track-prog">{p.done}/{p.total}</span>
       </button>
@@ -74,7 +89,7 @@ export function PathView({ nodes, edges, nodesById }: {
       <div className="path-main">
         <button className="path-back" onClick={() => setMobileDetail(false)}>← 코스 목록</button>
         <div className="path-head">
-          <h2><span className="path-head-icon">{track.icon}</span> {track.title}</h2>
+          <h2><span className="path-head-icon"><TrackIcon track={track} size={20} /></span> {track.title}</h2>
           <p className="path-desc">{track.description}</p>
           <div className="path-bar"><span style={{ width: `${pct}%` }} /></div>
           <div className="path-status">
@@ -83,7 +98,7 @@ export function PathView({ nodes, edges, nodesById }: {
               <button className="path-continue" onClick={() => openNode(nextNode.id)}>
                 이어서: {nextNode.label} <LuArrowRight size={14} />
               </button>
-            ) : <span className="path-done">완료 🎉</span>}
+            ) : <span className="path-done"><LuCircleCheck size={15} /> 완료</span>}
           </div>
         </div>
 

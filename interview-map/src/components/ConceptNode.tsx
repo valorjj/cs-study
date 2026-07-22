@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { CSSProperties } from 'react'
 import type { GraphNode } from '../graph/types'
 import { domainColor } from '../styles/theme'
+import { LuCheck } from 'react-icons/lu'
 import { NodeIcon } from './NodeIcon'
 import './nodes.css'
 
@@ -12,7 +13,7 @@ export function ConceptNode({ data }: NodeProps) {
   return (
     <div className="km-node km-concept" style={{ '--c': color } as CSSProperties}>
       <Handle type="target" position={Position.Top} className="km-handle" />
-      {d.studied && <span className="km-check" aria-label="완료">✓</span>}
+      {d.studied && <span className="km-check" aria-label="완료"><LuCheck size={12} strokeWidth={3} /></span>}
       <span className="km-icon"><NodeIcon id={node.id} domain={node.domain} size={20} /></span>
       <span className="km-label">{node.label}</span>
       {d.hasChildren && (

@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import type { ReactNode } from 'react'
-import { LuMap, LuBrain, LuRoute, LuArrowRight } from 'react-icons/lu'
+import { LuMap, LuBrain, LuRoute, LuArrowRight, LuRepeat } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import type { ViewMode } from '../store/graphStore'
 import { useNotePool } from '../hooks/useNotePool'
@@ -46,7 +46,7 @@ export function HomeView({ nodes }: { nodes: GraphNode[] }) {
             <span className="home-card-title">{c.title}</span>
             <span className="home-card-desc">{c.desc}</span>
             {c.target === 'quiz' && due > 0 && (
-              <span className="home-card-badge">🔁 오늘 {due}개</span>
+              <span className="home-card-badge"><LuRepeat size={12} /> 오늘 {due}개</span>
             )}
             <span className="home-card-cta">{c.cta} <LuArrowRight size={14} /></span>
           </button>

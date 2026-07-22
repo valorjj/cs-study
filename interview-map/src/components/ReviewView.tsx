@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { LuArrowRight } from 'react-icons/lu'
+import { LuArrowRight, LuCircleCheck } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { extractQuizItems, weakDomains } from '../lib/quiz'
 import { buildReviewDeck } from '../lib/srs'
@@ -65,7 +65,7 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
     return (
       <div className="review">
         <div className="review-empty">
-          <p className="review-empty-title">{done ? '오늘 복습 완료 🎉' : '복습할 카드가 아직 없어요'}</p>
+          <p className="review-empty-title">{done ? <><LuCircleCheck size={18} /> 오늘 복습 완료</> : '복습할 카드가 아직 없어요'}</p>
           {upcoming.length > 0
             ? <p className="review-dim">다음 복습: {upcoming[0]}</p>
             : <p className="review-dim">플래시카드를 몇 개 풀면 복습 일정이 생겨요.</p>}

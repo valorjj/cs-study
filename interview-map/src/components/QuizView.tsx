@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
-import { LuArrowRight, LuShuffle } from 'react-icons/lu'
+import { LuArrowRight, LuShuffle, LuTarget } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import { extractQuizItems, seededShuffle, hashSeed, weakDomains } from '../lib/quiz'
 import { useNotePool } from '../hooks/useNotePool'
@@ -74,7 +74,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
 
       {weak.length > 0 && (
         <div className="quiz-weak">
-          <span className="quiz-weak-label">🎯 약점 보강</span>
+          <span className="quiz-weak-label"><LuTarget size={13} /> 약점 보강</span>
           {weak.map((w) => (
             <button key={w.domain} className="quiz-weak-chip" onClick={() => requestTrack(`domain:${w.domain}`)}>
               {domainLabel.get(w.domain) ?? w.domain} <b>{w.correct}/{w.seen}</b>

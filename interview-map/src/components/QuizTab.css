@@ -10,6 +10,7 @@
   padding: 4px; border-radius: 999px; background: var(--bg-elev); border: 1px solid var(--border);
 }
 .quiztab-mode {
+  display: inline-flex; align-items: center; gap: 6px;
   font-size: 13px; font-weight: 600; padding: 6px 16px; border-radius: 999px;
   cursor: pointer; border: none; background: transparent; color: var(--text-dim);
 }

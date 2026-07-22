@@ -43,7 +43,7 @@
 }
 
 .quiz-weak { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 680px; }
-.quiz-weak-label { font-size: 12px; color: var(--text-dim); font-weight: 700; }
+.quiz-weak-label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-dim); font-weight: 700; }
 .quiz-weak-chip { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg));
   color: var(--text-strong); border-radius: 999px; padding: 4px 11px; cursor: pointer; font-size: 12px; }
 .quiz-weak-chip:hover { background: color-mix(in srgb, var(--accent) 22%, var(--bg)); }
