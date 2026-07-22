@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { DEFAULT_THEME } from '../styles/themes'
 import { review, type SrsState } from '../lib/srs'
-import { QuizSettings, DEFAULT_QUIZ_SETTINGS, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
+import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path'
 
