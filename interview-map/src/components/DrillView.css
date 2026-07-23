@@ -45,3 +45,25 @@
   .drill { padding: 14px 14px; }
   .drill-q { font-size: 15px; }
 }
+
+.drill-mode { display: flex; gap: 6px; margin: 8px 0 4px; }
+.drill-modebtn { padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border, #333);
+  background: transparent; color: inherit; cursor: pointer; font-size: 13px; }
+.drill-modebtn[data-active="true"] { background: var(--c); color: #fff; border-color: var(--c); }
+.drill-modebtn:disabled { opacity: .45; cursor: not-allowed; }
+.drill-ai { margin-top: 10px; }
+.drill-input { width: 100%; box-sizing: border-box; resize: vertical; border-radius: 10px;
+  border: 1px solid var(--border, #333); background: rgba(255,255,255,.03); color: inherit;
+  padding: 10px; font: inherit; }
+.drill-grade { margin-top: 8px; padding: 8px 16px; border: none; border-radius: 10px;
+  background: var(--c); color: #fff; cursor: pointer; }
+.drill-grade:disabled { opacity: .5; cursor: not-allowed; }
+.drill-err { color: #f87171; font-size: 13px; margin-top: 6px; }
+.drill-scored { margin-top: 10px; padding: 12px; border-radius: 12px; border: 1px solid var(--border, #333); }
+.drill-scored[data-band="good"] { border-color: #34d399; }
+.drill-scored[data-band="mid"] { border-color: #fbbf24; }
+.drill-scored[data-band="low"] { border-color: #f87171; }
+.drill-score { font-size: 15px; margin-bottom: 4px; }
+.drill-score b { font-size: 20px; }
+.drill-fb { margin: 4px 0; }
+.drill-missing { margin: 6px 0 0; padding-left: 18px; font-size: 13px; opacity: .85; }
