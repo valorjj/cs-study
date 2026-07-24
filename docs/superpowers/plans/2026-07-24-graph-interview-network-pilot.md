@@ -103,8 +103,9 @@ describe('nextNode', () => {
     const st = { path: ['net-http'], visited: ['net-http'], misses: 0 }
     expect(nextNode(sub, st, 5)).toBe('net-httpver')
   })
-  it('score>=4: 자식 다 방문 시 crosslink 이웃', () => {
-    const st = { path: ['net-http', 'net-httpver'], visited: ['net-http', 'net-httpver'], misses: 0 }
+  it('score>=4: 현재 노드의 자식 소진 시 현재의 crosslink', () => {
+    // cur=net-http, 자식 net-httpver는 방문됨 → net-http의 crosslink net-cors
+    const st = { path: ['net-http'], visited: ['net-http', 'net-httpver'], misses: 0 }
     expect(nextNode(sub, st, 4)).toBe('net-cors')
   })
   it('score==3: 같은 부모 형제 우선', () => {
@@ -115,6 +116,15 @@ describe('nextNode', () => {
     const st = { path: ['net-httpver'], visited: ['net-httpver'], misses: 1 }
     // net-httpver의 형제 없음 → 부모(net-http) 미방문이면 그쪽
     expect(nextNode(sub, st, 2)).toBe('net-http')
+  })
+  it('막다른 리프 → 백트래킹으로 다른 가지 계속 (path>=3)', () => {
+    // cur=net-httpver 막힘(자식·crosslink 없음) → 경로 거슬러: net-http(소진) → network의 미방문 자식 net-tcp
+    const st = {
+      path: ['network', 'net-http', 'net-httpver'],
+      visited: ['network', 'net-http', 'net-httpver', 'net-cors'],
+      misses: 0,
+    }
+    expect(nextNode(sub, st, 5)).toBe('net-tcp')
   })
   it('갈 곳 없으면 null', () => {
     const all = ['network', 'net-http', 'net-httpver', 'net-cors', 'net-tcp', 'net-handshake']
@@ -188,19 +198,35 @@ export function isOver(state: WalkState): boolean {
   return state.misses >= MISS_BUDGET
 }
 
-// 현재 노드 = path의 마지막. 점수로 다음 미방문 노드를 결정적으로 고른다.
+// 현재 노드가 막다른 길일 때: 지금까지 방문한 경로를 "최근 방문 순"으로 거슬러 올라가며
+// 미방문 이웃(자식→crosslink)이 있는 첫 노드로 되돌아가 면접을 계속한다(백트래킹).
+// 이래야 리프에서 2~3노드 만에 끝나지 않고 "끝없는 심층 세션"이 된다.
+function backtrack(sub: SubGraph, state: WalkState): string | null {
+  const fresh = (ids: string[]) => ids.find((id) => !has(state, id)) ?? null
+  for (let i = state.path.length - 1; i >= 0; i--) {
+    const n = state.path[i]
+    const cand = fresh([...childrenOf(sub, n), ...crosslinksOf(sub, n)])
+    if (cand) return cand
+  }
+  return null
+}
+
+// 현재 노드 = path의 마지막. 점수로 현재 노드 기준 우선 후보를 고르고(primary),
+// 현재가 막히면 backtrack으로 방문 경로의 미방문 이웃을 잇는다. 없으면 null.
 export function nextNode(sub: SubGraph, state: WalkState, score: number): string | null {
   const cur = state.path[state.path.length - 1]
   if (!cur) return null
   const fresh = (ids: string[]) => ids.find((id) => !has(state, id)) ?? null
+  let primary: string | null
   if (score >= 4) {
-    return fresh(childrenOf(sub, cur)) ?? fresh(crosslinksOf(sub, cur)) ?? fresh(siblingsOf(sub, cur)) ?? null
+    primary = fresh(childrenOf(sub, cur)) ?? fresh(crosslinksOf(sub, cur)) ?? fresh(siblingsOf(sub, cur))
+  } else if (score === 3) {
+    primary = fresh(siblingsOf(sub, cur)) ?? fresh(childrenOf(sub, cur))
+  } else {
+    // score <= 2: 형제 → 부모로 물러남
+    primary = fresh(siblingsOf(sub, cur)) ?? fresh(parentsOf(sub, cur))
   }
-  if (score === 3) {
-    return fresh(siblingsOf(sub, cur)) ?? fresh(childrenOf(sub, cur)) ?? null
-  }
-  // score <= 2: 형제 → 부모로 물러남
-  return fresh(siblingsOf(sub, cur)) ?? fresh(parentsOf(sub, cur)) ?? null
+  return primary ?? backtrack(sub, state)
 }
 ```
 
