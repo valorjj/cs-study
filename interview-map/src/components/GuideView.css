@@ -1,0 +1,66 @@
+.guide {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+  box-sizing: border-box;
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+.guide h1 {
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+
+.guide-lead {
+  color: var(--text-dim);
+  font-size: 15px;
+  margin: 0 0 32px;
+}
+
+.guide section {
+  margin: 0 0 36px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.guide section:last-child {
+  border-bottom: none;
+}
+
+.guide h2 {
+  font-size: 17px;
+  margin: 0 0 10px;
+}
+
+.guide p {
+  font-size: 14px;
+  margin: 0 0 14px;
+}
+
+.guide ul {
+  font-size: 14px;
+  padding-left: 20px;
+  margin: 0;
+}
+
+.guide li {
+  margin: 0 0 8px;
+}
+
+.guide code {
+  background: var(--bg-elev);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+}
+
+.guide-diagram {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-elev);
+}
