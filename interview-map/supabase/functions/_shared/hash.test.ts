@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { noteHash } from './noteHash'
+import { noteHash } from './hash.ts'
 
 describe('noteHash', () => {
   it('is deterministic', () => { expect(noteHash('포트는 종단점')).toBe(noteHash('포트는 종단점')) })

@@ -6,12 +6,12 @@ export type GenerateOutcome =
   | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'gen_error' | 'network' }
 
 export async function generateQuestion(
-  nodeId: string, noteText: string, rung: number, noteHash: string,
+  nodeId: string, noteText: string, rung: number,
 ): Promise<GenerateOutcome> {
   if (!supabase) return { ok: false, reason: 'unauthenticated' }
   try {
     const { data, error } = await supabase.functions.invoke('generate', {
-      body: { nodeId, rung, noteText, noteHash },
+      body: { nodeId, rung, noteText },
     })
     if (error) {
       const status = (error as { context?: Response }).context?.status

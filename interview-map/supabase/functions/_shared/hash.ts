@@ -1,5 +1,4 @@
-// 노트 텍스트의 짧은 결정적 해시(FNV-1a 32bit). 캐시 무효화 키 용도라 크립토 강도 불필요.
-// 노트가 바뀌면 해시가 바뀌어 question_cache가 자동으로 새 항목을 만든다.
+// 노트 텍스트의 결정적 짧은 해시(FNV-1a 32bit). 질문 캐시 무효화 키. 순수·import 0(Deno·Vitest 공용).
 export function noteHash(text: string): string {
   let h = 0x811c9dc5
   for (let i = 0; i < text.length; i++) {
