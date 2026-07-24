@@ -14,6 +14,10 @@ describe('advanceLadder', () => {
     const a = advanceLadder({ rung: 2, attempts: 0, reached: 1 }, 3)
     expect(a).toEqual({ kind: 'climb', state: { rung: 3, attempts: 0, reached: 2 } })
   })
+  it('climbs from rung 3 to 4', () => {
+    const a = advanceLadder({ rung: 3, attempts: 0, reached: 2 }, 4)
+    expect(a).toEqual({ kind: 'climb', state: { rung: 4, attempts: 0, reached: 3 } })
+  })
   it('score<=2 first attempt offers hint (one retry)', () => {
     const a = advanceLadder({ rung: 2, attempts: 0, reached: 1 }, 1)
     expect(a).toEqual({ kind: 'offer-hint', state: { rung: 2, attempts: 1, reached: 1 } })

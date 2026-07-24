@@ -7,7 +7,6 @@ import type { GraphData, GraphNode } from '../graph/types'
 import { networkSubgraph, pickStart, nextNode, isOver, type WalkState } from '../lib/graphWalk'
 import { generateQuestion } from '../lib/generate'
 import { getHint } from '../lib/hint'
-import { noteHash } from '../lib/noteHash'
 import { START_LADDER, advanceLadder, ladderSignal, applySkip, type LadderState } from '../lib/ladder'
 import { gradeAnswer, type ScoreResult } from '../lib/scoring'
 import { recentUsage, type Usage } from '../lib/usageMeter'
@@ -46,6 +45,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
   const [hint, setHint] = useState<string | null>(null)
   const [hintOffered, setHintOffered] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [deadEnd, setDeadEnd] = useState<'skip' | 'error' | null>(null)
   const [finished, setFinished] = useState(false)
   const [usage, setUsage] = useState<Usage | null>(null)
 
@@ -61,17 +61,18 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
 
   // 특정 노드의 특정 계단 질문을 로드. skip이면 콜백으로 알림.
   const loadRung = async (nodeId: string, rung: number): Promise<'ok' | 'skip' | 'error'> => {
-    setBusy(true); setErr(null); setScored(null); setDraft(''); setHint(null); setHintOffered(false); setQa(null)
+    setBusy(true); setErr(null); setDeadEnd(null); setScored(null); setDraft(''); setHint(null); setHintOffered(false); setQa(null)
     const note = noteByNode.get(nodeId) ?? ''
-    const out = await generateQuestion(nodeId, note, rung, noteHash(note))
+    const out = await generateQuestion(nodeId, note, rung)
     setBusy(false)
     if (!out.ok) {
       setErr(out.reason === 'rate_limited' ? '오늘 AI 한도를 다 썼어요.'
         : out.reason === 'unauthenticated' ? '로그인이 필요합니다.'
         : '질문 생성 실패. 다시 시도하세요.')
+      setDeadEnd('error')
       return 'error'
     }
-    if (out.skip) return 'skip'
+    if (out.skip) { setDeadEnd('skip'); return 'skip' }
     setQa({ question: out.question, reference: out.reference, grounded: out.grounded })
     return 'ok'
   }
@@ -128,7 +129,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
     if (!scored || !cur) return
     const act = advanceLadder(ladder, scored.score)
     if (act.kind === 'offer-hint') {
-      setLadder(act.state); setScored(null); setDraft(''); setHintOffered(true)
+      setLadder(act.state); setScored(null); setHintOffered(true)
       return
     }
     if (act.kind === 'climb') {
@@ -177,8 +178,10 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
               {err && <p className="gi-err">{err}</p>}
               {!qa && !busy && !finished && err && (
                 <div className="gi-actions">
-                  <button className="gi-grade" onClick={() => { if (cur) loadRung(cur, ladder.rung) }}>다시 시도</button>
-                  <button className="gi-next" onClick={() => goNextNode(0, true)}>다음 개념 →</button>
+                  {deadEnd === 'error' && (
+                    <button className="gi-grade" disabled={busy} onClick={() => { if (cur) loadRung(cur, ladder.rung) }}>다시 시도</button>
+                  )}
+                  <button className="gi-next" disabled={busy} onClick={() => goNextNode(0, true)}>다음 개념 →</button>
                 </div>
               )}
               {qa && !scored && (
