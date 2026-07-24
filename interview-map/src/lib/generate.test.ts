@@ -22,4 +22,20 @@ describe('generateQuestion', () => {
     invoke.mockResolvedValue({ data: null, error: { context: { status: 429 } } })
     expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'rate_limited' })
   })
+  it('maps 401 to unauthenticated', async () => {
+    invoke.mockResolvedValue({ data: null, error: { context: { status: 401 } } })
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'unauthenticated' })
+  })
+  it('maps a generic error to gen_error', async () => {
+    invoke.mockResolvedValue({ data: null, error: { context: { status: 500 } } })
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'gen_error' })
+  })
+  it('gen_error when question/reference missing', async () => {
+    invoke.mockResolvedValue({ data: { question: '', reference: '' }, error: null })
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'gen_error' })
+  })
+  it('network reason when invoke throws', async () => {
+    invoke.mockRejectedValueOnce('network error')
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'network' })
+  })
 })
