@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+  <style>
+    .start { fill: #ede9fe; stroke: #6d28d9; stroke-width: 2; }
+    .branch { fill: #dbeafe; stroke: #1d4ed8; stroke-width: 2; }
+    .end { fill: #fee2e2; stroke: #b91c1c; stroke-width: 2; }
+    .title { font-size: 14px; font-weight: 700; }
+    .sub { font-size: 12px; }
+    .arrow { stroke: #4b5563; stroke-width: 2; fill: none; marker-end: url(#ah4); }
+    .cond { font-size: 12px; font-weight: 700; fill: #1e3a8a; }
+  </style>
+  <defs>
+    <marker id="ah4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#4b5563" />
+    </marker>
+  </defs>
+  <rect width="1000" height="560" fill="#ffffff"/>
+  <text x="500" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">노드 순회 플로우</text>
+
+  <!-- start -->
+  <rect class="start" x="400" y="55" width="200" height="60" rx="10"/>
+  <text class="title" x="500" y="82" text-anchor="middle" fill="#5b21b6">노드완료</text>
+  <text class="sub" x="500" y="100" text-anchor="middle" fill="#5b21b6">reached</text>
+
+  <path class="arrow" d="M500,115 L500,150"/>
+
+  <!-- decision diamond simplified as branch box with 3 outputs -->
+  <polygon class="branch" points="500,150 620,210 500,270 380,210" fill="#dbeafe" stroke="#1d4ed8" stroke-width="2"/>
+  <text class="title" x="500" y="205" text-anchor="middle" fill="#1e3a8a">자식/crosslink</text>
+  <text class="sub" x="500" y="222" text-anchor="middle" fill="#1e3a8a">개수?</text>
+
+  <!-- >=4 deeper -->
+  <path class="arrow" d="M620,210 L800,210"/>
+  <text class="cond" x="710" y="198" text-anchor="middle">≥4개</text>
+  <rect class="branch" x="800" y="180" width="170" height="60" rx="10"/>
+  <text class="title" x="885" y="205" text-anchor="middle">더 깊이</text>
+  <text class="sub" x="885" y="223" text-anchor="middle">(자식/crosslink)</text>
+
+  <!-- 1~3 sibling -->
+  <path class="arrow" d="M500,270 L500,330"/>
+  <text class="cond" x="530" y="305" text-anchor="middle">1~3개</text>
+  <rect class="branch" x="400" y="330" width="200" height="60" rx="10"/>
+  <text class="title" x="500" y="355" text-anchor="middle">형제(옆)</text>
+  <text class="sub" x="500" y="373" text-anchor="middle">로 이동</text>
+
+  <!-- 0 parent -->
+  <path class="arrow" d="M380,210 L200,210"/>
+  <text class="cond" x="290" y="198" text-anchor="middle">0개</text>
+  <rect class="branch" x="30" y="180" width="170" height="70" rx="10"/>
+  <text class="title" x="115" y="205" text-anchor="middle">부모(물러남)</text>
+  <text class="sub" x="115" y="223" text-anchor="middle">miss +1</text>
+
+  <!-- both loop back to node completion for next round -->
+  <path class="arrow" d="M885,240 Q885,420 600,440"/>
+  <path class="arrow" d="M500,390 Q500,440 470,440"/>
+  <path class="arrow" d="M115,250 Q115,440 380,440"/>
+
+  <!-- end condition -->
+  <rect class="end" x="330" y="440" width="340" height="70" rx="10"/>
+  <text class="title" x="500" y="465" text-anchor="middle" fill="#7f1d1d">종료조건</text>
+  <text class="sub" x="500" y="483" text-anchor="middle" fill="#7f1d1d">miss 2 / 8노드 / 중단</text>
+</svg>

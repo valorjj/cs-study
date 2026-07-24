@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 460" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+  <style>
+    .lvl { fill: #e0f2fe; stroke: #0369a1; stroke-width: 2; }
+    .done { fill: #ede9fe; stroke: #6d28d9; stroke-width: 2; }
+    .title { font-size: 15px; font-weight: 700; fill: #0c4a6e; }
+    .sub { font-size: 12px; fill: #075985; }
+    .up { fill: #15803d; font-size: 12px; font-weight: 700; }
+    .down { fill: #b91c1c; font-size: 12px; font-weight: 700; }
+    .arrow { stroke: #6366f1; stroke-width: 2; fill: none; marker-end: url(#ah3); }
+  </style>
+  <defs>
+    <marker id="ah3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#6366f1" />
+    </marker>
+  </defs>
+  <rect width="1180" height="460" fill="#ffffff"/>
+  <text x="590" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">깊이 사다리 상태도</text>
+
+  <!-- L1 -->
+  <rect class="lvl" x="30" y="120" width="180" height="80" rx="10"/>
+  <text class="title" x="120" y="165" text-anchor="middle">L1 정의</text>
+
+  <!-- L2 -->
+  <rect class="lvl" x="290" y="120" width="180" height="80" rx="10"/>
+  <text class="title" x="380" y="165" text-anchor="middle">L2 실무</text>
+
+  <!-- L3 -->
+  <rect class="lvl" x="550" y="120" width="180" height="80" rx="10"/>
+  <text class="title" x="640" y="165" text-anchor="middle">L3 내부동작</text>
+
+  <!-- L4 -->
+  <rect class="lvl" x="810" y="120" width="180" height="80" rx="10"/>
+  <text class="title" x="900" y="165" text-anchor="middle">L4 엣지</text>
+
+  <!-- 상승 화살표 -->
+  <path class="arrow" d="M210,150 L288,150"/>
+  <text class="up" x="249" y="138" text-anchor="middle">score≥3 상승</text>
+  <path class="arrow" d="M470,150 L548,150"/>
+  <text class="up" x="509" y="138" text-anchor="middle">score≥3 상승</text>
+  <path class="arrow" d="M730,150 L808,150"/>
+  <text class="up" x="769" y="138" text-anchor="middle">score≥3 상승</text>
+
+  <!-- 각 레벨 하단: score<=2 -> 힌트 제안 -> 재시도 -> 여전히 낮으면 노드완료 -->
+  <rect class="lvl" x="290" y="280" width="180" height="60" rx="10"/>
+  <text class="sub" x="380" y="305" text-anchor="middle">힌트 제안</text>
+  <text class="sub" x="380" y="322" text-anchor="middle">→ 재시도</text>
+
+  <path class="arrow" d="M120,200 L120,310 L288,310"/>
+  <text class="down" x="150" y="260">score≤2</text>
+  <path class="arrow" d="M380,200 L380,278"/>
+  <path class="arrow" d="M640,200 L640,310 L472,310"/>
+  <text class="down" x="600" y="260">score≤2</text>
+  <path class="arrow" d="M900,200 L900,310 L472,320"/>
+  <text class="down" x="850" y="260">score≤2</text>
+
+  <!-- 노드완료 -->
+  <rect class="done" x="530" y="380" width="220" height="60" rx="10"/>
+  <text class="title" x="640" y="408" text-anchor="middle" fill="#5b21b6">노드완료</text>
+  <text class="sub" x="640" y="426" text-anchor="middle" fill="#5b21b6">reached 기록</text>
+
+  <path class="arrow" d="M380,340 Q 480,400 528,410"/>
+  <text class="down" x="420" y="380" font-size="11">여전히 낮으면</text>
+</svg>

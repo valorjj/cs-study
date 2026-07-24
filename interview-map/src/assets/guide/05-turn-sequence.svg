@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1150 900" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+  <style>
+    .actor { fill: #eef2ff; stroke: #4338ca; stroke-width: 2; }
+    .actorText { font-size: 14px; font-weight: 700; fill: #1e1b4b; }
+    .life { stroke: #a5b4fc; stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .msg { stroke: #374151; stroke-width: 1.6; fill: none; marker-end: url(#ah5); }
+    .msgd { stroke: #374151; stroke-width: 1.6; fill: none; stroke-dasharray: 5 4; marker-end: url(#ah5); }
+    .msgText { font-size: 12px; fill: #111827; }
+    .note { fill: #fef9c3; stroke: #ca8a04; stroke-width: 1.5; }
+    .noteText { font-size: 11.5px; fill: #713f12; }
+    .altBox { fill: none; stroke: #9ca3af; stroke-width: 1.2; stroke-dasharray: 2 2; }
+    .altLabel { font-size: 11px; font-weight: 700; fill: #4b5563; }
+  </style>
+  <defs>
+    <marker id="ah5" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#374151" />
+    </marker>
+  </defs>
+  <rect width="1150" height="900" fill="#ffffff"/>
+  <text x="575" y="28" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">한 턴 시퀀스: 질문 → 답변 → 채점 → 다음</text>
+
+  <!-- actors x positions -->
+  <!-- 사용자:80 뷰:270 generate:480 Gemini:690 grade:880 advanceLadder:1080 -->
+  <g>
+    <rect class="actor" x="20" y="55" width="120" height="40" rx="8"/>
+    <text class="actorText" x="80" y="80" text-anchor="middle">사용자</text>
+    <rect class="actor" x="210" y="55" width="120" height="40" rx="8"/>
+    <text class="actorText" x="270" y="80" text-anchor="middle">뷰</text>
+    <rect class="actor" x="410" y="55" width="140" height="40" rx="8"/>
+    <text class="actorText" x="480" y="80" text-anchor="middle">generate</text>
+    <rect class="actor" x="620" y="55" width="140" height="40" rx="8"/>
+    <text class="actorText" x="690" y="80" text-anchor="middle">Gemini</text>
+    <rect class="actor" x="820" y="55" width="120" height="40" rx="8"/>
+    <text class="actorText" x="880" y="80" text-anchor="middle">grade</text>
+    <rect class="actor" x="990" y="55" width="140" height="40" rx="8"/>
+    <text class="actorText" x="1060" y="80" text-anchor="middle">advanceLadder</text>
+  </g>
+
+  <!-- lifelines -->
+  <line class="life" x1="80" y1="95" x2="80" y2="860"/>
+  <line class="life" x1="270" y1="95" x2="270" y2="860"/>
+  <line class="life" x1="480" y1="95" x2="480" y2="860"/>
+  <line class="life" x1="690" y1="95" x2="690" y2="860"/>
+  <line class="life" x1="880" y1="95" x2="880" y2="860"/>
+  <line class="life" x1="1060" y1="95" x2="1060" y2="860"/>
+
+  <!-- 1 사용자->뷰 질문요청 트리거(진입) -->
+  <path class="msg" d="M80,120 L270,120"/>
+  <text class="msgText" x="175" y="112" text-anchor="middle">노드 진입</text>
+
+  <!-- 2 뷰->generate 질문요청 -->
+  <path class="msg" d="M270,150 L480,150"/>
+  <text class="msgText" x="375" y="142" text-anchor="middle">질문요청</text>
+
+  <!-- alt box: 캐시 조회 -->
+  <rect class="altBox" x="440" y="170" width="290" height="140"/>
+  <text class="altLabel" x="450" y="185">alt 캐시 조회</text>
+
+  <text class="msgText" x="600" y="205" text-anchor="middle" font-style="italic">[히트] 즉시 반환</text>
+  <path class="msg" d="M480,220 L270,220"/>
+  <text class="msgText" x="375" y="212" text-anchor="middle"></text>
+
+  <text class="msgText" x="600" y="245" text-anchor="middle" font-style="italic">[미스] reserve → Gemini → upsert</text>
+  <path class="msg" d="M480,260 L690,260"/>
+  <text class="msgText" x="585" y="252" text-anchor="middle">reserve 후 요청</text>
+  <path class="msg" d="M690,285 L480,285"/>
+  <text class="msgText" x="585" y="278" text-anchor="middle">응답→upsert</text>
+
+  <!-- generate -> 뷰 질문 반환 -->
+  <path class="msg" d="M480,335 L270,335"/>
+  <text class="msgText" x="375" y="327" text-anchor="middle">질문 반환</text>
+
+  <!-- 뷰 -> 사용자 질문 표시 -->
+  <path class="msg" d="M270,365 L80,365"/>
+  <text class="msgText" x="175" y="357" text-anchor="middle">질문 표시</text>
+
+  <!-- 사용자 -> 뷰 답변 -->
+  <path class="msg" d="M80,400 L270,400"/>
+  <text class="msgText" x="175" y="392" text-anchor="middle">답변 입력</text>
+
+  <!-- 뷰 -> grade 채점요청 -->
+  <path class="msg" d="M270,430 L880,430"/>
+  <text class="msgText" x="575" y="422" text-anchor="middle">채점요청</text>
+
+  <!-- grade -> grade_events 로깅 (note) -->
+  <rect class="note" x="800" y="450" width="220" height="40" rx="6"/>
+  <text class="noteText" x="910" y="474" text-anchor="middle">grade_events 로깅</text>
+
+  <!-- grade -> 뷰 결과 -->
+  <path class="msg" d="M880,510 L270,510"/>
+  <text class="msgText" x="575" y="502" text-anchor="middle">score 반환</text>
+
+  <!-- alt: score낮으면 hint -->
+  <rect class="altBox" x="240" y="530" width="290" height="90"/>
+  <text class="altLabel" x="250" y="545">alt score 낮음</text>
+  <path class="msg" d="M270,570 L480,570"/>
+  <text class="msgText" x="375" y="562" text-anchor="middle">힌트요청(hint)</text>
+  <path class="msg" d="M480,600 L270,600"/>
+  <text class="msgText" x="375" y="592" text-anchor="middle">힌트 반환</text>
+
+  <!-- 뷰 -> advanceLadder -->
+  <path class="msg" d="M270,650 L1060,650"/>
+  <text class="msgText" x="665" y="642" text-anchor="middle">advanceLadder(score)</text>
+
+  <!-- advanceLadder -> 뷰 다음 -->
+  <path class="msg" d="M1060,690 L270,690"/>
+  <text class="msgText" x="665" y="682" text-anchor="middle">다음 레벨/노드</text>
+
+  <!-- 뷰 -> 사용자 다음 -->
+  <path class="msg" d="M270,730 L80,730"/>
+  <text class="msgText" x="175" y="722" text-anchor="middle">다음 질문 표시</text>
+</svg>

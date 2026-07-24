@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 360" font-family="'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+  <style>
+    .box { fill: #eef2ff; stroke: #4338ca; stroke-width: 2; rx: 12; }
+    .title { font-size: 16px; font-weight: 700; fill: #1e1b4b; }
+    .sub { font-size: 12px; fill: #3730a3; }
+    .arrow-label { font-size: 12px; fill: #b91c1c; font-weight: 600; }
+    .arrow { stroke: #6366f1; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    .arrow-back { stroke: #6366f1; stroke-width: 2; fill: none; marker-end: url(#arrowhead); stroke-dasharray: 6 4; }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#6366f1" />
+    </marker>
+  </defs>
+
+  <rect width="1180" height="360" fill="#ffffff"/>
+
+  <!-- 브라우저 -->
+  <rect class="box" x="20" y="120" width="240" height="120" rx="12"/>
+  <text class="title" x="140" y="150" text-anchor="middle">브라우저</text>
+  <text class="sub" x="140" y="175" text-anchor="middle">순회 · 사다리</text>
+  <text class="sub" x="140" y="193" text-anchor="middle">noteHash</text>
+  <text class="sub" x="140" y="211" text-anchor="middle">캐시조회 트리거</text>
+
+  <!-- Edge Functions -->
+  <rect class="box" x="330" y="120" width="240" height="120" rx="12"/>
+  <text class="title" x="450" y="150" text-anchor="middle">Edge Functions</text>
+  <text class="sub" x="450" y="175" text-anchor="middle">generate</text>
+  <text class="sub" x="450" y="193" text-anchor="middle">grade</text>
+  <text class="sub" x="450" y="211" text-anchor="middle">hint</text>
+
+  <!-- Postgres -->
+  <rect class="box" x="640" y="90" width="270" height="180" rx="12"/>
+  <text class="title" x="775" y="120" text-anchor="middle">Postgres</text>
+  <text class="sub" x="775" y="150" text-anchor="middle">question_cache</text>
+  <text class="sub" x="775" y="172" text-anchor="middle">grade_usage</text>
+  <text class="sub" x="775" y="194" text-anchor="middle">grade_events</text>
+
+  <!-- Gemini flash -->
+  <rect class="box" x="950" y="120" width="210" height="120" rx="12"/>
+  <text class="title" x="1055" y="150" text-anchor="middle">Gemini flash</text>
+  <text class="sub" x="1055" y="180" text-anchor="middle">LLM 질문/채점</text>
+
+  <!-- arrows: browser <-> edge functions -->
+  <path class="arrow" d="M260,165 L328,165"/>
+  <text class="arrow-label" x="294" y="155" text-anchor="middle">JWT</text>
+  <path class="arrow-back" d="M328,195 L260,195"/>
+
+  <!-- arrows: edge functions <-> postgres -->
+  <path class="arrow" d="M572,155 L638,155"/>
+  <text class="arrow-label" x="605" y="122" text-anchor="middle" font-size="11">캐시 히트</text>
+  <text class="arrow-label" x="605" y="136" text-anchor="middle" font-size="11">→LLM 스킵</text>
+  <path class="arrow-back" d="M638,195 L572,195"/>
+  <text class="arrow-label" x="605" y="218" text-anchor="middle" font-size="11">reserve/refund</text>
+
+  <!-- arrows: edge functions <-> gemini (via postgres box, straight underneath) -->
+  <path class="arrow" d="M580,240 Q 760,300 948,190" />
+  <text class="arrow-label" x="760" y="300" text-anchor="middle">캐시 미스 시 호출</text>
+  <path class="arrow-back" d="M948,220 Q 760,320 580,260" />
+
+  <text x="590" y="30" text-anchor="middle" font-size="20" font-weight="700" fill="#111827">아키텍처: 브라우저 ↔ Edge Functions ↔ Postgres ↔ Gemini flash</text>
+</svg>
