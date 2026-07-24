@@ -1,4 +1,6 @@
-// 노트 근거로 "깊이 계단(rung)"에 맞는 면접 질문 1개 + 짧은 모범답안을 생성. 순수·import 0.
+// 노트 근거로 "깊이 계단(rung)"에 맞는 면접 질문 1개 + 짧은 모범답안을 생성. 순수·import 0(형제 _shared/*.ts만 예외).
+import { neutralizeDelimiters } from './sanitize.ts'
+
 export interface GenMsg { role: 'system' | 'user' | 'assistant'; content: string }
 
 // 범용 4계단: 얕은→깊은. 모든 노드에 공통 적용.
@@ -29,7 +31,7 @@ export function buildGenerateMessages(note: string, rung: number): GenMsg[] {
     { role: 'system', content: GEN_SYSTEM },
     {
       role: 'user',
-      content: `깊이 단계: L${r.level} (${r.intent}) — ${r.ask}\n\n[노트]\n<<<NOTE>>>\n${note}\n<<<END>>>`,
+      content: `깊이 단계: L${r.level} (${r.intent}) — ${r.ask}\n\n[노트]\n<<<NOTE>>>\n${neutralizeDelimiters(note)}\n<<<END>>>`,
     },
   ]
 }

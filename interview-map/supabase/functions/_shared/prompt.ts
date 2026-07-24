@@ -1,5 +1,6 @@
 // 검증된 채점 프롬프트(experiments/slm-scoring/score.mjs 이식). 인젝션 방어 3중 포함.
-// 외부 import 없음 → Deno Edge Function과 Vitest 양쪽에서 그대로 import 가능.
+// 외부 import 없음(형제 _shared/*.ts만 예외) → Deno Edge Function과 Vitest 양쪽에서 그대로 import 가능.
+import { neutralizeDelimiters } from './sanitize.ts'
 
 export interface ChatMsg { role: 'system' | 'user' | 'assistant'; content: string }
 export interface GradeInput { question: string; reference: string; userAnswer: string }
@@ -38,7 +39,7 @@ JSON 스키마:
 
 export function buildUser(input: GradeInput): string {
   const { question, reference, userAnswer } = input
-  return `[질문]\n${question}\n\n[모범답안]\n${reference}\n\n[응시자 답변]\n<<<ANSWER>>>\n${userAnswer}\n<<<END>>>`
+  return `[질문]\n${question}\n\n[모범답안]\n${reference}\n\n[응시자 답변]\n<<<ANSWER>>>\n${neutralizeDelimiters(userAnswer)}\n<<<END>>>`
 }
 
 // few-shot 앵커는 실제 대화 턴(user→assistant)으로 넣어야 모델이 "복사할 내용"이
