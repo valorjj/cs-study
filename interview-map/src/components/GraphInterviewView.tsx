@@ -61,7 +61,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
 
   // 특정 노드의 특정 계단 질문을 로드. skip이면 콜백으로 알림.
   const loadRung = async (nodeId: string, rung: number): Promise<'ok' | 'skip' | 'error'> => {
-    setBusy(true); setErr(null); setScored(null); setDraft(''); setHint(null); setHintOffered(false)
+    setBusy(true); setErr(null); setScored(null); setDraft(''); setHint(null); setHintOffered(false); setQa(null)
     const note = noteByNode.get(nodeId) ?? ''
     const out = await generateQuestion(nodeId, note, rung, noteHash(note))
     setBusy(false)
@@ -78,7 +78,8 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
 
   const enterNode = async (nodeId: string) => {
     setLadder(START_LADDER)
-    await loadRung(nodeId, 1)
+    const res = await loadRung(nodeId, 1)
+    if (res === 'skip') setErr('이 개념은 지금 다룰 자료가 부족해요. 다음 개념으로 넘어가세요.')
   }
 
   const start = async () => {
@@ -174,6 +175,12 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
                 <p className="gi-q">{qa.question}</p>
               )}
               {err && <p className="gi-err">{err}</p>}
+              {!qa && !busy && !finished && err && (
+                <div className="gi-actions">
+                  <button className="gi-grade" onClick={() => { if (cur) loadRung(cur, ladder.rung) }}>다시 시도</button>
+                  <button className="gi-next" onClick={() => goNextNode(0, true)}>다음 개념 →</button>
+                </div>
+              )}
               {qa && !scored && (
                 <>
                   <textarea className="gi-input" rows={5} value={draft} disabled={busy}
