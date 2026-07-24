@@ -3,7 +3,7 @@ import { DEFAULT_THEME } from '../styles/themes'
 import { review, type SrsState } from '../lib/srs'
 import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
-export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path'
+export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide'
 
 // Study-path progress key. Loaded synchronously at store creation so the first
 // render already has the saved state — avoids an effect-order hydrate/persist

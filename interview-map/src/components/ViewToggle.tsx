@@ -1,4 +1,4 @@
-import { LuHouse, LuMap, LuList, LuBrain, LuRoute } from 'react-icons/lu'
+import { LuHouse, LuMap, LuList, LuBrain, LuRoute, LuBookText } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
 import './ViewToggle.css'
 
@@ -46,6 +46,14 @@ export function ViewToggle() {
         onClick={() => setViewMode('path')}
       >
         <LuRoute size={15} /> 경로
+      </button>
+      <button
+        role="tab"
+        aria-selected={viewMode === 'guide'}
+        data-active={viewMode === 'guide'}
+        onClick={() => setViewMode('guide')}
+      >
+        <LuBookText size={15} /> 가이드
       </button>
     </div>
   )
