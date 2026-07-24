@@ -75,8 +75,8 @@
 
 ## 7. 실시간 사용량 미터
 - generate·grade 성공마다 `grade_events` 1행(kind, created_at).
-- 클라 `usageMeter`가 `select count where created_at > now()-'1 minute'` / `'1 hour'`(RLS own-row) 폴링(예: 10초).
-- UI: `이번 분 N · 이번 시간 M` + 설정 상한(`VITE_GEMINI_RPM`/`RPH` 상수, 없으면 숫자만). 429(Gemini limit) 수신 시 배너.
+- 클라 `usageMeter`가 `select count where created_at > now()-'1 minute'` / `'1 hour'` / `'1 day'`(RLS own-row) 폴링(예: 10초).
+- UI: `이번 분 N · 이번 시간 M · 오늘 D` + 설정 상한(`VITE_GEMINI_RPM`/`RPH`/`RPD` 상수, 없으면 숫자만). 429(Gemini limit) 수신 시 배너.
 - 정직한 한계 명시: "내 호출 기준(= Gemini 부하). Google 잔여 할당량 실시간 조회는 불가."
 
 ## 8. 에러 처리
