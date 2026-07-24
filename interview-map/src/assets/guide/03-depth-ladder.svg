@@ -49,6 +49,7 @@
   <path class="arrow" d="M120,200 L120,310 L288,310"/>
   <text class="down" x="150" y="260">score≤2</text>
   <path class="arrow" d="M380,200 L380,278"/>
+  <text class="down" x="410" y="260">score≤2</text>
   <path class="arrow" d="M640,200 L640,310 L472,310"/>
   <text class="down" x="600" y="260">score≤2</text>
   <path class="arrow" d="M900,200 L900,310 L472,320"/>
