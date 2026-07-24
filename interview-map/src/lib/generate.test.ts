@@ -1,34 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { generateQuestion } from './generate'
-
 const invoke = vi.fn()
 vi.mock('./supabase', () => ({ supabase: { functions: { invoke: (...a: unknown[]) => invoke(...a) } } }))
-function httpErr(status: number) { return { name: 'FunctionsHttpError', context: new Response(null, { status }) } }
+import { generateQuestion } from './generate'
+beforeEach(() => invoke.mockReset())
 
 describe('generateQuestion', () => {
-  beforeEach(() => { invoke.mockReset() })
-  it('성공 → ok + question/reference', async () => {
-    invoke.mockResolvedValue({ data: { question: 'Q?', reference: 'A.' }, error: null })
-    expect(await generateQuestion('net-http', 'note')).toEqual({ ok: true, question: 'Q?', reference: 'A.' })
+  it('passes rung and noteHash in body', async () => {
+    invoke.mockResolvedValue({ data: { question: 'q', reference: 'r', grounded: true }, error: null })
+    await generateQuestion('net-http', 'note', 2, 'abcd1234')
+    expect(invoke).toHaveBeenCalledWith('generate', { body: { nodeId: 'net-http', rung: 2, noteText: 'note', noteHash: 'abcd1234' } })
   })
-  it('429 → rate_limited', async () => {
-    invoke.mockResolvedValue({ data: null, error: httpErr(429) })
-    expect(await generateQuestion('n', 'note')).toEqual({ ok: false, reason: 'rate_limited' })
+  it('returns grounded question', async () => {
+    invoke.mockResolvedValue({ data: { question: 'q', reference: 'r', grounded: false }, error: null })
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: true, skip: false, question: 'q', reference: 'r', grounded: false })
   })
-  it('401 → unauthenticated', async () => {
-    invoke.mockResolvedValue({ data: null, error: httpErr(401) })
-    expect(await generateQuestion('n', 'note')).toEqual({ ok: false, reason: 'unauthenticated' })
+  it('returns skip', async () => {
+    invoke.mockResolvedValue({ data: { skip: true }, error: null })
+    expect(await generateQuestion('n', 't', 4, 'h')).toEqual({ ok: true, skip: true })
   })
-  it('500 → gen_error', async () => {
-    invoke.mockResolvedValue({ data: null, error: httpErr(500) })
-    expect(await generateQuestion('n', 'note')).toEqual({ ok: false, reason: 'gen_error' })
-  })
-  it('필드 누락 → gen_error', async () => {
-    invoke.mockResolvedValue({ data: { question: 'Q?' }, error: null })
-    expect(await generateQuestion('n', 'note')).toEqual({ ok: false, reason: 'gen_error' })
-  })
-  it('throw → network', async () => {
-    invoke.mockRejectedValue(new Error('x'))
-    expect(await generateQuestion('n', 'note')).toEqual({ ok: false, reason: 'network' })
+  it('maps 429', async () => {
+    invoke.mockResolvedValue({ data: null, error: { context: { status: 429 } } })
+    expect(await generateQuestion('n', 't', 1, 'h')).toEqual({ ok: false, reason: 'rate_limited' })
   })
 })
