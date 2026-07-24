@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { LuMic, LuRepeat, LuSettings, LuTrash2 } from 'react-icons/lu'
+import { LuMic, LuNetwork, LuRepeat, LuSettings, LuTrash2 } from 'react-icons/lu'
 import { QuizView } from './QuizView'
 import { DrillView } from './DrillView'
 import { ReviewView } from './ReviewView'
+import { GraphInterviewView } from './GraphInterviewView'
 import { InfoPopover } from './InfoPopover'
 import { useGraphStore } from '../store/graphStore'
 import { useNotePool } from '../hooks/useNotePool'
@@ -12,7 +13,7 @@ import { MODE_HELP, SRS_HELP } from '../lib/quizHelp'
 import type { GraphNode } from '../graph/types'
 import './QuizTab.css'
 
-type QuizMode = 'flash' | 'drill' | 'review'
+type QuizMode = 'flash' | 'drill' | 'review' | 'graph'
 
 const CAP_OPTIONS: { value: number; label: string }[] = [
   { value: 10, label: '10' }, { value: 15, label: '15' }, { value: 20, label: '20' },
@@ -63,6 +64,10 @@ export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
             data-active={mode === 'review'} onClick={() => setMode('review')}>
             <LuRepeat size={14} /> 복습{due > 0 && <span className="quiztab-badge">{due}</span>}
           </button>
+          <button className="quiztab-mode" role="tab" aria-selected={mode === 'graph'}
+            data-active={mode === 'graph'} onClick={() => setMode('graph')}>
+            <LuNetwork size={15} /> 그래프 면접
+          </button>
         </div>
         <div className="quiztab-tools">
           <InfoPopover title="퀴즈 모드 설명" body={MODE_HELP} align="right" />
@@ -108,6 +113,7 @@ export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
       {mode === 'flash' && <QuizView nodes={nodes} />}
       {mode === 'drill' && <DrillView nodes={nodes} />}
       {mode === 'review' && <ReviewView nodes={nodes} />}
+      {mode === 'graph' && <GraphInterviewView nodes={nodes} />}
     </div>
   )
 }
