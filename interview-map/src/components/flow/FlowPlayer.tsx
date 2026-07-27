@@ -70,7 +70,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
         <button onClick={() => go(stepIdx + 1)} disabled={stepIdx >= last}>다음 ▶</button>
         <button onClick={() => go(0)}>↻ 처음</button>
         <span className="fp-counter">{stepIdx + 1} / {flow.steps.length}</span>
-        <span className="fp-steptitle">{step?.title}</span>
+        <span className="fp-steptitle" aria-live="polite">{step?.title}</span>
       </div>
 
       <div className="fp-stage-wrap">

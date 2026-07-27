@@ -61,7 +61,7 @@ export function GuideView() {
           다시 기회를 줍니다. 계단당 최대 두 번 — 그래서 한 개념은 아무리 길어도 네 계단으로 끝나고, 비용이 구조적으로 상한을 가집니다.
         </p>
         <img className="guide-diagram" src={ladderUrl} alt="깊이 사다리 상태도" />
-        <p className="guide-lead" style={{ margin: '8px 0 0', fontSize: 13 }}>※ 이 그림은 다음 업데이트에서 위 흐름도처럼 살아 움직이게 바뀝니다.</p>
+        <p className="guide-note">※ 이 그림은 다음 업데이트에서 위 흐름도처럼 살아 움직이게 바뀝니다.</p>
       </section>
 
       <section>
@@ -71,7 +71,7 @@ export function GuideView() {
           무난했으면 형제 개념으로 옆으로, 입구에서 막혔으면 부모 개념으로 물러섭니다. 막힘 2번 또는 8개 개념에서 한 세션이 끝납니다.
         </p>
         <img className="guide-diagram" src={travUrl} alt="개념 사이 순회" />
-        <p className="guide-lead" style={{ margin: '8px 0 0', fontSize: 13 }}>※ 이 그림도 다음 업데이트에서 흐름도로 바뀝니다.</p>
+        <p className="guide-note">※ 이 그림도 다음 업데이트에서 흐름도로 바뀝니다.</p>
       </section>
 
       <section>

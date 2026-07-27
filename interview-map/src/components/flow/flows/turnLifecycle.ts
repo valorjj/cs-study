@@ -3,10 +3,10 @@ import type { Flow } from '../types'
 // "한 턴의 생애": 개념 진입 → 캐시 조회 → (미스) 상한·생성·저장 → 질문 → 채점 → 힌트 → 다음.
 export const turnLifecycle: Flow = {
   stages: [
-    { id: 'browser', label: '브라우저', color: '#3b82f6' },
-    { id: 'edge', label: 'Edge Functions', color: '#8b5cf6' },
-    { id: 'db', label: 'Postgres', color: '#0ea5e9' },
-    { id: 'llm', label: 'Gemini flash', color: '#f59e0b' },
+    { id: 'browser', label: '브라우저', color: '#1d4ed8' },
+    { id: 'edge', label: 'Edge Functions', color: '#6d28d9' },
+    { id: 'db', label: 'Postgres', color: '#0369a1' },
+    { id: 'llm', label: 'Gemini flash', color: '#b45309' },
   ],
   nodes: [
     { id: 'b-enter', stage: 'browser', title: '개념 진입', subtitle: '순회·사다리' },
