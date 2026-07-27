@@ -9,6 +9,7 @@ interface Box { x: number; y: number; w: number; h: number }
 export function FlowPlayer({ flow }: { flow: Flow }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [boxes, setBoxes] = useState<Record<string, Box>>({})
   const rootRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -32,6 +33,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
     setBoxes(next)
   }
 
+  // 확대/축소로 레이아웃이 바뀌므로 expanded도 측정 트리거에 포함.
   useLayoutEffect(() => {
     measure()
     if (typeof ResizeObserver === 'undefined') return
@@ -39,7 +41,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
     if (rootRef.current) ro.observe(rootRef.current)
     return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flow])
+  }, [flow, expanded])
 
   // 자동재생: playing이면 다음 스텝으로, 마지막에서 정지.
   useEffect(() => {
@@ -48,6 +50,14 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
     const t = setTimeout(() => setStepIdx((i) => Math.min(i + 1, last)), AUTOPLAY_MS)
     return () => clearTimeout(t)
   }, [playing, stepIdx, last])
+
+  // Esc로 확대 닫기(확대 중에만 리스너 활성).
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [expanded])
 
   const go = (i: number) => { setPlaying(false); setStepIdx(Math.max(0, Math.min(i, last))) }
 
@@ -63,7 +73,12 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
   }
 
   return (
-    <div className="flow-player" ref={rootRef}>
+    <div
+      className={`flow-player${expanded ? ' flow-player--expanded' : ''}`}
+      ref={rootRef}
+      role={expanded ? 'dialog' : undefined}
+      aria-modal={expanded ? true : undefined}
+    >
       <div className="fp-bar">
         <button onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ 일시정지' : '▶ 재생'}</button>
         <button onClick={() => go(stepIdx - 1)} disabled={stepIdx <= 0}>◀ 이전</button>
@@ -71,6 +86,9 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
         <button onClick={() => go(0)}>↻ 처음</button>
         <span className="fp-counter">{stepIdx + 1} / {flow.steps.length}</span>
         <span className="fp-steptitle" aria-live="polite">{step?.title}</span>
+        <button className="fp-expand" onClick={() => setExpanded((v) => !v)}>
+          {expanded ? '✕ 닫기' : '⛶ 크게 보기'}
+        </button>
       </div>
 
       <div className="fp-stage-wrap">

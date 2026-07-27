@@ -66,4 +66,30 @@ describe('FlowPlayer', () => {
     expect(within(root).getByText('A')).toBeTruthy()
     expect(within(root).getByText('B')).toBeTruthy()
   })
+
+  it('toggles fullscreen expand via the 크게 보기 button', () => {
+    render(<FlowPlayer flow={flow} />)
+    expect(document.querySelector('.flow-player--expanded')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /크게 보기/ }))
+    expect(document.querySelector('.flow-player--expanded')).toBeTruthy()
+    // 확대 중에도 카운터/버튼 라벨 유지
+    expect(document.querySelector('.fp-counter')?.textContent).toBe('1 / 2')
+    fireEvent.click(screen.getByRole('button', { name: /닫기/ }))
+    expect(document.querySelector('.flow-player--expanded')).toBeNull()
+  })
+
+  it('closes expand on Escape', () => {
+    render(<FlowPlayer flow={flow} />)
+    fireEvent.click(screen.getByRole('button', { name: /크게 보기/ }))
+    expect(document.querySelector('.flow-player--expanded')).toBeTruthy()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(document.querySelector('.flow-player--expanded')).toBeNull()
+  })
+
+  it('keeps step navigation working while expanded', () => {
+    render(<FlowPlayer flow={flow} />)
+    fireEvent.click(screen.getByRole('button', { name: /크게 보기/ }))
+    fireEvent.click(screen.getByRole('button', { name: /다음/ }))
+    expect(document.querySelector('.fp-counter')?.textContent).toBe('2 / 2')
+  })
 })
