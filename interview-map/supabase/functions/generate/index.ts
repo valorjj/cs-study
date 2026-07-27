@@ -47,9 +47,12 @@ Deno.serve(async (req) => {
 
   // 캐시 키는 서버가 noteText(+브리지는 상대 개념 필드)로부터 직접 유도한다
   // (클라 값 불신 — 공유 캐시 오염 방지). 브리지의 toLabel/toSummary도 해시에 포함해야
-  // 크래프트된 라벨이 동일 키의 정상 응답을 덮어쓰지 못한다.
-  // 브리지는 (from~to, rung 0) 별도 네임스페이스라 기존 rung 캐시와 충돌 없음.
-  const key = noteHash(isBridge ? `${noteText} ${bridge!.toLabel} ${bridge!.toSummary ?? ''}` : noteText)
+  // 크래프트된 라벨이 동일 키의 정상 응답을 덮어쓰지 못한다. 필드는 JSON.stringify로
+  // 경계를 명확히 인코딩 — 단순 join의 경계충돌(예: noteText="A"/toLabel="B C" vs
+  // noteText="A B"/toLabel="C")을 원천 차단. 브리지는 (from~to, rung 0) 별도 네임스페이스.
+  const key = noteHash(
+    isBridge ? JSON.stringify([noteText, bridge!.toLabel, bridge!.toSummary ?? '']) : noteText,
+  )
   const cacheNodeId = isBridge ? `${nodeId}~${bridge!.toId}` : nodeId
   const cacheRung = isBridge ? 0 : rung
 
