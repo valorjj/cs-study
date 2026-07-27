@@ -54,7 +54,7 @@ export function buildBridgeMessages(homeNote: string, toLabel: string, toSummary
     { role: 'system', content: BRIDGE_SYSTEM },
     {
       role: 'user',
-      content: `상대 개념: ${toLabel}${toSummary ? ` — ${toSummary}` : ''}\n\n[노트]\n<<<NOTE>>>\n${neutralizeDelimiters(homeNote)}\n<<<END>>>`,
+      content: `상대 개념: ${neutralizeDelimiters(toLabel)}${toSummary ? ` — ${neutralizeDelimiters(toSummary)}` : ''}\n\n[노트]\n<<<NOTE>>>\n${neutralizeDelimiters(homeNote)}\n<<<END>>>`,
     },
   ]
 }

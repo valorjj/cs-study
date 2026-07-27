@@ -40,10 +40,16 @@ Deno.serve(async (req) => {
       !bridge!.toLabel || typeof bridge!.toLabel !== 'string')) {
     return json({ error: 'bad body' }, 400)
   }
+  // 비브리지는 rung 1~4만 허용(0은 브리지 전용 네임스페이스라, 비브리지가 0을 쓰면 충돌 가능).
+  if (!isBridge && (!Number.isInteger(rung) || rung < 1 || rung > 4)) {
+    return json({ error: 'bad body' }, 400)
+  }
 
-  // 캐시 키는 서버가 noteText로부터 직접 유도한다(클라 값 불신 — 공유 캐시 오염 방지).
+  // 캐시 키는 서버가 noteText(+브리지는 상대 개념 필드)로부터 직접 유도한다
+  // (클라 값 불신 — 공유 캐시 오염 방지). 브리지의 toLabel/toSummary도 해시에 포함해야
+  // 크래프트된 라벨이 동일 키의 정상 응답을 덮어쓰지 못한다.
   // 브리지는 (from~to, rung 0) 별도 네임스페이스라 기존 rung 캐시와 충돌 없음.
-  const key = noteHash(noteText)
+  const key = noteHash(isBridge ? `${noteText} ${bridge!.toLabel} ${bridge!.toSummary ?? ''}` : noteText)
   const cacheNodeId = isBridge ? `${nodeId}~${bridge!.toId}` : nodeId
   const cacheRung = isBridge ? 0 : rung
 
