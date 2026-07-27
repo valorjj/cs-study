@@ -1,7 +1,7 @@
-import travUrl from '../assets/guide/04-node-traversal.svg'
 import { FlowPlayer } from './flow/FlowPlayer'
 import { turnLifecycle } from './flow/flows/turnLifecycle'
 import { depthLadder } from './flow/flows/depthLadder'
+import { traversal } from './flow/flows/traversal'
 import './GuideView.css'
 
 export function GuideView() {
@@ -77,8 +77,17 @@ export function GuideView() {
           한 개념을 끝내면, 거기서 얼마나 깊이 갔는지가 다음 개념을 고릅니다. 깊이 마스터했으면 자식 개념으로 더 깊이,
           무난했으면 형제 개념으로 옆으로, 입구에서 막혔으면 부모 개념으로 물러섭니다. 막힘 2번 또는 8개 개념에서 한 세션이 끝납니다.
         </p>
-        <img className="guide-diagram" src={travUrl} alt="개념 사이 순회" />
-        <p className="guide-note">※ 이 그림도 다음 업데이트에서 흐름도로 바뀝니다.</p>
+        <FlowPlayer flow={traversal} />
+        <details className="deep">
+          <summary>더 깊이 — nextNode가 다음 개념을 고르는 우선순위</summary>
+          <ul>
+            <li><b>score ≥ 4</b> — 자식 → crosslink → 형제 순으로 미방문 노드.</li>
+            <li><b>score = 3</b> — 형제 → 자식.</li>
+            <li><b>score ≤ 2</b> — 형제 → 부모(물러남, miss + 1).</li>
+            <li><b>막다른 길</b> — 우선 후보가 모두 방문됐으면 <code>backtrack</code>: 방문 경로를 최근순으로 거슬러 미방문 이웃(자식·crosslink)을 잇는다.</li>
+            <li><b>종료</b> — <code>misses ≥ MISS_BUDGET(2)</code>면 <code>isOver</code>. (파일럿은 Network 계층 하강; 크로스도메인 crosslink 점프는 다음 이터레이션.)</li>
+          </ul>
+        </details>
       </section>
 
       <section>
