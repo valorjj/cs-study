@@ -7,12 +7,12 @@ export type GenerateOutcome =
 
 export async function generateQuestion(
   nodeId: string, noteText: string, rung: number,
+  bridge?: { toId: string; toLabel: string; toSummary?: string },
 ): Promise<GenerateOutcome> {
   if (!supabase) return { ok: false, reason: 'unauthenticated' }
   try {
-    const { data, error } = await supabase.functions.invoke('generate', {
-      body: { nodeId, rung, noteText },
-    })
+    const body = bridge ? { nodeId, rung, noteText, bridge } : { nodeId, rung, noteText }
+    const { data, error } = await supabase.functions.invoke('generate', { body })
     if (error) {
       const status = (error as { context?: Response }).context?.status
       if (status === 401) return { ok: false, reason: 'unauthenticated' }

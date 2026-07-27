@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import rehypeRaw from 'rehype-raw'
 import graphData from '../graph/graph.json'
 import type { GraphData, GraphNode } from '../graph/types'
-import { networkSubgraph, pickStart, nextNode, isOver, type WalkState } from '../lib/graphWalk'
+import { subgraphWithBridges, pickStart, nextNode, isOver, type WalkState } from '../lib/graphWalk'
 import { generateQuestion } from '../lib/generate'
 import { getHint } from '../lib/hint'
 import { START_LADDER, advanceLadder, ladderSignal, applySkip, type LadderState } from '../lib/ladder'
@@ -17,13 +17,14 @@ import './GraphInterviewView.css'
 
 const data = graphData as GraphData
 const NODE_CAP = 8
+const START_DOMAIN = 'network'
 
 interface QA { question: string; reference: string; grounded: boolean }
 
 export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
   const { user } = useAuth()
   const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
-  const sub = useMemo(() => networkSubgraph(data.nodes, data.edges, 'network'), [])
+  const sub = useMemo(() => subgraphWithBridges(data.nodes, data.edges, 'network'), [])
   const { loading, buildItems } = useNotePool(nodes)
 
   const noteByNode = useMemo(() => {
@@ -51,6 +52,10 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
 
   const label = (id: string) => sub.nodes.find((n) => n.id === id)?.label ?? id
 
+  const domainOf = (id: string) => sub.nodes.find((n) => n.id === id)?.domain ?? START_DOMAIN
+  const isBridge = (id: string) => domainOf(id) !== START_DOMAIN
+  const domainLabel = (d: string) => data.nodes.find((n) => n.level === 0 && n.domain === d)?.label ?? d
+
   useEffect(() => {
     if (!user) return
     let alive = true
@@ -77,10 +82,32 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
     return 'ok'
   }
 
-  const enterNode = async (nodeId: string) => {
+  const enterNode = async (nodeId: string, fromId?: string) => {
+    if (isBridge(nodeId)) { await enterBridge(nodeId, fromId); return }
     setLadder(START_LADDER)
     const res = await loadRung(nodeId, 1)
     if (res === 'skip') setErr('이 개념은 지금 다룰 자료가 부족해요. 다음 개념으로 넘어가세요.')
+  }
+
+  // 크로스도메인 브리지 노드: 사다리 없이 "연결 질문" 하나만. 홈(직전 network) 노트를 근거로.
+  const enterBridge = async (toId: string, fromId?: string) => {
+    setBusy(true); setErr(null); setDeadEnd(null); setScored(null); setDraft(''); setHint(null); setHintOffered(false); setQa(null)
+    setLadder(START_LADDER)
+    const home = fromId ?? state.path[state.path.length - 1]
+    const homeNote = noteByNode.get(home ?? '') ?? ''
+    const to = sub.nodes.find((n) => n.id === toId)
+    const out = await generateQuestion(home ?? toId, homeNote, 0, {
+      toId, toLabel: to?.label ?? toId, toSummary: to?.summary,
+    })
+    setBusy(false)
+    if (!out.ok) {
+      setErr(out.reason === 'rate_limited' ? '오늘 AI 한도를 다 썼어요.'
+        : out.reason === 'unauthenticated' ? '로그인이 필요합니다.'
+        : '연결 질문 생성 실패. 다시 시도하세요.')
+      setDeadEnd('error'); return
+    }
+    if (out.skip) { setDeadEnd('skip'); setErr('이 연결은 지금 다룰 자료가 부족해요. 다음 개념으로 넘어가세요.'); return }
+    setQa({ question: out.question, reference: out.reference, grounded: out.grounded })
   }
 
   const start = async () => {
@@ -121,12 +148,21 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
     if (!next) { setState(st2); setFinished(true); return }
     setState({ path: [...st2.path, next], visited: [...st2.visited, next], misses })
     setCur(next)
-    await enterNode(next)
+    await enterNode(next, st2.path[st2.path.length - 1])
   }
 
   // 채점 결과를 사다리에 적용 → climb / offer-hint / node-done.
+  // 브리지 재시도: 사다리 계단이 아니라 연결 질문을 다시 생성.
+  const retry = () => {
+    if (!cur) return
+    if (isBridge(cur)) enterBridge(cur, state.path[state.path.length - 2])
+    else loadRung(cur, ladder.rung)
+  }
+
   const advance = async () => {
     if (!scored || !cur) return
+    // 브리지는 excursion(비-miss). 이웃이 없어 nextNode가 backtrack으로 Network 복귀.
+    if (isBridge(cur)) { await goNextNode(1, false); return }
     const act = advanceLadder(ladder, scored.score)
     if (act.kind === 'offer-hint') {
       setLadder(act.state); setScored(null); setHintOffered(true)
@@ -158,7 +194,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
       ) : (
         <>
           <div className="gi-path">{state.path.map((id, i) => (
-            <span key={i} className="gi-crumb" data-cur={i === state.path.length - 1}>{label(id)}</span>
+            <span key={i} className="gi-crumb" data-cur={i === state.path.length - 1} data-cross={domainOf(id) !== START_DOMAIN}>{label(id)}</span>
           ))}</div>
           {finished ? (
             <div className="gi-summary">
@@ -169,9 +205,14 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
             <div className="gi-card">
               <div className="gi-node">
                 {cur ? label(cur) : ''}
-                <span className="gi-rung">L{ladder.rung}</span>
+                {cur && isBridge(cur)
+                  ? <span className="gi-badge gi-badge-cross">🔗 {domainLabel(domainOf(cur))}</span>
+                  : <span className="gi-rung">L{ladder.rung}</span>}
                 {qa && !qa.grounded && <span className="gi-badge">🔎 AI 확장</span>}
               </div>
+              {cur && isBridge(cur) && (
+                <p className="gi-cross-note">지금 <b>Network → {domainLabel(domainOf(cur))}</b>으로 건너갑니다 — 두 개념의 연결을 봅니다.</p>
+              )}
               {busy && !qa ? <p className="gi-dim">질문 생성 중…</p> : qa && (
                 <p className="gi-q">{qa.question}</p>
               )}
@@ -179,9 +220,9 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
               {!qa && !busy && !finished && err && (
                 <div className="gi-actions">
                   {deadEnd === 'error' && (
-                    <button className="gi-grade" disabled={busy} onClick={() => { if (cur) loadRung(cur, ladder.rung) }}>다시 시도</button>
+                    <button className="gi-grade" disabled={busy} onClick={retry}>다시 시도</button>
                   )}
-                  <button className="gi-next" disabled={busy} onClick={() => goNextNode(0, true)}>다음 개념 →</button>
+                  <button className="gi-next" disabled={busy} onClick={() => goNextNode(0, !(cur && isBridge(cur)))}>다음 개념 →</button>
                 </div>
               )}
               {qa && !scored && (
@@ -211,7 +252,8 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
                   )}
                   <div className="gi-actions">
                     <button className="gi-next" onClick={advance}>
-                      {scored.score >= 4 ? '더 깊이 →' : scored.score >= 3 ? '다음 계단 →' : ladder.attempts === 0 ? '힌트 받고 재도전 →' : '다음 개념 →'}
+                      {cur && isBridge(cur) ? '다음 개념 →'
+                        : scored.score >= 4 ? '더 깊이 →' : scored.score >= 3 ? '다음 계단 →' : ladder.attempts === 0 ? '힌트 받고 재도전 →' : '다음 개념 →'}
                     </button>
                   </div>
                 </div>

@@ -10,6 +10,18 @@ describe('generateQuestion', () => {
     await generateQuestion('net-http', 'note', 2)
     expect(invoke).toHaveBeenCalledWith('generate', { body: { nodeId: 'net-http', rung: 2, noteText: 'note' } })
   })
+  it('sends bridge payload when provided', async () => {
+    invoke.mockResolvedValue({ data: { question: 'q', reference: 'r', grounded: true }, error: null })
+    await generateQuestion('net-http', 'homeNote', 0, { toId: 'spring-mvc', toLabel: 'Spring MVC', toSummary: 's' })
+    expect(invoke).toHaveBeenCalledWith('generate', {
+      body: { nodeId: 'net-http', rung: 0, noteText: 'homeNote', bridge: { toId: 'spring-mvc', toLabel: 'Spring MVC', toSummary: 's' } },
+    })
+  })
+  it('omits bridge key when not provided (backward compatible)', async () => {
+    invoke.mockResolvedValue({ data: { question: 'q', reference: 'r', grounded: true }, error: null })
+    await generateQuestion('n', 't', 2)
+    expect(invoke).toHaveBeenCalledWith('generate', { body: { nodeId: 'n', rung: 2, noteText: 't' } })
+  })
   it('returns grounded question', async () => {
     invoke.mockResolvedValue({ data: { question: 'q', reference: 'r', grounded: false }, error: null })
     expect(await generateQuestion('n', 't', 1)).toEqual({ ok: true, skip: false, question: 'q', reference: 'r', grounded: false })
