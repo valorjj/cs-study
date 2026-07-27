@@ -12,6 +12,23 @@ export function networkSubgraph(nodes: GraphNode[], edges: GraphEdge[], domain =
   return { nodes: ns, edges: es }
 }
 
+// 도메인 서브그래프 + 인접 1홉 크로스도메인 브리지.
+// 한쪽 끝만 도메인 안인 crosslink 엣지를 살리고 반대편(타 도메인) 노드를 추가하되,
+// 그 노드의 다른 엣지는 넣지 않는다 → 브리지 노드는 자동으로 1홉 leaf가 되어 nextNode가 backtrack으로 복귀한다.
+export function subgraphWithBridges(nodes: GraphNode[], edges: GraphEdge[], domain = 'network'): SubGraph {
+  const home = nodes.filter((n) => n.domain === domain)
+  const homeIds = new Set(home.map((n) => n.id))
+  const internal = edges.filter((e) => homeIds.has(e.source) && homeIds.has(e.target))
+  const bridgeEdges = edges.filter(
+    (e) => e.type === 'crosslink' && (homeIds.has(e.source) !== homeIds.has(e.target)),
+  )
+  const bridgeIds = new Set<string>()
+  for (const e of bridgeEdges) bridgeIds.add(homeIds.has(e.source) ? e.target : e.source)
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const bridgeNodes = [...bridgeIds].map((id) => byId.get(id)).filter((n): n is GraphNode => !!n)
+  return { nodes: [...home, ...bridgeNodes], edges: [...internal, ...bridgeEdges] }
+}
+
 const has = (st: WalkState, id: string) => st.visited.includes(id)
 
 function childrenOf(sub: SubGraph, id: string): string[] {

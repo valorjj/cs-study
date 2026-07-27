@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { networkSubgraph, pickStart, nextNode, isOver, MISS_BUDGET } from './graphWalk'
+import { networkSubgraph, subgraphWithBridges, pickStart, nextNode, isOver, MISS_BUDGET } from './graphWalk'
 import type { GraphNode, GraphEdge } from '../graph/types'
 
 const N = (id: string, level: 0 | 1 | 2, domain = 'network'): GraphNode => ({
@@ -20,11 +20,13 @@ const E = (source: string, target: string, type: 'hierarchy' | 'crosslink'): Gra
 const nodes: GraphNode[] = [
   N('network', 0), N('net-http', 1), N('net-httpver', 2), N('net-cors', 2),
   N('net-tcp', 1), N('net-handshake', 2), N('spring-mvc', 1, 'spring'),
+  N('spring-di', 2, 'spring'),
 ]
 const edges: GraphEdge[] = [
   E('network', 'net-http', 'hierarchy'), E('network', 'net-tcp', 'hierarchy'),
   E('net-http', 'net-httpver', 'hierarchy'), E('net-tcp', 'net-handshake', 'hierarchy'),
   E('net-http', 'net-cors', 'crosslink'), E('net-http', 'spring-mvc', 'crosslink'),
+  E('spring-mvc', 'spring-di', 'hierarchy'),
 ]
 
 describe('networkSubgraph', () => {
@@ -34,6 +36,34 @@ describe('networkSubgraph', () => {
       ['net-cors', 'net-handshake', 'net-http', 'net-httpver', 'net-tcp', 'network'])
     // net-http↔spring-mvc crosslink는 spring-mvc가 서브그래프 밖이라 제외
     expect(sub.edges.some((e) => e.target === 'spring-mvc' || e.source === 'spring-mvc')).toBe(false)
+  })
+})
+
+describe('subgraphWithBridges', () => {
+  const sub = subgraphWithBridges(nodes, edges, 'network')
+  it('keeps network-internal edges (like networkSubgraph)', () => {
+    expect(sub.edges.some((e) => e.source === 'net-http' && e.target === 'net-httpver')).toBe(true)
+    expect(sub.edges.some((e) => e.source === 'net-http' && e.target === 'net-cors')).toBe(true)
+  })
+  it('includes the cross-domain crosslink and its far node (1-hop bridge)', () => {
+    expect(sub.nodes.some((n) => n.id === 'spring-mvc')).toBe(true)
+    expect(sub.edges.some((e) =>
+      (e.source === 'net-http' && e.target === 'spring-mvc') ||
+      (e.source === 'spring-mvc' && e.target === 'net-http'))).toBe(true)
+  })
+  it('does NOT load the bridge node\'s other edges (no 2nd hop)', () => {
+    // spring-mvc → spring-di 는 서브그래프에 없어야 함(도메인 밖 내부 엣지)
+    expect(sub.nodes.some((n) => n.id === 'spring-di')).toBe(false)
+    expect(sub.edges.some((e) => e.source === 'spring-di' || e.target === 'spring-di')).toBe(false)
+  })
+  it('from a bridge node nextNode backtracks to home (1-hop leaf)', () => {
+    // cur=spring-mvc(브리지): 자식/형제/미방문 crosslink 없음 → 경로 거슬러 network의 미방문 자식
+    const st = {
+      path: ['network', 'net-http', 'spring-mvc'],
+      visited: ['network', 'net-http', 'spring-mvc', 'net-httpver', 'net-cors'],
+      misses: 0,
+    }
+    expect(nextNode(sub, st, 5)).toBe('net-tcp')
   })
 })
 
