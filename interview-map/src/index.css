@@ -1,23 +1,14 @@
+/* 다크 단일 테마. 예전에 다른 템플릿의 라이트 :root + prefers-color-scheme
+   분기가 아래에 겹쳐 붙어 --bg/--text/--accent를 덮어썼고, 앱 고유 패널/글자
+   토큰(--bg-panel/--text-dim/--text-strong)은 라이트 대응값이 없어 다크 패널
+   위 다크 글자가 되는 대비 붕괴가 있었다. 하나의 다크 팔레트로 통합. */
 :root {
   --bg:#0b1220; --bg-panel:#0f172a; --bg-elev:#1e293b;
   --text:#e6edf6; --text-dim:#94a3b8; --text-strong:#f8fafc;
+  --text-h:#f8fafc; --code-bg:#1e293b;
   --border:#2b3a4f; --border-strong:#475569;
   --edge:#3a4a63; --edge-cross:#7c8aa5; --grid:#1c2738;
   --accent:#3b82f6; --node-studied-text:#0b1220;
-}
-
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
   --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
   --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
@@ -25,7 +16,7 @@
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;
-  color-scheme: light dark;
+  color-scheme: dark;
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
@@ -35,26 +26,6 @@
 
   @media (max-width: 1024px) {
     font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
   }
 }
 
