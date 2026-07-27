@@ -3,14 +3,20 @@ import { render, screen } from '@testing-library/react'
 import { GuideView } from './GuideView'
 
 describe('GuideView', () => {
-  it('renders key section headings', () => {
+  it('renders the lead heading and key section headings', () => {
     render(<GuideView />)
-    expect(screen.getByText(/왜 이 구조/)).toBeInTheDocument()
-    expect(screen.getByText(/왜 graph DB를 쓰지 않았나/)).toBeInTheDocument()
-    expect(screen.getByText(/깊이 사다리/)).toBeInTheDocument()
+    expect(screen.getByText(/설계 가이드/)).toBeTruthy()
+    expect(screen.getByText(/왜 graph DB/)).toBeTruthy()
+    expect(screen.getByText(/한 턴의 생애/)).toBeTruthy()
   })
-  it('embeds all six diagrams', () => {
-    const { container } = render(<GuideView />)
-    expect(container.querySelectorAll('img.guide-diagram').length).toBe(6)
+  it('embeds the FlowPlayer for the turn lifecycle', () => {
+    render(<GuideView />)
+    expect(document.querySelector('.flow-player')).toBeTruthy()
+    // 플레이어의 스텝 카운터가 존재
+    expect(document.querySelector('.fp-counter')).toBeTruthy()
+  })
+  it('has at least one deep-fold for technical detail', () => {
+    render(<GuideView />)
+    expect(document.querySelector('details.deep')).toBeTruthy()
   })
 })

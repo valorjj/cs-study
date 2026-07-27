@@ -64,3 +64,23 @@
   border-radius: 8px;
   background: var(--bg-elev);
 }
+
+/* 전역 h1,h2 { color: var(--text-h) } 가 다크모드에서 안 보여서 가독 색으로 덮는다. */
+.guide h1, .guide h2 { color: var(--text); }
+
+.guide details.deep {
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 10px 0 0;
+  background: var(--bg-elev);
+  font-size: 13px;
+}
+.guide details.deep > summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+}
+.guide details.deep[open] { padding-bottom: 12px; }
+.guide details.deep p, .guide details.deep li { color: var(--text-dim); }
