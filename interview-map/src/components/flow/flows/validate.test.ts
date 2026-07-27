@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { validateFlow } from './validate'
 import { turnLifecycle } from './turnLifecycle'
+import { depthLadder } from './depthLadder'
 import type { Flow } from '../types'
 
 describe('validateFlow', () => {
@@ -37,5 +38,15 @@ describe('turnLifecycle data', () => {
   it('has multiple steps and the four runtime stages', () => {
     expect(turnLifecycle.steps.length).toBeGreaterThanOrEqual(7)
     expect(turnLifecycle.stages.map((s) => s.id).sort()).toEqual(['browser', 'db', 'edge', 'llm'])
+  })
+})
+
+describe('depthLadder data', () => {
+  it('is internally consistent', () => {
+    expect(validateFlow(depthLadder)).toEqual([])
+  })
+  it('has the four ladder-rung stages and enough steps', () => {
+    expect(depthLadder.stages.map((s) => s.id)).toEqual(['l1', 'l2', 'l3', 'l4'])
+    expect(depthLadder.steps.length).toBeGreaterThanOrEqual(6)
   })
 })

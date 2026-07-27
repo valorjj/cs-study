@@ -1,7 +1,7 @@
-import ladderUrl from '../assets/guide/03-depth-ladder.svg'
 import travUrl from '../assets/guide/04-node-traversal.svg'
 import { FlowPlayer } from './flow/FlowPlayer'
 import { turnLifecycle } from './flow/flows/turnLifecycle'
+import { depthLadder } from './flow/flows/depthLadder'
 import './GuideView.css'
 
 export function GuideView() {
@@ -60,8 +60,15 @@ export function GuideView() {
           한 개념 안에서 채점 점수가 다음 계단을 정합니다. 3점 이상이면 한 계단 올라가고, 2점 이하면 답변에 맞춘 힌트를 한 번 주고
           다시 기회를 줍니다. 계단당 최대 두 번 — 그래서 한 개념은 아무리 길어도 네 계단으로 끝나고, 비용이 구조적으로 상한을 가집니다.
         </p>
-        <img className="guide-diagram" src={ladderUrl} alt="깊이 사다리 상태도" />
-        <p className="guide-note">※ 이 그림은 다음 업데이트에서 위 흐름도처럼 살아 움직이게 바뀝니다.</p>
+        <FlowPlayer flow={depthLadder} />
+        <details className="deep">
+          <summary>더 깊이 — 사다리 엔진이 계단을 정하는 규칙</summary>
+          <ul>
+            <li><b>climb</b> — <code>score ≥ 3</code>이면 다음 계단으로, <code>reached</code>를 현재 계단까지 올림.</li>
+            <li><b>offer-hint</b> — <code>score ≤ 2</code>이고 <code>attempts = 0</code>이면 답변 기반 힌트 + 재시도 1회.</li>
+            <li><b>node-done</b> — L4를 넘거나 재시도도 <code>≤ 2</code>면 종료. 계단당 최대 2번이라 한 개념은 아무리 길어도 유한 — 비용이 구조적으로 상한을 가짐.</li>
+          </ul>
+        </details>
       </section>
 
       <section>

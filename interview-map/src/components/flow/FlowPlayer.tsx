@@ -12,17 +12,20 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
   const [expanded, setExpanded] = useState(false)
   const [boxes, setBoxes] = useState<Record<string, Box>>({})
   const rootRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
   const nodeRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const last = flow.steps.length - 1
   const step = flow.steps[stepIdx]
   const activeSet = new Set(step?.activeNodes ?? [])
 
-  // 노드 위치 측정(컨테이너 기준). jsdom에선 0이 나와도 무해(엣지가 0길이).
+  // 노드 위치 측정. 엣지 SVG(.fp-edges)가 .fp-stage-wrap에 inset:0으로 얹히므로,
+  // 좌표 원점을 stage-wrap에 맞춰야 확대(세로 중앙정렬)에서도 엣지가 노드와 정렬된다.
+  // jsdom에선 0이 나와도 무해(엣지가 0길이).
   const measure = () => {
-    const root = rootRef.current
-    if (!root) return
-    const base = root.getBoundingClientRect()
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const base = wrap.getBoundingClientRect()
     const next: Record<string, Box> = {}
     for (const n of flow.nodes) {
       const el = nodeRefs.current[n.id]
@@ -38,7 +41,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
     measure()
     if (typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(() => measure())
-    if (rootRef.current) ro.observe(rootRef.current)
+    if (wrapRef.current) ro.observe(wrapRef.current)
     return () => ro.disconnect()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [flow, expanded])
@@ -91,7 +94,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
         </button>
       </div>
 
-      <div className="fp-stage-wrap">
+      <div className="fp-stage-wrap" ref={wrapRef}>
         <svg className="fp-edges" aria-hidden="true">
           {(step?.edges ?? []).map((e, i) => {
             const d = edgePath(e.from, e.to)
