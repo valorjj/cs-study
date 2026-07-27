@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildGenerateMessages, parseGenerated } from '../_shared/generate-prompt.ts'
+import { buildGenerateMessages, buildBridgeMessages, parseGenerated } from '../_shared/generate-prompt.ts'
 import { chatComplete } from '../_shared/llm.ts'
 import { noteHash } from '../_shared/hash.ts'
 
@@ -25,22 +25,33 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return json({ error: 'unauthenticated' }, 401)
 
-  let body: { nodeId?: string; rung?: number; noteText?: string }
+  let body: {
+    nodeId?: string; rung?: number; noteText?: string
+    bridge?: { toId?: string; toLabel?: string; toSummary?: string }
+  }
   try { body = await req.json() } catch { return json({ error: 'bad body' }, 400) }
-  const { nodeId, rung, noteText } = body
+  const { nodeId, rung, noteText, bridge } = body
   if (!nodeId || typeof nodeId !== 'string' ||
       typeof rung !== 'number' || !noteText || typeof noteText !== 'string') {
     return json({ error: 'bad body' }, 400)
   }
+  const isBridge = !!bridge
+  if (isBridge && (!bridge!.toId || typeof bridge!.toId !== 'string' ||
+      !bridge!.toLabel || typeof bridge!.toLabel !== 'string')) {
+    return json({ error: 'bad body' }, 400)
+  }
 
-  // 캐시 키는 서버가 noteText로부터 직접 유도한다(클라이언트 값을 신뢰하지 않음 — 공유 캐시 오염 방지).
+  // 캐시 키는 서버가 noteText로부터 직접 유도한다(클라 값 불신 — 공유 캐시 오염 방지).
+  // 브리지는 (from~to, rung 0) 별도 네임스페이스라 기존 rung 캐시와 충돌 없음.
   const key = noteHash(noteText)
+  const cacheNodeId = isBridge ? `${nodeId}~${bridge!.toId}` : nodeId
+  const cacheRung = isBridge ? 0 : rung
 
   // 1) 캐시 조회(전체 공유). 히트면 상한·LLM 없이 즉시 반환.
   const { data: cached } = await supabase
     .from('question_cache')
     .select('question, reference, grounded')
-    .eq('node_id', nodeId).eq('rung', rung).eq('note_hash', key)
+    .eq('node_id', cacheNodeId).eq('rung', cacheRung).eq('note_hash', key)
     .maybeSingle()
   if (cached) {
     if (!cached.question) return json({ skip: true }, 200) // question='' → 스킵 캐시
@@ -54,7 +65,9 @@ Deno.serve(async (req) => {
 
   let parsed
   try {
-    const raw = await chatComplete(buildGenerateMessages(noteText, rung))
+    const raw = await chatComplete(
+      isBridge ? buildBridgeMessages(noteText, bridge!.toLabel!, bridge!.toSummary) : buildGenerateMessages(noteText, rung),
+    )
     parsed = parseGenerated(raw)
   } catch (e) {
     await supabase.rpc('refund_grade_slot')
@@ -67,13 +80,13 @@ Deno.serve(async (req) => {
   // 3) 캐시에 저장(skip은 question='' 로). 실패해도 응답엔 영향 없음.
   if ('skip' in parsed) {
     await supabase.rpc('upsert_question_cache', {
-      p_node_id: nodeId, p_rung: rung, p_note_hash: key,
+      p_node_id: cacheNodeId, p_rung: cacheRung, p_note_hash: key,
       p_question: '', p_reference: '', p_grounded: true,
     })
     return json({ skip: true }, 200)
   }
   await supabase.rpc('upsert_question_cache', {
-    p_node_id: nodeId, p_rung: rung, p_note_hash: key,
+    p_node_id: cacheNodeId, p_rung: cacheRung, p_note_hash: key,
     p_question: parsed.question, p_reference: parsed.reference, p_grounded: parsed.grounded,
   })
   return json(parsed, 200)
