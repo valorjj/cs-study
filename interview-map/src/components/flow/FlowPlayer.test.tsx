@@ -92,4 +92,23 @@ describe('FlowPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: /다음/ }))
     expect(document.querySelector('.fp-counter')?.textContent).toBe('2 / 2')
   })
+
+  it('renders the visual-state legend', () => {
+    render(<FlowPlayer flow={flow} />)
+    const legend = document.querySelector('.fp-legend')
+    expect(legend).toBeTruthy()
+    expect(legend?.querySelector('.fp-lg-active')).toBeTruthy()
+    expect(legend?.querySelector('.fp-lg-flow')).toBeTruthy()
+    expect(legend?.querySelector('.fp-lg-dim')).toBeTruthy()
+  })
+
+  it('exposes a speed slider whose displayed value inverts (right = faster)', () => {
+    render(<FlowPlayer flow={flow} />)
+    const slider = screen.getByLabelText('재생 속도') as HTMLInputElement
+    // 기본 1600ms → 표시값 = 600+3000-1600 = 2000
+    expect(slider.value).toBe('2000')
+    // 슬라이더를 오른쪽 끝(3000=빠름)으로 → speedMs = 600 → 표시값 다시 3000
+    fireEvent.change(slider, { target: { value: '3000' } })
+    expect(slider.value).toBe('3000')
+  })
 })
