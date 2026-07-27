@@ -19,7 +19,17 @@
 .fp-node-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 .fp-note { font-size: 13px; color: var(--text-dim); margin: 12px 0 0; }
 
-.fp-expand { margin-left: auto; }
+.fp-speed { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; }
+.fp-speed input[type="range"] { width: 84px; accent-color: var(--accent); cursor: pointer; }
+
+.fp-legend { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; margin-top: 12px; font-size: 12px; color: var(--text-dim); }
+.fp-legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.fp-legend i { display: inline-block; flex: none; }
+.fp-lg-active { width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.fp-lg-flow { width: 20px; height: 0; border-top: 2px dashed var(--accent); opacity: .6; }
+.fp-lg-dim { width: 12px; height: 12px; border-radius: 4px; border: 1.5px solid var(--border); opacity: .45; }
+
+.fp-expand { margin-left: 0; }
 
 .flow-player--expanded {
   position: fixed;

@@ -2,7 +2,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Flow } from './types'
 import './FlowPlayer.css'
 
-const AUTOPLAY_MS = 1600
+// 자동재생 간격(ms). 슬라이더는 오른쪽=빠름이 직관적이라, 표시값은 뒤집어 매핑한다.
+const SPEED_MIN = 600
+const SPEED_MAX = 3000
+const SPEED_STEP = 200
+const SPEED_DEFAULT = 1600
 
 interface Box { x: number; y: number; w: number; h: number }
 
@@ -10,6 +14,7 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
   const [stepIdx, setStepIdx] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [speedMs, setSpeedMs] = useState(SPEED_DEFAULT)
   const [boxes, setBoxes] = useState<Record<string, Box>>({})
   const rootRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -50,9 +55,9 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
   useEffect(() => {
     if (!playing) return
     if (stepIdx >= last) { setPlaying(false); return }
-    const t = setTimeout(() => setStepIdx((i) => Math.min(i + 1, last)), AUTOPLAY_MS)
+    const t = setTimeout(() => setStepIdx((i) => Math.min(i + 1, last)), speedMs)
     return () => clearTimeout(t)
-  }, [playing, stepIdx, last])
+  }, [playing, stepIdx, last, speedMs])
 
   // Esc로 확대 닫기(확대 중에만 리스너 활성).
   useEffect(() => {
@@ -89,6 +94,19 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
         <button onClick={() => go(0)}>↻ 처음</button>
         <span className="fp-counter">{stepIdx + 1} / {flow.steps.length}</span>
         <span className="fp-steptitle" aria-live="polite">{step?.title}</span>
+        <label className="fp-speed">
+          <span aria-hidden="true">🐢</span>
+          <input
+            type="range"
+            min={SPEED_MIN}
+            max={SPEED_MAX}
+            step={SPEED_STEP}
+            value={SPEED_MIN + SPEED_MAX - speedMs}
+            onChange={(e) => setSpeedMs(SPEED_MIN + SPEED_MAX - Number(e.target.value))}
+            aria-label="재생 속도"
+          />
+          <span aria-hidden="true">⚡</span>
+        </label>
         <button className="fp-expand" onClick={() => setExpanded((v) => !v)}>
           {expanded ? '✕ 닫기' : '⛶ 크게 보기'}
         </button>
@@ -125,6 +143,12 @@ export function FlowPlayer({ flow }: { flow: Flow }) {
       </div>
 
       {step?.note && <p className="fp-note">{step.note}</p>}
+
+      <div className="fp-legend" aria-hidden="true">
+        <span className="fp-legend-item"><i className="fp-lg-active" /> 활성 노드(지금 집중)</span>
+        <span className="fp-legend-item"><i className="fp-lg-flow" /> 흐르는 흐름</span>
+        <span className="fp-legend-item"><i className="fp-lg-dim" /> 이번 스텝과 무관</span>
+      </div>
     </div>
   )
 }
