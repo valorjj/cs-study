@@ -9,11 +9,11 @@ describe('GuideView', () => {
     expect(screen.getByText(/왜 graph DB/)).toBeTruthy()
     expect(screen.getByText(/한 턴의 생애/)).toBeTruthy()
   })
-  it('embeds FlowPlayers for the turn lifecycle and the depth ladder', () => {
+  it('embeds FlowPlayers for all three living flows', () => {
     render(<GuideView />)
-    // 한 턴의 생애 + 깊이 사다리 → 플레이어 2개
-    expect(document.querySelectorAll('.flow-player').length).toBeGreaterThanOrEqual(2)
-    expect(document.querySelectorAll('.fp-counter').length).toBeGreaterThanOrEqual(2)
+    // 한 턴의 생애 + 깊이 사다리 + 개념 사이 순회 → 플레이어 3개
+    expect(document.querySelectorAll('.flow-player').length).toBeGreaterThanOrEqual(3)
+    expect(document.querySelectorAll('.fp-counter').length).toBeGreaterThanOrEqual(3)
   })
   it('has at least one deep-fold for technical detail', () => {
     render(<GuideView />)
