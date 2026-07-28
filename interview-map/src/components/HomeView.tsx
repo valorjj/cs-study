@@ -12,7 +12,7 @@ import './HomeView.css'
 interface ModeCard { icon: ReactNode; title: string; desc: string; cta: string; target: ViewMode }
 
 const CARDS: ModeCard[] = [
-  { icon: <LuRoute size={26} />, title: '학습 경로', desc: '추천 순서대로 CS·백엔드 기초를 정복', cta: '시작', target: 'path' },
+  { icon: <LuRoute size={26} />, title: '학습 코스', desc: '추천 순서대로 CS·백엔드 기초를 정복', cta: '시작', target: 'path' },
   { icon: <LuBrain size={26} />, title: '면접 퀴즈', desc: '플래시카드 + 면접 꼬리질문 드릴다운', cta: '풀기', target: 'quiz' },
   { icon: <LuMap size={26} />, title: '개념 지도', desc: '개념 간 연결을 그래프로 탐색', cta: '열기', target: 'graph' },
 ]

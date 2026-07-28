@@ -63,7 +63,7 @@ interface GraphState {
   recordReview: (srsKey: string, item: { domain: string }, grade: number, today: string) => void
   quizSettings: QuizSettings                // 퀴즈 순서·SRS 취향값 (localStorage 전용)
   setQuizSettings: (patch: Partial<QuizSettings>) => void
-  pathTrackId: string | null                // 퀴즈 약점 칩 → 경로 코스 열기 요청
+  pathTrackId: string | null                // 퀴즈 약점 칩 → 코스 탭 열기 요청
   requestTrack: (trackId: string) => void
   clearPathTrack: () => void
 }
