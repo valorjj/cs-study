@@ -43,7 +43,7 @@ export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
   const due = useMemo(() => dueCount(pool, srs, todayStr(), cap), [pool, srs, cap])
 
   const resetData = () => {
-    if (!window.confirm('퀴즈/복습 기록(정답률·복습 일정)을 모두 초기화할까요? 학습 경로 진도는 유지됩니다.')) return
+    if (!window.confirm('퀴즈/복습 기록(정답률·복습 일정)을 모두 초기화할까요? 학습 코스 진도는 유지됩니다.')) return
     setSrs({})
     setQuizStats({})
   }

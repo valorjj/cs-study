@@ -45,7 +45,7 @@ export function ViewToggle() {
         data-active={viewMode === 'path'}
         onClick={() => setViewMode('path')}
       >
-        <LuRoute size={15} /> 경로
+        <LuRoute size={15} /> 코스
       </button>
       <button
         role="tab"
