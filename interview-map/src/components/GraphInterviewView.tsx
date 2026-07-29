@@ -5,6 +5,7 @@ import rehypeRaw from 'rehype-raw'
 import graphData from '../graph/graph.json'
 import type { GraphData, GraphNode } from '../graph/types'
 import { subgraphWithBridges, pickStart, nextNode, isOver, type WalkState } from '../lib/graphWalk'
+import { listDomains } from '../lib/domains'
 import { generateQuestion } from '../lib/generate'
 import { getHint } from '../lib/hint'
 import { START_LADDER, advanceLadder, ladderSignal, applySkip, type LadderState } from '../lib/ladder'
@@ -17,14 +18,16 @@ import './GraphInterviewView.css'
 
 const data = graphData as GraphData
 const NODE_CAP = 8
-const START_DOMAIN = 'network'
+const DEFAULT_DOMAIN = 'network'
 
 interface QA { question: string; reference: string; grounded: boolean }
 
 export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
   const { user } = useAuth()
   const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
-  const sub = useMemo(() => subgraphWithBridges(data.nodes, data.edges, 'network'), [])
+  const [domain, setDomain] = useState(DEFAULT_DOMAIN)
+  const domains = useMemo(() => listDomains(data.nodes), [])
+  const sub = useMemo(() => subgraphWithBridges(data.nodes, data.edges, domain), [domain])
   const { loading, buildItems } = useNotePool(nodes)
 
   const noteByNode = useMemo(() => {
@@ -52,8 +55,8 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
 
   const label = (id: string) => sub.nodes.find((n) => n.id === id)?.label ?? id
 
-  const domainOf = (id: string) => sub.nodes.find((n) => n.id === id)?.domain ?? START_DOMAIN
-  const isBridge = (id: string) => domainOf(id) !== START_DOMAIN
+  const domainOf = (id: string) => sub.nodes.find((n) => n.id === id)?.domain ?? domain
+  const isBridge = (id: string) => domainOf(id) !== domain
   const domainLabel = (d: string) => data.nodes.find((n) => n.level === 0 && n.domain === d)?.label ?? d
 
   useEffect(() => {
@@ -110,6 +113,12 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
     setQa({ question: out.question, reference: out.reference, grounded: out.grounded })
   }
 
+  // 시작 화면으로 복귀 → 도메인 셀렉터가 다시 보인다.
+  const reset = () => {
+    setFinished(false); setState({ path: [], visited: [], misses: 0 }); setCur(null)
+    setQa(null); setScored(null); setErr(null); setDeadEnd(null); setDraft('')
+  }
+
   const start = async () => {
     const s = pickStart(sub)
     if (!s) return
@@ -127,7 +136,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
       return
     }
     setScored(out.result)
-    recordQuizResult('network', out.result.score >= 3)
+    recordQuizResult(domainOf(cur), out.result.score >= 3)
   }
 
   const askHint = async () => {
@@ -181,7 +190,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
     await goNextNode(act.reached, act.weak)
   }
 
-  if (!user) return <div className="gi"><p className="gi-dim">로그인하면 그래프 면접을 시작할 수 있어요.</p></div>
+  if (!user) return <div className="gi"><p className="gi-dim">로그인하면 AI 모의면접을 시작할 수 있어요.</p></div>
   if (loading) return <div className="gi"><p className="gi-dim">노트 불러오는 중…</p></div>
 
   return (
@@ -190,16 +199,29 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
         AI 호출 — 분 {usage?.perMin ?? '·'} · 시간 {usage?.perHour ?? '·'} · 오늘 {usage?.perDay ?? '·'}
       </div>
       {state.path.length === 0 ? (
-        <button className="gi-start" onClick={start}>면접 시작 (Network)</button>
+        <div className="gi-setup">
+          <label className="gi-pick">
+            도메인
+            <select value={domain} onChange={(e) => setDomain(e.target.value)}>
+              {domains.map((d) => (
+                <option key={d.id} value={d.id}>{d.label} ({d.nodeCount})</option>
+              ))}
+            </select>
+          </label>
+          <button className="gi-start" onClick={start}>모의면접 시작</button>
+        </div>
       ) : (
         <>
           <div className="gi-path">{state.path.map((id, i) => (
-            <span key={i} className="gi-crumb" data-cur={i === state.path.length - 1} data-cross={domainOf(id) !== START_DOMAIN}>{label(id)}</span>
+            <span key={i} className="gi-crumb" data-cur={i === state.path.length - 1} data-cross={domainOf(id) !== domain}>{label(id)}</span>
           ))}</div>
           {finished ? (
             <div className="gi-summary">
-              <p>면접 종료 — <b>{state.path.length}</b>개 개념을 거쳤어요 (miss {state.misses}/2).</p>
-              <button className="gi-start" onClick={start}>다시 시작</button>
+              <p>모의면접 종료 — <b>{state.path.length}</b>개 개념을 거쳤어요 (miss {state.misses}/2).</p>
+              <div className="gi-actions">
+                <button className="gi-start" onClick={start}>같은 도메인 다시</button>
+                <button className="gi-next" onClick={reset}>도메인 바꾸기</button>
+              </div>
             </div>
           ) : (
             <div className="gi-card">
@@ -211,7 +233,7 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
                 {qa && !qa.grounded && <span className="gi-badge">🔎 AI 확장</span>}
               </div>
               {cur && isBridge(cur) && (
-                <p className="gi-cross-note">지금 <b>Network → {domainLabel(domainOf(cur))}</b>으로 건너갑니다 — 두 개념의 연결을 봅니다.</p>
+                <p className="gi-cross-note">지금 <b>{domainLabel(domain)} → {domainLabel(domainOf(cur))}</b>으로 건너갑니다 — 두 개념의 연결을 봅니다.</p>
               )}
               {busy && !qa ? <p className="gi-dim">질문 생성 중…</p> : qa && (
                 <p className="gi-q">{qa.question}</p>

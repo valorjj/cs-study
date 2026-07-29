@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { LuMic, LuNetwork, LuRepeat, LuSettings, LuTrash2 } from 'react-icons/lu'
+import { LuMic, LuMessagesSquare, LuRepeat, LuSettings, LuTrash2 } from 'react-icons/lu'
 import { QuizView } from './QuizView'
 import { DrillView } from './DrillView'
 import { ReviewView } from './ReviewView'
@@ -66,7 +66,7 @@ export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
           </button>
           <button className="quiztab-mode" role="tab" aria-selected={mode === 'graph'}
             data-active={mode === 'graph'} onClick={() => setMode('graph')}>
-            <LuNetwork size={15} /> 그래프 면접
+            <LuMessagesSquare size={15} /> AI 모의면접
           </button>
         </div>
         <div className="quiztab-tools">

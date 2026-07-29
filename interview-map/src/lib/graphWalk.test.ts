@@ -68,8 +68,21 @@ describe('subgraphWithBridges', () => {
 })
 
 describe('pickStart', () => {
-  it('net-http를 시작으로', () => {
+  it('network는 첫 L1(net-http)에서 시작 — 파일럿 동작 유지', () => {
     expect(pickStart(networkSubgraph(nodes, edges))).toBe('net-http')
+  })
+
+  it('도메인이 바뀌어도 그 도메인의 첫 L1을 고른다', () => {
+    expect(pickStart(networkSubgraph(nodes, edges, 'spring'))).toBe('spring-mvc')
+  })
+
+  it('L1이 없으면 첫 노드로 폴백', () => {
+    const only = { nodes: [N('sec-jwt', 2, 'security')], edges: [] }
+    expect(pickStart(only)).toBe('sec-jwt')
+  })
+
+  it('빈 서브그래프면 null', () => {
+    expect(pickStart({ nodes: [], edges: [] })).toBeNull()
   })
 })
 
