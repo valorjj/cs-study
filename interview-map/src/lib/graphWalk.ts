@@ -52,9 +52,10 @@ function siblingsOf(sub: SubGraph, id: string): string[] {
   return [...out]
 }
 
-// 시작: net-http 우선, 없으면 첫 L1, 없으면 첫 노드.
+// 시작: 그 도메인의 첫 L1, 없으면 첫 노드.
+// graph.json의 노드 순서가 학습 순서라서 도메인마다 자연스러운 입구가 나온다
+// (network는 net-http 그대로). "자식 최다 L1" 규칙은 network에서 net-tcp를 골라 검증된 동작이 바뀐다.
 export function pickStart(sub: SubGraph): string | null {
-  if (sub.nodes.some((n) => n.id === 'net-http')) return 'net-http'
   const l1 = sub.nodes.find((n) => n.level === 1)
   return l1?.id ?? sub.nodes[0]?.id ?? null
 }
