@@ -48,16 +48,16 @@ Hash의 본질: **"키 → 숫자(인덱스) 변환 함수"**. 변환만 빠르�
 | 상황 | 대신 쓸 것 | 이유 |
 |------|-----------|------|
 | 정렬된 순회 필요 | `TreeMap` (Red-Black Tree) | HashMap은 순서 보장 X |
-| 범위 검색 (15~25) | `TreeMap.subMap()` | Hash는 범위 개념 X |
+| 범위 검색 (15\~25) | `TreeMap.subMap()` | Hash는 범위 개념 X |
 | 삽입/접근 순서 유지 | `LinkedHashMap` | LRU 캐시 등 |
-| 키가 0~N 정수 | **배열** | HashMap은 Node overhead 큼 |
+| 키가 0\~N 정수 | **배열** | HashMap은 Node overhead 큼 |
 | Thread-safe | `ConcurrentHashMap` | HashMap은 동시성 X (무한루프 가능) |
 | 메모리 타이트 | 배열 / BitSet | bucket + Node + load factor 여유공간 |
 
 ## 6. 핵심 포인트 (자주 하는 실수)
 - 🔴 "HashMap은 항상 O(1)" — 평균 O(1), worst Java 7=O(N), Java 8+=O(log N).
 - 🔴 "key 순서대로 나옴" — iteration 순서 X. LinkedHashMap이 그거 함.
-- 🔴 "모든 key는 HashMap이 빠름" — 0~N 작은 정수면 배열이 메모리/속도 모두 우위.
+- 🔴 "모든 key는 HashMap이 빠름" — 0\~N 작은 정수면 배열이 메모리/속도 모두 우위.
 - 🟡 null 허용? HashMap key/value null 허용(key 1개). ConcurrentHashMap, TreeMap은 null key 불가.
 
 ## 7. 패턴 정리표 — Map 자매들
@@ -74,7 +74,7 @@ Hash의 본질: **"키 → 숫자(인덱스) 변환 함수"**. 변환만 빠르�
 > ① 정렬·범위검색 필요할 때 → ② 예시(점수 랭킹, 시간 범위 조회) → ③ HashMap은 iteration 순서 X 한계 언급.
 
 **Q2. "1억 명 사용자 중복 체크 어떻게 하실래요?"**
-> ① HashSet — 평균 O(1), 메모리 ~1억 × Node ≈ 수 GB → ② 메모리 부족하면 BitSet (정수 ID) 또는 Bloom Filter (확률적, false positive 허용).
+> ① HashSet — 평균 O(1), 메모리 \~1억 × Node ≈ 수 GB → ② 메모리 부족하면 BitSet (정수 ID) 또는 Bloom Filter (확률적, false positive 허용).
 
 **Q3. "HashMap vs ConcurrentHashMap 차이?"**
 > ① HashMap 동시성 X (Java 7 resize 무한루프) → ② ConcurrentHashMap은 bucket 단위 lock(Java 8 CAS+synchronized) → ③ HashTable은 전체 lock이라 ConcurrentHashMap이 처리량 훨씬 높음.
@@ -163,7 +163,7 @@ buckets[5] → A → B → C → D        buckets[5] → A → B → C → D    
 | Java 7 이하 | LinkedList | **O(N)** |
 | Java 8 이상 | Red-Black Tree (size ≥ 8) | **O(log N)** |
 
-핵심: **Red-Black Tree는 self-balancing BST라서 height가 항상 ~2 log N 이하 보장**. 일반 BST는 한쪽으로 쏠리면 O(N), RB Tree는 색깔 규칙(빨/검 5가지)으로 균형 강제 ➜ 어떤 삽입 순서든 O(log N).
+핵심: **Red-Black Tree는 self-balancing BST라서 height가 항상 \~2 log N 이하 보장**. 일반 BST는 한쪽으로 쏠리면 O(N), RB Tree는 색깔 규칙(빨/검 5가지)으로 균형 강제 ➜ 어떤 삽입 순서든 O(log N).
 
 → **그래서 Java 8+ HashMap의 worst case time = O(log N)**.
 
@@ -243,7 +243,7 @@ for (char c : chars) h = 31 * h + c;
 | 방식 | 작동 | 장점 | 단점 | 사용처 |
 |------|------|------|------|--------|
 | **Separate Chaining** | bucket → LL → RB Tree | resize 단순, 삭제 쉬움 | 포인터 메모리, cache miss | Java HashMap/HashSet |
-| **Open Addressing — Linear** | 충돌 시 다음 칸 | cache 친화적, 메모리 ↓ | clustering, LF 민감(max ~0.7) | Python dict, Java IdentityHashMap |
+| **Open Addressing — Linear** | 충돌 시 다음 칸 | cache 친화적, 메모리 ↓ | clustering, LF 민감(max \~0.7) | Python dict, Java IdentityHashMap |
 | **Open Addressing — Double Hash** | 두 번째 hash로 step | clustering 적음 | 구현 복잡 | 일부 라이브러리 |
 
 ## 4. equals / hashCode 계약 (면접 ⭐)
@@ -305,7 +305,7 @@ JPA Entity는 특히 주의: ID 기반 equals/hashCode 권장 (영속화 전후 
 > ① put 후 mutate 하면 hashCode 변경 → ② lookup은 새 hashCode → 새 bucket → 못 찾음 → ③ key는 immutable이 원칙. JPA Entity ID null→generate 후 사고 사례.
 
 **Q4. "load factor 0.75인 이유?"**
-> ① 더 낮으면 메모리 낭비 → ② 더 높으면 충돌 ↑ → ③ Knuth 분석상 0.5~0.75 sweet spot. 0.75는 일반 워크로드 균형.
+> ① 더 낮으면 메모리 낭비 → ② 더 높으면 충돌 ↑ → ③ Knuth 분석상 0.5\~0.75 sweet spot. 0.75는 일반 워크로드 균형.
 
 **Q5. "Java HashMap이 Open Addressing 대신 Chaining 쓰는 이유?"**
 > ① resize 부담 적음 → ② 삭제 단순 (O.A.는 tombstone) → ③ Java 8 treeify로 worst O(log N) 가능 → ④ 메모리 overhead는 감수.
@@ -463,7 +463,7 @@ Java RB 선택 이유: HashMap/TreeMap은 write 빈도 높음 → 회전 적은 
 
 **채점 (75/100 — 합격선 통과)**:
 - 🟢 worst O(log N) 언급 (treeify까지 알고 있음)
-- 🟢 **수질오염도 40~60% subMap 예시** — 실무 시나리오 정확. 면접관이 "써본 사람" 인상 받음
+- 🟢 **수질오염도 40\~60% subMap 예시** — 실무 시나리오 정확. 면접관이 "써본 사람" 인상 받음
 - 🟢 "근사값 용이" — `floorKey/ceilingKey` 의도 표현
 - 🟡 Trade-off 명시 부족 (마무리에 "순서·범위 필요 없으면 HashMap이 정답" 한 줄 있으면 완벽)
 - 🔴 **API 정정 필요**: `Collections.sort` / `comparingByKey` 는 TreeMap의 정렬 API가 **아님**.
@@ -476,7 +476,7 @@ Java RB 선택 이유: HashMap/TreeMap은 write 빈도 높음 → 회전 적은 
 >
 > ② TreeMap은 **Red-Black Tree 기반**으로 key 자동 정렬. 모든 연산 O(log N)이지만 **(a) 정렬 순회 (b) 범위 검색 `subMap` (c) 근사값 `floorKey/ceilingKey`** 지원.
 >
-> ③ 예시: 수질오염도 40~60% district 조회 → `pollution.subMap(40.0, 60.0)` 한 줄, O(log N + k). HashMap이면 entrySet 전체 O(N) 필터링.
+> ③ 예시: 수질오염도 40\~60% district 조회 → `pollution.subMap(40.0, 60.0)` 한 줄, O(log N + k). HashMap이면 entrySet 전체 O(N) 필터링.
 >
 > ④ 결론: 순서·범위·근사가 필요하면 TreeMap, 아니면 HashMap. TreeMap 정렬 규칙은 `new TreeMap<>(Comparator)` 로 주입.
 
@@ -500,7 +500,7 @@ Java RB 선택 이유: HashMap/TreeMap은 write 빈도 높음 → 회전 적은 
 - **안 쓸 때**:
   - 정렬 순회/범위 검색 필요 → `TreeMap` (Red-Black Tree, `subMap`/`floorKey`)
   - 삽입·접근 순서 유지 → `LinkedHashMap` (LRU 캐시 등)
-  - 키가 0~N 정수 → **배열** (Node overhead 없음)
+  - 키가 0\~N 정수 → **배열** (Node overhead 없음)
   - Thread-safe 필요 → `ConcurrentHashMap`
 - 흔한 오해: "HashMap은 항상 O(1)" → 평균 O(1)이고, worst case는 Java 7=O(N), Java 8+=O(log N)
 
@@ -513,7 +513,7 @@ Java RB 선택 이유: HashMap/TreeMap은 write 빈도 높음 → 회전 적은 
 
 1. `hashCode()` → 32비트 정수 h
 2. spread: `h ^ (h >>> 16)` → 상위 16비트를 하위 비트에 섞음
-3. `(n - 1) & hash` → 0~n-1 범위의 bucket index (n = capacity)
+3. `(n - 1) & hash` → 0\~n-1 범위의 bucket index (n = capacity)
 
 - spread를 하는 이유: capacity가 작으면 하위 비트만 index에 반영되는데, spread 없이는 상위 비트만 다른 객체들이 전부 같은 bucket에 몰림
 

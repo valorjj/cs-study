@@ -274,7 +274,7 @@ long count = list.parallelStream().filter(...).count();  // ForkJoinPool로 분�
 - 🔴 **I/O 바운드 / 블로킹 작업**: 공용 ForkJoinPool은 전체 앱이 공유 → 여기서 블로킹하면 **다른 병렬 작업까지 굶는다(pool starvation)**.
 - 🔴 **reduce의 결합법칙 위반**: 병렬 reduce의 결합 함수는 **associative**해야 함(뺄셈 등 순서 의존 연산은 병렬에서 결과가 달라짐).
 
-> 실무 판단: "데이터가 충분히 크고(수만~), 연산이 CPU 바운드이며, 각 작업이 독립적(공유 상태·순서·블로킹 없음)"일 때만. 대부분의 웹 요청 처리에선 **그냥 순차 stream**이 맞고, 병렬은 벤치마크로 이득을 확인한 뒤 쓴다.
+> 실무 판단: "데이터가 충분히 크고(수만\~), 연산이 CPU 바운드이며, 각 작업이 독립적(공유 상태·순서·블로킹 없음)"일 때만. 대부분의 웹 요청 처리에선 **그냥 순차 stream**이 맞고, 병렬은 벤치마크로 이득을 확인한 뒤 쓴다.
 
 ## 8. 비교표 — for문 vs Stream
 | | 전통 for문 | Stream |
@@ -305,7 +305,7 @@ long count = list.parallelStream().filter(...).count();  // ForkJoinPool로 분�
 > 중간 연산은 즉시 실행되지 않고 종단 연산 때 한꺼번에 실행된다. 게다가 요소 하나가 파이프라인 끝까지 흐른 뒤 다음 요소로 가는 세로 순회라, `findFirst`·`limit` 같은 short-circuit과 만나면 필요한 만큼만 계산하고 나머지는 건너뛴다 → 불필요한 연산 절감, 무한 스트림도 처리 가능.
 
 **Q3. "map과 flatMap의 차이는?"**
-> map은 요소를 1:1로 변환(`Stream<T>`→`Stream<R>`). flatMap은 각 요소를 스트림으로 바꾼 뒤 하나의 스트림으로 평탄화(`Stream<List<T>>`→`Stream<T>`). 중첩 컬렉션을 펼치거나 요소당 0~N개로 확장할 때 flatMap.
+> map은 요소를 1:1로 변환(`Stream<T>`→`Stream<R>`). flatMap은 각 요소를 스트림으로 바꾼 뒤 하나의 스트림으로 평탄화(`Stream<List<T>>`→`Stream<T>`). 중첩 컬렉션을 펼치거나 요소당 0\~N개로 확장할 때 flatMap.
 
 **Q4. "parallelStream을 언제 쓰면 안 되나요?"**
 > ① 람다에서 공유 가변 상태를 건드릴 때(데이터 레이스), ② 순서에 의존할 때, ③ 데이터가 작거나 연산이 가벼워 분할·병합 오버헤드가 이득을 넘을 때, ④ I/O·블로킹 작업일 때(공용 ForkJoinPool을 굶김), ⑤ reduce 결합 함수가 결합법칙을 안 지킬 때. 웹 요청 처리 대부분은 순차 stream이 맞고, 병렬은 대용량·CPU바운드·독립 작업에서 벤치마크로 확인 후 쓴다.
