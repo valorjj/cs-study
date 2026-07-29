@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { remarkPlugins } from '../lib/markdownPlugins'
 import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuShuffle, LuTarget, LuRefreshCw } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
@@ -127,7 +127,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
 
           {revealed ? (
             <div className="quiz-a">
-              <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{card.answer}</Markdown>
+              <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{card.answer}</Markdown>
             </div>
           ) : (
             <button className="quiz-reveal" onClick={() => setRevealed(true)}>답 보기</button>

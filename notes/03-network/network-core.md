@@ -73,7 +73,7 @@
 ### L4 — TCP 헤더 (최소 20B)
 | 필드 | 크기 | 의미 |
 |------|------|------|
-| **Src / Dst Port** | 각 2B | 프로세스 식별(0~65535) |
+| **Src / Dst Port** | 각 2B | 프로세스 식별(0\~65535) |
 | **Sequence Number** | 4B | 보낸 바이트 스트림의 첫 바이트 번호 |
 | **Ack Number** | 4B | "여기까지 잘 받음, 다음은 이 번호" |
 | Data Offset | 4b | TCP 헤더 길이 |
@@ -164,7 +164,7 @@ Client                         Server
 ### 6-2. 혼잡 제어(Congestion Control) — Slow Start / AIMD
 흐름 제어와 달리, 혼잡 제어는 **네트워크(중간 경로)의 처리 능력**을 추정해서 조절 — "회선 자체가 막힐 것 같으니 늦출게". 기준 변수는 **cwnd(congestion window)**이고, 실제 전송량은 `min(cwnd, rwnd)`.
 
-1. **Slow Start**: cwnd를 작게(1~2 MSS) 시작해 **RTT마다 2배(지수적)** 증가 → `ssthresh`(임계값) 도달 또는 손실 발생 시 다음 단계로.
+1. **Slow Start**: cwnd를 작게(1\~2 MSS) 시작해 **RTT마다 2배(지수적)** 증가 → `ssthresh`(임계값) 도달 또는 손실 발생 시 다음 단계로.
 2. **Congestion Avoidance (AIMD)**: ssthresh 이후엔 **RTT마다 +1 MSS(선형 증가, Additive Increase)** — 조심스럽게 늘림.
 3. **손실 발생 시 (Multiplicative Decrease)**:
    - **Timeout**(패킷 완전 유실 추정) → cwnd를 1로 리셋하고 slow start부터 재시작(강한 처벌).
@@ -463,7 +463,7 @@ Client                              Server
 7. 브라우저 렌더링 (HTML 파싱 → DOM → 표시)
 8. 연결 종료 (4-way) 또는 keep-alive 재사용
 ```
-> 이 한 흐름에 N1~N4가 다 나옴. 면접에서 이걸로 "계층을 실제로 이해했다"를 보여줄 수 있다.
+> 이 한 흐름에 N1\~N4가 다 나옴. 면접에서 이걸로 "계층을 실제로 이해했다"를 보여줄 수 있다.
 
 ## 4. 핵심 포인트
 - 🟡 DNS는 주로 **UDP**(빠름, 작은 응답). 응답 크거나 재전송 필요 시 TCP.
@@ -641,7 +641,7 @@ cwnd
 > 아닙니다. QUIC은 UDP 443을 쓰는데 일부 기업 방화벽·미들박스가 이를 차단해 TCP로 폴백해야 하고, UDP 처리가 커널 최적화가 덜 돼 CPU 비용이 더 들 수 있습니다. 손실이 적은 안정적 유선망·내부 통신에서는 HTTP/2로 충분하고, 손실·이동성이 큰 공용 인터넷 클라이언트 트래픽에서 HTTP/3의 이득이 큽니다. 실제로는 HTTP/3를 제공하되 미지원 클라이언트는 HTTP/2로 자연스럽게 폴백하도록 함께 운영합니다.
 
 **Q4. "HTTP/3가 연결 수립을 어떻게 빠르게 하나요?"**
-> QUIC은 TLS 1.3을 프로토콜에 내장해 전송 연결과 암호화 협상을 합쳐 1-RTT에 끝냅니다. TCP+TLS라면 3-way 핸드셰이크 뒤 TLS 핸드셰이크가 별도로 붙어 최소 2~3 RTT가 드는 것과 대비됩니다. 한 번 붙었던 서버에는 세션 정보를 캐시해 0-RTT로 곧바로 요청을 실어 보낼 수도 있고, Connection ID로 식별하므로 Wi-Fi↔LTE 전환처럼 IP가 바뀌어도 연결을 새로 맺지 않습니다.
+> QUIC은 TLS 1.3을 프로토콜에 내장해 전송 연결과 암호화 협상을 합쳐 1-RTT에 끝냅니다. TCP+TLS라면 3-way 핸드셰이크 뒤 TLS 핸드셰이크가 별도로 붙어 최소 2\~3 RTT가 드는 것과 대비됩니다. 한 번 붙었던 서버에는 세션 정보를 캐시해 0-RTT로 곧바로 요청을 실어 보낼 수도 있고, Connection ID로 식별하므로 Wi-Fi↔LTE 전환처럼 IP가 바뀌어도 연결을 새로 맺지 않습니다.
 
 ---
 
@@ -950,7 +950,7 @@ public SseEmitter stream() {
 <summary>Q12. HTTP/3(QUIC)는 무엇을 더 해결했고, 무조건 정답인가요?</summary>
 
 - **UDP 기반 QUIC**: 스트림 다중화를 전송 계층에 내장 → 스트림별 독립 순서 관리로 **TCP 레벨 HOL 제거**
-- **TLS 1.3 내장** → 연결+암호화 핸드셰이크를 **1-RTT**(재접속 시 0-RTT). TCP+TLS의 2~3 RTT 대비 빠름
+- **TLS 1.3 내장** → 연결+암호화 핸드셰이크를 **1-RTT**(재접속 시 0-RTT). TCP+TLS의 2\~3 RTT 대비 빠름
 - **Connection Migration**: Connection ID로 식별해 Wi-Fi↔LTE로 IP가 바뀌어도 연결 유지
 - 트레이드오프: UDP 443을 막는 방화벽·미들박스에선 **TCP로 폴백** 필요, UDP 처리 CPU 비용↑. 안정적 유선·내부망은 HTTP/2로 충분, 손실·이동성 큰 공용 트래픽에서 HTTP/3 이득
 - 낡은 답 주의: "HTTP/2 = 서버 푸시"는 이제 비권장(브라우저 지원 중단)

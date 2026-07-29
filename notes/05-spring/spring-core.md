@@ -236,7 +236,7 @@ Client ← Filter ← DispatcherServlet ← Interceptor(postHandle/afterCompleti
 | 구분 | 실행 위치 | 스프링 컨텍스트 접근 | 대표 용도 |
 |------|-----------|----------------------|-----------|
 | **Filter** | 서블릿 컨테이너 (DispatcherServlet 앞뒤) | 원칙적으로 불가(스프링 빈 아님) | 인코딩 설정, CORS, XSS 방어, 요청/응답 원본 조작 |
-| **Interceptor** | 스프링 MVC (HandlerMapping ~ Controller 사이) | 가능(스프링 빈) | 인증/인가, 공통 로깅, `ModelAndView` 조작 |
+| **Interceptor** | 스프링 MVC (HandlerMapping \~ Controller 사이) | 가능(스프링 빈) | 인증/인가, 공통 로깅, `ModelAndView` 조작 |
 | **AOP** | 메서드 호출 레벨 (빈 내부, HTTP 요청과 무관하게도 동작) | 가능(스프링 빈) | 트랜잭션, 비즈니스 로직 로깅, 캐싱 — 가장 세밀한 단위 |
 
 - 🟡 Filter는 스프링이 아니라 **서블릿 스펙** 기능이라 스프링 컨텍스트 밖에서도 동작 — 프레임워크 교체와 무관하게 필요한 저수준 처리에 적합.
@@ -426,7 +426,7 @@ Client
 바깥 서비스가 "큰 계약(물리 트랜잭션)"을 열면, 안쪽에서 호출되는 서비스들은 상황에 따라 ① **그 계약에 서명만 더 하거나(REQUIRED)** ② **완전히 별도 계약서를 새로 쓰거나(REQUIRES_NEW)** ③ **큰 계약 안에 부분 취소가 가능한 조항(savepoint)을 다는(NESTED)** 방식으로 참여합니다. 전파(propagation)는 "이미 진행 중인 트랜잭션이 있을 때 어떻게 합류할지"의 규칙입니다.
 
 ## 2. 개념 정의 — 물리 트랜잭션 vs 논리 트랜잭션
-> **물리(physical) 트랜잭션** = 실제 DB 커넥션에 붙은 begin~commit/rollback 단위(진짜 하나).
+> **물리(physical) 트랜잭션** = 실제 DB 커넥션에 붙은 begin\~commit/rollback 단위(진짜 하나).
 > **논리(logical) 트랜잭션** = `@Transactional`이 붙은 메서드 각각의 트랜잭션 경계(개념상 여러 개).
 > REQUIRED로 중첩 호출하면 논리 트랜잭션은 여러 개지만 **물리 트랜잭션은 1개**로 묶입니다. 그래서 안쪽에서 하나라도 롤백을 표시하면 전체가 롤백됩니다.
 

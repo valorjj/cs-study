@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { remarkPlugins } from '../lib/markdownPlugins'
 import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuShuffle, LuShield } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
@@ -204,7 +204,7 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
                     {scored.score <= 2 ? (
                       <div className="drill-a">
                         <p className="drill-dim">모범답안:</p>
-                        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
+                        <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
                         <div className="drill-assess">
                           <button className="drill-miss" onClick={retry}>다시 답변</button>
                           <button className="drill-got" onClick={advanceAfterScore}>다음으로</button>
@@ -231,7 +231,7 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
               <>
                 {revealed ? (
                   <div className="drill-a">
-                    <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
+                    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
                   </div>
                 ) : (
                   <button className="drill-reveal" onClick={() => setRevealed(true)}>답 보기</button>
