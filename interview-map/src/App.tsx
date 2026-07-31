@@ -19,6 +19,7 @@ import { ViewToggle } from './components/ViewToggle'
 import { useGraphStore } from './store/graphStore'
 import { useThemeEffect, useViewModeEffect } from './hooks/useTheme'
 import { useCloudSync } from './hooks/useCloudSync'
+import { useUrlSync } from './hooks/useUrlSync'
 
 const data = graphData as GraphData
 
@@ -26,6 +27,7 @@ export default function App() {
   useThemeEffect()
   useViewModeEffect()
   useCloudSync()
+  useUrlSync()
   const viewMode = useGraphStore((s) => s.viewMode)
   const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])
   const edges = useMemo(() => toFlowEdges(data.edges), [])
