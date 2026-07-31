@@ -46,6 +46,7 @@ export function readGuestSrs(): SrsState {
 interface GraphState {
   selectedId: string | null
   select: (id: string | null) => void
+  openNote: (id: string) => void  // 다른 탭에서 노트 열기 (선택 + list 모드 전환을 한 번에)
   focusRequestId: string | null   // 카메라 이동 요청 (검색 등)
   requestFocus: (id: string) => void
   clearFocusRequest: () => void
@@ -75,6 +76,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   // Clear any pending camera-focus so a stale search target can't hijack the
   // graph camera after the user picks a different node (e.g. in list mode).
   select: (id) => set({ selectedId: id, focusRequestId: null }),
+  // One atomic set: two separate sets would emit an intermediate state to
+  // subscribers (and, via useUrlSync, a bogus extra history entry).
+  openNote: (id) => set({ selectedId: id, viewMode: 'list', focusRequestId: null }),
   focusRequestId: null,
   requestFocus: (id) => set({ focusRequestId: id, selectedId: id }),
   clearFocusRequest: () => set({ focusRequestId: null }),

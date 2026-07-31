@@ -82,3 +82,20 @@ describe('trackId', () => {
     expect(useGraphStore.getState().trackId).toBe('curated:junior-backend')
   })
 })
+
+describe('openNote', () => {
+  it('sets selection and view mode in a single notification', () => {
+    useGraphStore.setState({ selectedId: null, viewMode: 'path', focusRequestId: 'stale' })
+    let notifications = 0
+    const unsub = useGraphStore.subscribe(() => { notifications++ })
+
+    useGraphStore.getState().openNote('dsa-bigo')
+
+    unsub()
+    const s = useGraphStore.getState()
+    expect(s.selectedId).toBe('dsa-bigo')
+    expect(s.viewMode).toBe('list')
+    expect(s.focusRequestId).toBeNull()
+    expect(notifications).toBe(1)
+  })
+})

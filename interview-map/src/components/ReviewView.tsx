@@ -19,7 +19,7 @@ function todayStr(): string {
 
 // Spaced-repetition review: today's due + new cards, graded on a 3-point scale.
 export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
-  const select = useGraphStore((s) => s.select)
+  const openNote = useGraphStore((s) => s.openNote)
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const srs = useGraphStore((s) => s.srs)
   const quizStats = useGraphStore((s) => s.quizStats)
@@ -92,7 +92,7 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
         )}
 
         <div className="review-actions">
-          <button className="review-link" onClick={() => { select(card.nodeId); setViewMode('list') }}>
+          <button className="review-link" onClick={() => openNote(card.nodeId)}>
             이 개념 보기 <LuArrowRight size={14} />
           </button>
           {revealed && (

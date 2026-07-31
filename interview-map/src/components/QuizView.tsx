@@ -21,7 +21,7 @@ function todayStr(): string {
 
 // Flashcard quiz: interview Q&A drawn in a date-seeded order within the chosen scope.
 export function QuizView({ nodes }: { nodes: GraphNode[] }) {
-  const select = useGraphStore((s) => s.select)
+  const openNote = useGraphStore((s) => s.openNote)
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const recordReview = useGraphStore((s) => s.recordReview)
   const quizStats = useGraphStore((s) => s.quizStats)
@@ -134,7 +134,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
           )}
 
           <div className="quiz-actions">
-            <button className="quiz-link" onClick={() => { select(card.nodeId); setViewMode('list') }}>
+            <button className="quiz-link" onClick={() => openNote(card.nodeId)}>
               이 개념 보기 <LuArrowRight size={14} />
             </button>
             {revealed ? (

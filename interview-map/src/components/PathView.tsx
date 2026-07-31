@@ -31,8 +31,7 @@ export function PathView({ nodes, edges, nodesById }: {
   edges: GraphEdge[]
   nodesById: Map<string, GraphNode>
 }) {
-  const select = useGraphStore((s) => s.select)
-  const setViewMode = useGraphStore((s) => s.setViewMode)
+  const openNote = useGraphStore((s) => s.openNote)
   const studiedIds = useGraphStore((s) => s.studiedIds)
   const toggleStudied = useGraphStore((s) => s.toggleStudied)
   const trackId = useGraphStore((s) => s.trackId)
@@ -59,7 +58,7 @@ export function PathView({ nodes, edges, nodesById }: {
   const nextNode = nextIdx >= 0 ? nodesById.get(track.steps[nextIdx]) : undefined
   const pct = total ? Math.round((done / total) * 100) : 0
 
-  const openNode = (id: string) => { select(id); setViewMode('list') }
+  const openNode = (id: string) => openNote(id)
   const pickTrack = (id: string) => { setTrackId(id); setMobileDetail(true) }
 
   const renderTrack = (t: Track) => {
