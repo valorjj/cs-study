@@ -70,3 +70,15 @@ describe('quizMode', () => {
     expect(useGraphStore.getState().quizMode).toBe('drill')
   })
 })
+
+describe('trackId', () => {
+  it('defaults to null so PathView falls back to the first track', () => {
+    expect(useGraphStore.getInitialState().trackId).toBeNull()
+  })
+
+  it('setTrackId selects a course and survives a view switch', () => {
+    useGraphStore.getState().setTrackId('curated:junior-backend')
+    useGraphStore.getState().setViewMode('list')
+    expect(useGraphStore.getState().trackId).toBe('curated:junior-backend')
+  })
+})

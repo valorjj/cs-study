@@ -25,7 +25,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const recordReview = useGraphStore((s) => s.recordReview)
   const quizStats = useGraphStore((s) => s.quizStats)
-  const requestTrack = useGraphStore((s) => s.requestTrack)
+  const setTrackId = useGraphStore((s) => s.setTrackId)
   const srs = useGraphStore((s) => s.srs)
   const quizSettings = useGraphStore((s) => s.quizSettings)
   const setQuizSettings = useGraphStore((s) => s.setQuizSettings)
@@ -110,7 +110,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
         <div className="quiz-weak">
           <span className="quiz-weak-label"><LuTarget size={13} /> 약점 보강</span>
           {weak.map((w) => (
-            <button key={w.domain} className="quiz-weak-chip" onClick={() => requestTrack(`domain:${w.domain}`)}>
+            <button key={w.domain} className="quiz-weak-chip" onClick={() => { setTrackId(`domain:${w.domain}`); setViewMode('path') }}>
               {domainLabel.get(w.domain) ?? w.domain} <b>{w.correct}/{w.seen}</b>
             </button>
           ))}

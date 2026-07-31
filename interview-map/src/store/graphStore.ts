@@ -66,9 +66,8 @@ interface GraphState {
   recordReview: (srsKey: string, item: { domain: string }, grade: number, today: string) => void
   quizSettings: QuizSettings                // 퀴즈 순서·SRS 취향값 (localStorage 전용)
   setQuizSettings: (patch: Partial<QuizSettings>) => void
-  pathTrackId: string | null                // 퀴즈 약점 칩 → 코스 탭 열기 요청
-  requestTrack: (trackId: string) => void
-  clearPathTrack: () => void
+  trackId: string | null                    // 코스 탭에서 선택된 트랙 (null = 첫 트랙)
+  setTrackId: (id: string | null) => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -115,7 +114,6 @@ export const useGraphStore = create<GraphState>((set) => ({
     try { localStorage.setItem(QUIZSETTINGS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
     return { quizSettings: next }
   }),
-  pathTrackId: null,
-  requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
-  clearPathTrack: () => set({ pathTrackId: null }),
+  trackId: null,
+  setTrackId: (id) => set({ trackId: id }),
 }))

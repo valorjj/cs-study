@@ -35,8 +35,8 @@ export function PathView({ nodes, edges, nodesById }: {
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const studiedIds = useGraphStore((s) => s.studiedIds)
   const toggleStudied = useGraphStore((s) => s.toggleStudied)
-  const pathTrackId = useGraphStore((s) => s.pathTrackId)
-  const clearPathTrack = useGraphStore((s) => s.clearPathTrack)
+  const trackId = useGraphStore((s) => s.trackId)
+  const setTrackId = useGraphStore((s) => s.setTrackId)
 
   const studied = useMemo(() => new Set(studiedIds), [studiedIds])
   const tracks = useMemo(() => [...CURATED_TRACKS, ...buildDomainTracks(nodes, edges)], [nodes, edges])
@@ -44,16 +44,12 @@ export function PathView({ nodes, edges, nodesById }: {
     () => new Map(nodes.filter((n) => n.level === 0).map((n) => [n.domain, n.label])),
     [nodes],
   )
-  const [selectedId, setSelectedId] = useState(tracks[0]?.id ?? '')
-  const [mobileDetail, setMobileDetail] = useState(false)
+  // Course deep-links (#/path/<id>) and the quiz weak-domain chip both arrive as
+  // a non-null trackId, so seed the mobile detail pane open in that case.
+  const [mobileDetail, setMobileDetail] = useState(trackId != null)
+  useEffect(() => { if (trackId) setMobileDetail(true) }, [trackId])
 
-  // A quiz weak-domain chip (requestTrack) asked to open a specific course.
-  useEffect(() => {
-    if (!pathTrackId) return
-    setSelectedId(pathTrackId)
-    setMobileDetail(true)
-    clearPathTrack()
-  }, [pathTrackId, clearPathTrack])
+  const selectedId = trackId ?? tracks[0]?.id ?? ''
 
   const curated = tracks.filter((t) => t.id.startsWith('curated:'))
   const domainTracks = tracks.filter((t) => t.id.startsWith('domain:'))
@@ -64,7 +60,7 @@ export function PathView({ nodes, edges, nodesById }: {
   const pct = total ? Math.round((done / total) * 100) : 0
 
   const openNode = (id: string) => { select(id); setViewMode('list') }
-  const pickTrack = (id: string) => { setSelectedId(id); setMobileDetail(true) }
+  const pickTrack = (id: string) => { setTrackId(id); setMobileDetail(true) }
 
   const renderTrack = (t: Track) => {
     const p = trackProgress(t, studied)
