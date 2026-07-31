@@ -55,8 +55,9 @@
 ```ts
 describe('quizMode', () => {
   it('defaults to flash', () => {
-    useGraphStore.setState({ quizMode: 'flash' })
-    expect(useGraphStore.getState().quizMode).toBe('flash')
+    // getInitialState() reads the store's declared initial value, not whatever
+    // an earlier test left behind.
+    expect(useGraphStore.getInitialState().quizMode).toBe('flash')
   })
 
   it('setQuizMode switches the active quiz sub-tab', () => {
@@ -146,8 +147,7 @@ EOF
 ```ts
 describe('trackId', () => {
   it('defaults to null so PathView falls back to the first track', () => {
-    useGraphStore.setState({ trackId: null })
-    expect(useGraphStore.getState().trackId).toBeNull()
+    expect(useGraphStore.getInitialState().trackId).toBeNull()
   })
 
   it('setTrackId selects a course and survives a view switch', () => {
