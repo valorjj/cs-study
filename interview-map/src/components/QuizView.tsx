@@ -110,6 +110,11 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
         <div className="quiz-weak">
           <span className="quiz-weak-label"><LuTarget size={13} /> 약점 보강</span>
           {weak.map((w) => (
+            // Order is load-bearing: setTrackId first keeps the intermediate
+            // state's URL at #/quiz/flash (trackId isn't part of the quiz
+            // route), so only setViewMode('path') produces a URL change and
+            // exactly one history entry is pushed. Swapping these would push
+            // a bogus #/path entry (trackId still null) before the real one.
             <button key={w.domain} className="quiz-weak-chip" onClick={() => { setTrackId(`domain:${w.domain}`); setViewMode('path') }}>
               {domainLabel.get(w.domain) ?? w.domain} <b>{w.correct}/{w.seen}</b>
             </button>

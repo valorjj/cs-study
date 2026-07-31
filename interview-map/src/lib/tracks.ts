@@ -1,4 +1,6 @@
-import type { GraphNode, GraphEdge } from '../graph/types'
+import graphData from '../graph/graph.json'
+import type { GraphData, GraphNode, GraphEdge } from '../graph/types'
+import { CURATED_TRACKS } from '../graph/tracks'
 import { buildTree, type TreeNode } from './tree'
 
 export interface Track {
@@ -29,6 +31,14 @@ export function buildDomainTracks(nodes: GraphNode[], edges: GraphEdge[]): Track
     steps: flattenSteps(root),
   }))
 }
+
+// Every selectable course: hand-curated plus one per domain. Built once at
+// module load from the static, already-bundled graph.json, and shared by
+// useUrlSync (route vocab: which track ids a #/path/<id> hash may name) and
+// PathView (the course list) so buildTree only walks the whole graph once per
+// page load instead of once per consumer.
+const graph = graphData as GraphData
+export const ALL_TRACKS: Track[] = [...CURATED_TRACKS, ...buildDomainTracks(graph.nodes, graph.edges)]
 
 export function trackProgress(track: Track, studied: Set<string>): { done: number; total: number } {
   let done = 0

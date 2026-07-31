@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import graphData from '../graph/graph.json'
 import type { GraphData } from '../graph/types'
-import { CURATED_TRACKS } from '../graph/tracks'
-import { buildDomainTracks } from '../lib/tracks'
+import { ALL_TRACKS } from '../lib/tracks'
 import { parseHash, formatHash, type Route, type RouteVocab } from '../lib/route'
 import { useGraphStore } from '../store/graphStore'
 import { VIEW_KEY } from './useTheme'
@@ -13,9 +12,11 @@ const data = graphData as GraphData
 // vocab is available synchronously and a deep link needs no async gate to
 // validate. Route application itself still happens in useEffect below, i.e.
 // after the first paint — a deep link briefly paints the default view first.
+// ALL_TRACKS is itself module-load-once (shared with PathView), so this adds
+// no extra buildTree pass.
 const VOCAB: RouteVocab = {
   nodeIds: new Set(data.nodes.map((n) => n.id)),
-  trackIds: new Set([...CURATED_TRACKS, ...buildDomainTracks(data.nodes, data.edges)].map((t) => t.id)),
+  trackIds: new Set(ALL_TRACKS.map((t) => t.id)),
 }
 
 // Which store fields ride in the URL, per view. Everything else (theme,
@@ -48,11 +49,18 @@ function initialHash(): string {
 }
 
 // Two-way bridge between the store and the browser's history. The ONLY place
-// that touches window.history.
+// in this codebase that touches window.history — but not the only code that
+// mutates the fragment: @supabase/auth-js also replaceStates (PKCE) or clears
+// window.location.hash (implicit flow) after an OAuth redirect, which is
+// exactly the non-canonical-entry case handled below.
 //
-// Loop guard: just the string compare below. On popstate location.hash has
-// already changed, so applying it to the store makes formatHash(state) equal
-// location.hash and the push is skipped. No flags, no refs.
+// Loop guard: just the string compare in the subscriber below. Applying a
+// route to the store makes formatHash(state) equal location.hash, so the
+// push is skipped — but only if location.hash was already canonical. On
+// popstate/hashchange it might not be (a non-canonical entry from a manual
+// address-bar edit, or Supabase's implicit-flow hash clear), so we
+// canonicalise the URL with replaceState BEFORE applying the route: that
+// keeps the string compare true instead of suppressing it. No flags, no refs.
 export function useUrlSync(): void {
   useEffect(() => {
     const route = parseHash(initialHash(), VOCAB)
@@ -61,8 +69,20 @@ export function useUrlSync(): void {
     // behind, and it keeps StrictMode's double-mount idempotent.
     window.history.replaceState(null, '', formatHash(route))
 
-    const onPop = () => applyRoute(parseHash(window.location.hash, VOCAB))
-    window.addEventListener('popstate', onPop)
+    // Handles both popstate (Back/Forward) and hashchange (manual address-bar
+    // edits, and Supabase's implicit-flow `window.location.hash = ''` after
+    // consuming the OAuth token fragment — hashchange fires but popstate does
+    // not). Order matters: replaceState must run before applyRoute, because
+    // the store subscriber below runs synchronously inside applyRoute's
+    // setState and reads window.location.hash to decide whether to push.
+    const applyFromUrl = () => {
+      const r = parseHash(window.location.hash, VOCAB)
+      const canon = formatHash(r)
+      if (canon !== window.location.hash) window.history.replaceState(null, '', canon)
+      applyRoute(r)
+    }
+    window.addEventListener('popstate', applyFromUrl)
+    window.addEventListener('hashchange', applyFromUrl)
 
     const unsubscribe = useGraphStore.subscribe(() => {
       const next = formatHash(routeFromState(useGraphStore.getState()))
@@ -70,7 +90,8 @@ export function useUrlSync(): void {
     })
 
     return () => {
-      window.removeEventListener('popstate', onPop)
+      window.removeEventListener('popstate', applyFromUrl)
+      window.removeEventListener('hashchange', applyFromUrl)
       unsubscribe()
     }
   }, [])

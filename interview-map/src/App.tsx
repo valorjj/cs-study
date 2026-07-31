@@ -51,7 +51,7 @@ export default function App() {
       )}
       {viewMode === 'home' && <HomeView nodes={data.nodes} />}
       {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
-      {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
+      {viewMode === 'path' && <PathView nodes={data.nodes} nodesById={nodesById} />}
       {viewMode === 'guide' && <GuideView />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
       <AuthButton />

@@ -46,7 +46,7 @@ describe('useUrlSync', () => {
     expect(window.history.length).toBe(before + 1)
   })
 
-  it('pushes exactly one entry per navigation', () => {
+  it('pushes exactly one entry per navigation, across two navigations', () => {
     renderHook(() => useUrlSync())
     const before = window.history.length
     useGraphStore.getState().setViewMode('path')
@@ -101,6 +101,43 @@ describe('useUrlSync', () => {
     window.dispatchEvent(new PopStateEvent('popstate'))
     expect(window.history.length).toBe(before)
     expect(window.location.hash).toBe('#/list/dsa-bigo')
+  })
+
+  it('does not push back after a popstate onto a non-canonical hash (#/quiz)', () => {
+    renderHook(() => useUrlSync())
+    setHash('#/quiz')
+    const before = window.history.length
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe('#/quiz/flash')
+  })
+
+  it('does not push back after a popstate onto a non-canonical hash (#, empty)', () => {
+    renderHook(() => useUrlSync())
+    setHash('#')
+    const before = window.history.length
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe('#/home')
+  })
+
+  it('does not push back after a popstate onto an unknown track id (#/path/domain:ghost)', () => {
+    renderHook(() => useUrlSync())
+    setHash('#/path/domain:ghost')
+    const before = window.history.length
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe('#/path')
+  })
+
+  it('canonicalises on hashchange too (address-bar edits, supabase hash clear)', () => {
+    renderHook(() => useUrlSync())
+    setHash('#/quiz')
+    const before = window.history.length
+    window.dispatchEvent(new Event('hashchange'))
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe('#/quiz/flash')
+    expect(useGraphStore.getState().viewMode).toBe('quiz')
   })
 
   it('survives a double mount without duplicating entries', () => {

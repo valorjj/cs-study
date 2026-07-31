@@ -3,11 +3,10 @@ import type { CSSProperties } from 'react'
 import type { IconType } from 'react-icons'
 import { LuArrowRight, LuCheck, LuCircleCheck, LuTarget, LuZap, LuPuzzle, LuShield, LuNetwork } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
-import { CURATED_TRACKS } from '../graph/tracks'
-import { buildDomainTracks, trackProgress, nextStepIndex, type Track } from '../lib/tracks'
+import { ALL_TRACKS, trackProgress, nextStepIndex, type Track } from '../lib/tracks'
 import { domainColor } from '../styles/theme'
 import { NodeIcon } from './NodeIcon'
-import type { GraphNode, GraphEdge } from '../graph/types'
+import type { GraphNode } from '../graph/types'
 import './PathView.css'
 
 // Vector icons for the hand-curated courses (keyed by Track.icon).
@@ -26,9 +25,8 @@ function TrackIcon({ track, size }: { track: Track; size: number }) {
 
 // Study-path view: choose a course (curated or per-domain) and work through its
 // ordered concepts, checking each off (persisted) and jumping to its note.
-export function PathView({ nodes, edges, nodesById }: {
+export function PathView({ nodes, nodesById }: {
   nodes: GraphNode[]
-  edges: GraphEdge[]
   nodesById: Map<string, GraphNode>
 }) {
   const openNote = useGraphStore((s) => s.openNote)
@@ -38,15 +36,18 @@ export function PathView({ nodes, edges, nodesById }: {
   const setTrackId = useGraphStore((s) => s.setTrackId)
 
   const studied = useMemo(() => new Set(studiedIds), [studiedIds])
-  const tracks = useMemo(() => [...CURATED_TRACKS, ...buildDomainTracks(nodes, edges)], [nodes, edges])
+  const tracks = ALL_TRACKS
   const domainLabel = useMemo(
     () => new Map(nodes.filter((n) => n.level === 0).map((n) => [n.domain, n.label])),
     [nodes],
   )
   // Course deep-links (#/path/<id>) and the quiz weak-domain chip both arrive as
-  // a non-null trackId, so seed the mobile detail pane open in that case.
+  // a non-null trackId, so seed the mobile detail pane open in that case. Keep
+  // it two-way (not just "open on truthy"): Back navigation to #/path clears
+  // trackId, and the pane must close then too, or it's left open silently
+  // showing tracks[0].
   const [mobileDetail, setMobileDetail] = useState(trackId != null)
-  useEffect(() => { if (trackId) setMobileDetail(true) }, [trackId])
+  useEffect(() => { setMobileDetail(trackId != null) }, [trackId])
 
   const selectedId = trackId ?? tracks[0]?.id ?? ''
 
@@ -58,7 +59,6 @@ export function PathView({ nodes, edges, nodesById }: {
   const nextNode = nextIdx >= 0 ? nodesById.get(track.steps[nextIdx]) : undefined
   const pct = total ? Math.round((done / total) * 100) : 0
 
-  const openNode = (id: string) => openNote(id)
   const pickTrack = (id: string) => { setTrackId(id); setMobileDetail(true) }
 
   const renderTrack = (t: Track) => {
@@ -90,7 +90,7 @@ export function PathView({ nodes, edges, nodesById }: {
           <div className="path-status">
             <span>{done} / {total} 완료</span>
             {nextNode ? (
-              <button className="path-continue" onClick={() => openNode(nextNode.id)}>
+              <button className="path-continue" onClick={() => openNote(nextNode.id)}>
                 이어서: {nextNode.label} <LuArrowRight size={14} />
               </button>
             ) : <span className="path-done"><LuCircleCheck size={15} /> 완료</span>}
@@ -110,7 +110,7 @@ export function PathView({ nodes, edges, nodesById }: {
                   {isDone && <LuCheck size={13} />}
                 </button>
                 <span className="path-num">{i + 1}</span>
-                <button className="path-step-label" onClick={() => openNode(id)}>
+                <button className="path-step-label" onClick={() => openNote(id)}>
                   <NodeIcon id={n.id} domain={n.domain} size={15} />
                   <span className="path-step-name">{n.label}</span>
                   <span className="path-step-domain">{domainLabel.get(n.domain) ?? n.domain}</span>
