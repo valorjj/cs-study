@@ -62,6 +62,25 @@ describe('useUrlSync', () => {
     expect(window.history.length).toBe(before)
   })
 
+  it('preserves quizMode across a popstate that lands on a non-quiz view', () => {
+    // Repro from findings: set drill mode -> push #/home -> back to #/quiz/drill
+    // (restored) -> forward to #/home again must NOT reset quizMode to 'flash',
+    // since parseHash defaults quizMode to 'flash' for every non-quiz view.
+    renderHook(() => useUrlSync())
+    useGraphStore.getState().setQuizMode('drill')
+    useGraphStore.getState().setViewMode('home')
+    expect(window.location.hash).toBe('#/home')
+
+    setHash('#/quiz/drill')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().quizMode).toBe('drill')
+
+    setHash('#/home')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().viewMode).toBe('home')
+    expect(useGraphStore.getState().quizMode).toBe('drill')
+  })
+
   it('applies popstate back to the store', () => {
     renderHook(() => useUrlSync())
     useGraphStore.getState().openNote('dsa-bigo')

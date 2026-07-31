@@ -9,8 +9,10 @@ import { VIEW_KEY } from './useTheme'
 
 const data = graphData as GraphData
 
-// Built once at module load: graph.json is static and already bundled, so a
-// deep link can be validated synchronously before the first paint.
+// Built once at module load: graph.json is static and already bundled, so the
+// vocab is available synchronously and a deep link needs no async gate to
+// validate. Route application itself still happens in useEffect below, i.e.
+// after the first paint — a deep link briefly paints the default view first.
 const VOCAB: RouteVocab = {
   nodeIds: new Set(data.nodes.map((n) => n.id)),
   trackIds: new Set([...CURATED_TRACKS, ...buildDomainTracks(data.nodes, data.edges)].map((t) => t.id)),
@@ -22,12 +24,16 @@ function routeFromState(s: ReturnType<typeof useGraphStore.getState>): Route {
   return { view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode }
 }
 
+// parseHash defaults quizMode to 'flash' for every non-quiz view (it's not part
+// of that view's URL), so only write it when the route actually names a quiz
+// mode — otherwise navigating away from and back to the quiz tab would reset
+// the user's chosen sub-mode.
 function applyRoute(r: Route): void {
   useGraphStore.setState({
     viewMode: r.view,
     selectedId: r.nodeId,
     trackId: r.trackId,
-    quizMode: r.quizMode,
+    ...(r.view === 'quiz' ? { quizMode: r.quizMode } : {}),
     focusRequestId: null,
   })
 }

@@ -25,9 +25,12 @@ const data = graphData as GraphData
 
 export default function App() {
   useThemeEffect()
+  // Must run before useViewModeEffect: within one component effects fire in
+  // hook-call order, and useViewModeEffect's write effect would otherwise
+  // persist the store's pre-hydration default before useUrlSync reads it back.
+  useUrlSync()
   useViewModeEffect()
   useCloudSync()
-  useUrlSync()
   const viewMode = useGraphStore((s) => s.viewMode)
   const nodes = useMemo(() => toFlowNodes(layoutNodes(data.nodes, data.edges)), [])
   const edges = useMemo(() => toFlowEdges(data.edges), [])
