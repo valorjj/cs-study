@@ -25,8 +25,7 @@ function todayStr(): string {
 // and continues; survival depth = the first step the user missed. Each step feeds
 // the existing domain weakness stats via recordQuizResult.
 export function DrillView({ nodes }: { nodes: GraphNode[] }) {
-  const select = useGraphStore((s) => s.select)
-  const setViewMode = useGraphStore((s) => s.setViewMode)
+  const openNote = useGraphStore((s) => s.openNote)
   const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
   const [scope, setScope] = useState<string>('all')
   const [index, setIndex] = useState(0)
@@ -177,7 +176,7 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
               {survived === total ? '끝까지 버텼어요. 완벽합니다!' : `${survived + 1}단계 꼬리질문부터 막혔어요. 이 개념을 다시 보세요.`}
             </p>
             <div className="drill-actions">
-              <button className="drill-link" onClick={() => { select(chain.nodeId); setViewMode('list') }}>
+              <button className="drill-link" onClick={() => openNote(chain.nodeId)}>
                 이 개념 보기 <LuArrowRight size={14} />
               </button>
               <button className="drill-next" onClick={nextCard}>다음 개념 <LuArrowRight size={14} /></button>

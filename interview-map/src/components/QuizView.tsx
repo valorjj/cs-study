@@ -21,11 +21,11 @@ function todayStr(): string {
 
 // Flashcard quiz: interview Q&A drawn in a date-seeded order within the chosen scope.
 export function QuizView({ nodes }: { nodes: GraphNode[] }) {
-  const select = useGraphStore((s) => s.select)
+  const openNote = useGraphStore((s) => s.openNote)
   const setViewMode = useGraphStore((s) => s.setViewMode)
   const recordReview = useGraphStore((s) => s.recordReview)
   const quizStats = useGraphStore((s) => s.quizStats)
-  const requestTrack = useGraphStore((s) => s.requestTrack)
+  const setTrackId = useGraphStore((s) => s.setTrackId)
   const srs = useGraphStore((s) => s.srs)
   const quizSettings = useGraphStore((s) => s.quizSettings)
   const setQuizSettings = useGraphStore((s) => s.setQuizSettings)
@@ -110,7 +110,12 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
         <div className="quiz-weak">
           <span className="quiz-weak-label"><LuTarget size={13} /> 약점 보강</span>
           {weak.map((w) => (
-            <button key={w.domain} className="quiz-weak-chip" onClick={() => requestTrack(`domain:${w.domain}`)}>
+            // Order is load-bearing: setTrackId first keeps the intermediate
+            // state's URL at #/quiz/flash (trackId isn't part of the quiz
+            // route), so only setViewMode('path') produces a URL change and
+            // exactly one history entry is pushed. Swapping these would push
+            // a bogus #/path entry (trackId still null) before the real one.
+            <button key={w.domain} className="quiz-weak-chip" onClick={() => { setTrackId(`domain:${w.domain}`); setViewMode('path') }}>
               {domainLabel.get(w.domain) ?? w.domain} <b>{w.correct}/{w.seen}</b>
             </button>
           ))}
@@ -134,7 +139,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
           )}
 
           <div className="quiz-actions">
-            <button className="quiz-link" onClick={() => { select(card.nodeId); setViewMode('list') }}>
+            <button className="quiz-link" onClick={() => openNote(card.nodeId)}>
               이 개념 보기 <LuArrowRight size={14} />
             </button>
             {revealed ? (

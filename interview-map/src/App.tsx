@@ -19,11 +19,16 @@ import { ViewToggle } from './components/ViewToggle'
 import { useGraphStore } from './store/graphStore'
 import { useThemeEffect, useViewModeEffect } from './hooks/useTheme'
 import { useCloudSync } from './hooks/useCloudSync'
+import { useUrlSync } from './hooks/useUrlSync'
 
 const data = graphData as GraphData
 
 export default function App() {
   useThemeEffect()
+  // Must run before useViewModeEffect: within one component effects fire in
+  // hook-call order, and useViewModeEffect's write effect would otherwise
+  // persist the store's pre-hydration default before useUrlSync reads it back.
+  useUrlSync()
   useViewModeEffect()
   useCloudSync()
   const viewMode = useGraphStore((s) => s.viewMode)
@@ -46,7 +51,7 @@ export default function App() {
       )}
       {viewMode === 'home' && <HomeView nodes={data.nodes} />}
       {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
-      {viewMode === 'path' && <PathView nodes={data.nodes} edges={data.edges} nodesById={nodesById} />}
+      {viewMode === 'path' && <PathView nodes={data.nodes} nodesById={nodesById} />}
       {viewMode === 'guide' && <GuideView />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
       <AuthButton />

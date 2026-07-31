@@ -57,3 +57,45 @@ describe('setQuizSettings', () => {
     })
   })
 })
+
+describe('quizMode', () => {
+  it('defaults to flash', () => {
+    // getInitialState() reads the store's declared initial value, not whatever
+    // an earlier test left behind.
+    expect(useGraphStore.getInitialState().quizMode).toBe('flash')
+  })
+
+  it('setQuizMode switches the active quiz sub-tab', () => {
+    useGraphStore.getState().setQuizMode('drill')
+    expect(useGraphStore.getState().quizMode).toBe('drill')
+  })
+})
+
+describe('trackId', () => {
+  it('defaults to null so PathView falls back to the first track', () => {
+    expect(useGraphStore.getInitialState().trackId).toBeNull()
+  })
+
+  it('setTrackId selects a course and survives a view switch', () => {
+    useGraphStore.getState().setTrackId('curated:junior-backend')
+    useGraphStore.getState().setViewMode('list')
+    expect(useGraphStore.getState().trackId).toBe('curated:junior-backend')
+  })
+})
+
+describe('openNote', () => {
+  it('sets selection and view mode in a single notification', () => {
+    useGraphStore.setState({ selectedId: null, viewMode: 'path', focusRequestId: 'stale' })
+    let notifications = 0
+    const unsub = useGraphStore.subscribe(() => { notifications++ })
+
+    useGraphStore.getState().openNote('dsa-bigo')
+
+    unsub()
+    const s = useGraphStore.getState()
+    expect(s.selectedId).toBe('dsa-bigo')
+    expect(s.viewMode).toBe('list')
+    expect(s.focusRequestId).toBeNull()
+    expect(notifications).toBe(1)
+  })
+})

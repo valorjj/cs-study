@@ -3,7 +3,7 @@ import { useGraphStore } from '../store/graphStore'
 import { applyTheme, DEFAULT_THEME } from '../styles/themes'
 
 const KEY = 'interview-map.theme.v1'
-const VIEW_KEY = 'interview-map.viewMode.v1'
+export const VIEW_KEY = 'interview-map.viewMode.v1'
 
 export function useThemeEffect(): void {
   const themeId = useGraphStore((s) => s.themeId)
@@ -21,16 +21,10 @@ export function useThemeEffect(): void {
   }, [themeId])
 }
 
-// Persist the graph/list view mode across sessions (mirrors theme persistence).
+// Persist the last-visited tab so a bare visit (no hash) resumes there.
+// Hydration now belongs to useUrlSync — the URL outranks localStorage.
 export function useViewModeEffect(): void {
   const viewMode = useGraphStore((s) => s.viewMode)
-  const setViewMode = useGraphStore((s) => s.setViewMode)
-  useEffect(() => {
-    const saved = localStorage.getItem(VIEW_KEY)
-    if (saved === 'home' || saved === 'graph' || saved === 'list' || saved === 'quiz' || saved === 'path') setViewMode(saved)
-    // hydrate once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, viewMode) } catch { /* ignore */ }
   }, [viewMode])

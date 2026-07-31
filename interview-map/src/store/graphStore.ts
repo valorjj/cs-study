@@ -4,6 +4,7 @@ import { review, type SrsState } from '../lib/srs'
 import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide'
+export type QuizMode = 'flash' | 'drill' | 'review' | 'graph'
 
 // Study-path progress key. Loaded synchronously at store creation so the first
 // render already has the saved state — avoids an effect-order hydrate/persist
@@ -45,6 +46,7 @@ export function readGuestSrs(): SrsState {
 interface GraphState {
   selectedId: string | null
   select: (id: string | null) => void
+  openNote: (id: string) => void  // 다른 탭에서 노트 열기 (선택 + list 모드 전환을 한 번에)
   focusRequestId: string | null   // 카메라 이동 요청 (검색 등)
   requestFocus: (id: string) => void
   clearFocusRequest: () => void
@@ -52,6 +54,8 @@ interface GraphState {
   setTheme: (id: string) => void
   viewMode: ViewMode              // 지도(graph) vs 목록(list)
   setViewMode: (m: ViewMode) => void
+  quizMode: QuizMode              // 퀴즈 탭 내부 서브모드 (플래시카드/드릴/복습/모의면접)
+  setQuizMode: (m: QuizMode) => void
   studiedIds: string[]            // 학습 완료 체크된 노드 (localStorage 저장)
   toggleStudied: (id: string) => void
   setStudiedIds: (ids: string[]) => void
@@ -63,9 +67,8 @@ interface GraphState {
   recordReview: (srsKey: string, item: { domain: string }, grade: number, today: string) => void
   quizSettings: QuizSettings                // 퀴즈 순서·SRS 취향값 (localStorage 전용)
   setQuizSettings: (patch: Partial<QuizSettings>) => void
-  pathTrackId: string | null                // 퀴즈 약점 칩 → 코스 탭 열기 요청
-  requestTrack: (trackId: string) => void
-  clearPathTrack: () => void
+  trackId: string | null                    // 코스 탭에서 선택된 트랙 (null = 첫 트랙)
+  setTrackId: (id: string | null) => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -73,6 +76,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   // Clear any pending camera-focus so a stale search target can't hijack the
   // graph camera after the user picks a different node (e.g. in list mode).
   select: (id) => set({ selectedId: id, focusRequestId: null }),
+  // One atomic set: two separate sets would emit an intermediate state to
+  // subscribers (and, via useUrlSync, a bogus extra history entry).
+  openNote: (id) => set({ selectedId: id, viewMode: 'list', focusRequestId: null }),
   focusRequestId: null,
   requestFocus: (id) => set({ focusRequestId: id, selectedId: id }),
   clearFocusRequest: () => set({ focusRequestId: null }),
@@ -80,6 +86,8 @@ export const useGraphStore = create<GraphState>((set) => ({
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'home',
   setViewMode: (m) => set({ viewMode: m }),
+  quizMode: 'flash',
+  setQuizMode: (m) => set({ quizMode: m }),
   studiedIds: readGuestStudied(),
   toggleStudied: (id) => set((s) => ({
     studiedIds: s.studiedIds.includes(id)
@@ -110,7 +118,6 @@ export const useGraphStore = create<GraphState>((set) => ({
     try { localStorage.setItem(QUIZSETTINGS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
     return { quizSettings: next }
   }),
-  pathTrackId: null,
-  requestTrack: (trackId) => set({ pathTrackId: trackId, viewMode: 'path' }),
-  clearPathTrack: () => set({ pathTrackId: null }),
+  trackId: null,
+  setTrackId: (id) => set({ trackId: id }),
 }))
