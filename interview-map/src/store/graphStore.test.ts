@@ -57,3 +57,16 @@ describe('setQuizSettings', () => {
     })
   })
 })
+
+describe('quizMode', () => {
+  it('defaults to flash', () => {
+    // getInitialState() reads the store's declared initial value, not whatever
+    // an earlier test left behind.
+    expect(useGraphStore.getInitialState().quizMode).toBe('flash')
+  })
+
+  it('setQuizMode switches the active quiz sub-tab', () => {
+    useGraphStore.getState().setQuizMode('drill')
+    expect(useGraphStore.getState().quizMode).toBe('drill')
+  })
+})

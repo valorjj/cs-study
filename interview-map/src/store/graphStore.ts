@@ -4,6 +4,7 @@ import { review, type SrsState } from '../lib/srs'
 import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide'
+export type QuizMode = 'flash' | 'drill' | 'review' | 'graph'
 
 // Study-path progress key. Loaded synchronously at store creation so the first
 // render already has the saved state — avoids an effect-order hydrate/persist
@@ -52,6 +53,8 @@ interface GraphState {
   setTheme: (id: string) => void
   viewMode: ViewMode              // 지도(graph) vs 목록(list)
   setViewMode: (m: ViewMode) => void
+  quizMode: QuizMode              // 퀴즈 탭 내부 서브모드 (플래시카드/드릴/복습/모의면접)
+  setQuizMode: (m: QuizMode) => void
   studiedIds: string[]            // 학습 완료 체크된 노드 (localStorage 저장)
   toggleStudied: (id: string) => void
   setStudiedIds: (ids: string[]) => void
@@ -80,6 +83,8 @@ export const useGraphStore = create<GraphState>((set) => ({
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'home',
   setViewMode: (m) => set({ viewMode: m }),
+  quizMode: 'flash',
+  setQuizMode: (m) => set({ quizMode: m }),
   studiedIds: readGuestStudied(),
   toggleStudied: (id) => set((s) => ({
     studiedIds: s.studiedIds.includes(id)

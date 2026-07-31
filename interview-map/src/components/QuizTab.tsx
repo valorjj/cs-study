@@ -13,8 +13,6 @@ import { MODE_HELP, SRS_HELP } from '../lib/quizHelp'
 import type { GraphNode } from '../graph/types'
 import './QuizTab.css'
 
-type QuizMode = 'flash' | 'drill' | 'review' | 'graph'
-
 const CAP_OPTIONS: { value: number; label: string }[] = [
   { value: 10, label: '10' }, { value: 15, label: '15' }, { value: 20, label: '20' },
   { value: 30, label: '30' }, { value: 0, label: '무제한' },
@@ -30,7 +28,8 @@ function todayStr(): string {
 // Quiz tab shell: flashcard practice, interview drill-down, and SRS review,
 // plus a settings gear (new-card cap, grade buttons, data reset) and mode help.
 export function QuizTab({ nodes }: { nodes: GraphNode[] }) {
-  const [mode, setMode] = useState<QuizMode>('flash')
+  const mode = useGraphStore((s) => s.quizMode)
+  const setMode = useGraphStore((s) => s.setQuizMode)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const srs = useGraphStore((s) => s.srs)
   const quizSettings = useGraphStore((s) => s.quizSettings)
