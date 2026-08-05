@@ -8,7 +8,7 @@ export type CandidateKind = 'company' | 'system' | 'person' | 'contact'
 export interface Candidate {
   text: string
   kind: CandidateKind
-  count: number   // 등장 횟수. 1회짜리는 후보에서 제외한다
+  count: number   // 등장 횟수. 코드명 후보만 2회 이상을 요구한다 — 연락처·회사는 1회로도 채택된다
 }
 
 // 기술 용어는 절대 가리면 안 된다 — Redis가 [SYSTEM_1]이 되면 추출 신호가 사라진다.
@@ -42,14 +42,13 @@ export function findCandidates(text: string, neverMask: Set<string>): Candidate[
   const found = new Map<string, Candidate>()
 
   // 연락처·회사 마커는 1회 등장만으로도 후보다 (신호가 명확하다).
-  const always = new Set<string>()
   for (const m of text.matchAll(CONTACT_RE)) {
-    bump(found, m[0], 'contact'); always.add(m[0])
+    bump(found, m[0], 'contact')
   }
   for (const m of text.matchAll(COMPANY_RE)) {
     const name = m[1] ?? m[2]
     if (!name) continue
-    bump(found, name, 'company'); always.add(name)
+    bump(found, name, 'company')
   }
 
   // 코드명 후보는 기술 사전에 없고 2회 이상 나올 때만 채택한다.
@@ -64,7 +63,6 @@ export function findCandidates(text: string, neverMask: Set<string>): Candidate[
   }
 
   // 기술 용어는 어떤 경로(회사/연락처/코드명)로 발견되든 최종적으로 걸러낸다.
-  // always는 회사/연락처 1회 등장 규칙을 제어할 뿐, 기술 사전 검사를 우회하지 않는다.
   return [...found.values()]
     .filter((c) => !neverMask.has(normalize(c.text)))
     .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
