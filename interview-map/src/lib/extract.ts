@@ -1,19 +1,21 @@
 // extract Edge Function 클라이언트. generate.ts와 같은 형태의 Outcome 유니온을 쓴다.
 import { supabase } from './supabase'
-import { buildExtractPayload, assertNoPlaintext, type ExtractPayload } from './extractPayload'
+import { buildExtractPayload, type ExtractPayload } from './extractPayload'
 import type { Project } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
 
 export type ExtractOutcome =
   | { ok: true; nodeIds: string[]; reasons: Record<string, string> }
-  | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'extract_error' | 'network' | 'unsafe' }
+  | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'extract_error' | 'network' }
 
-// payload를 만드는 유일한 입구. 평문이 남아 있으면 여기서 throw하므로,
-// 미리보기 UI도 전송 코드도 이 함수의 결과만 다루면 된다.
+// 평문 잔존은 Outcome이 아니라 예외로 나온다 — buildExtractPayload가 throw하고,
+// UI가 잡아서 "전송을 중단했습니다"로 보여준다. 선언만 있고 아무도 만들 수 없는
+// 실패 사유를 union에 남겨두지 않는다.
+
+// payload를 만드는 명확한 입구. buildExtractPayload가 plaintext를 검사하므로,
+// 이 함수를 거치지 않은 호출도 안전하다.
 export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPayload {
-  const payload = buildExtractPayload(project, nodes)
-  assertNoPlaintext(payload, project.maskDict)
-  return payload
+  return buildExtractPayload(project, nodes)
 }
 
 export async function requestExtract(payload: ExtractPayload): Promise<ExtractOutcome> {

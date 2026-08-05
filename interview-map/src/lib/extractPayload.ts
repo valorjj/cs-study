@@ -1,6 +1,10 @@
-// 네트워크로 나가는 payload를 만드는 단 하나의 경로. 미리보기 UI도 반드시 이 함수의
-// 결과를 렌더해야 한다 — 미리보기와 전송이 갈라지면 미리보기는 거짓 안전감만 주는
+// 네트워크로 나가는 payload를 만드는 단 하나의 경로. 미리보기 UI도 이 함수의 결과를
+// 그대로 렌더해야 한다 — 미리보기와 전송이 갈라지면 미리보기는 거짓 안전감만 주는
 // 장식이 된다.
+//
+// 평문 잔존 검사는 이 함수 안에서 돈다. 규약(주석)으로만 두면 호출자가 건너뛸 수
+// 있고, 실제로 이 주석이 다음 UI 작업에 그 우회를 권하고 있었다. 안전 속성은
+// 문장이 아니라 코드가 강제해야 한다.
 import { applyMask } from './mask'
 import type { Project, Stage } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
@@ -18,18 +22,6 @@ export interface ExtractPayload {
   catalog: CatalogEntry[]  // 공개 데이터. graph.json을 Edge Function에 복제하지 않기 위해 보낸다
 }
 
-// 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
-export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
-  return {
-    maskedNarrative: applyMask(project.narrative, project.maskDict),
-    stack: project.stack,
-    lifecycle: project.lifecycle,
-    catalog: nodes
-      .filter((n) => n.level !== 0)
-      .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
-  }
-}
-
 // 방어의 마지막 층. 조용한 유출을 시끄러운 예외로 바꾼다.
 // JSON.stringify는 백슬래시·따옴표·제어문자를 이스케이프하므로, 직렬화된 텍스트에서
 // 원문 그대로를 찾으면 그런 문자가 든 키는 payload에 남아 있어도 발견되지 않는다.
@@ -44,4 +36,18 @@ export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, 
       throw new Error(`payload에 마스킹되지 않은 원문이 남아 있어 전송을 중단했습니다: ${plain}`)
     }
   }
+}
+
+// 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
+export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
+  const payload: ExtractPayload = {
+    maskedNarrative: applyMask(project.narrative, project.maskDict),
+    stack: project.stack,
+    lifecycle: project.lifecycle,
+    catalog: nodes
+      .filter((n) => n.level !== 0)
+      .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
+  }
+  assertNoPlaintext(payload, project.maskDict)
+  return payload
 }
