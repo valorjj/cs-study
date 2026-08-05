@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { parseVaultRow, interpretSave, loadVault, saveVault } from './resumeCloud'
+
+// 이 파일은 "Supabase가 설정되지 않은 경우"의 동작을 검증한다. 이 저장소에는
+// 로컬 .env.local이 있어 실제로는 클라이언트가 만들어지므로, 전역 테스트 설정을
+// 건드리지 않고 이 파일에서만 모듈을 대체한다.
+vi.mock('./supabase', () => ({ supabase: null }))
 
 describe('parseVaultRow', () => {
   it('reads a well-formed row', () => {
@@ -32,18 +37,27 @@ describe('interpretSave', () => {
     expect(interpretSave(null, null)).toEqual({ ok: false, reason: 'conflict' })
   })
 
-  it('maps a 401 to unauthenticated', () => {
-    expect(interpretSave(null, { code: '401', message: 'JWT expired' }))
-      .toEqual({ ok: false, reason: 'unauthenticated' })
-  })
-
-  it('maps any other error to offline', () => {
-    expect(interpretSave(null, { message: 'network down' }))
-      .toEqual({ ok: false, reason: 'offline' })
+  describe('error classification', () => {
+    const cases: Array<[string, { code?: string; message?: string }, 'unauthenticated' | 'offline']> = [
+      ['RLS denial (logged-out user)', { code: '42501', message: 'new row violates row-level security policy for table "resume_vault"' }, 'unauthenticated'],
+      ['expired JWT', { code: 'PGRST301', message: 'JWT expired' }, 'unauthenticated'],
+      ['network failure', { message: 'Failed to fetch' }, 'offline'],
+      ['unrelated postgres error', { code: '23505', message: 'duplicate key value violates unique constraint' }, 'offline'],
+    ]
+    for (const [label, error, reason] of cases) {
+      it(`classifies ${label} as ${reason}`, () => {
+        expect(interpretSave(null, error)).toEqual({ ok: false, reason })
+      })
+    }
   })
 })
 
 describe('without Supabase configured (test env)', () => {
+  it('confirms the precondition: no Supabase client in this file', async () => {
+    const { supabase } = await import('./supabase')
+    expect(supabase).toBeNull()
+  })
+
   it('loadVault resolves to null instead of throwing', async () => {
     await expect(loadVault()).resolves.toBeNull()
   })
