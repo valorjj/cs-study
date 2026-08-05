@@ -315,6 +315,13 @@ describe('findCandidates', () => {
     expect(findCandidates(text, never)).toEqual([])
   })
 
+  // 회사/연락처 분기는 1회 등장만으로 통과하지만, 그것이 기술 용어 허용목록을
+  // 면제해주지는 않는다. Kafka가 [COMPANY_1]로 가려지면 추출 신호가 사라진다.
+  it('never proposes a tech term even when a company marker wraps it', () => {
+    expect(findCandidates('(주)Kafka 컨설팅에서 일했다', never).map((x) => x.text))
+      .not.toContain('Kafka')
+  })
+
   it('flags Korean company markers', () => {
     const c = findCandidates('(주)가상상사 정산 팀에서 작업했다', never)
     expect(c.map((x) => x.text)).toContain('가상상사')
@@ -440,15 +447,12 @@ function bump(map: Map<string, Candidate>, text: string, kind: CandidateKind): v
 export function findCandidates(text: string, neverMask: Set<string>): Candidate[] {
   const found = new Map<string, Candidate>()
 
-  // 연락처·회사 마커는 1회 등장만으로도 후보다 (신호가 명확하다).
-  const always = new Set<string>()
-  for (const m of text.matchAll(CONTACT_RE)) {
-    bump(found, m[0], 'contact'); always.add(m[0])
-  }
+  // 연락처·회사 마커는 1회 등장만으로도 후보다 (신호가 명확하다). 아래 코드명
+  // 분기와 달리 횟수 게이트가 없다는 것이 그 "1회 허용"의 전부다.
+  for (const m of text.matchAll(CONTACT_RE)) bump(found, m[0], 'contact')
   for (const m of text.matchAll(COMPANY_RE)) {
     const name = m[1] ?? m[2]
-    if (!name) continue
-    bump(found, name, 'company'); always.add(name)
+    if (name) bump(found, name, 'company')
   }
 
   // 코드명 후보는 기술 사전에 없고 2회 이상 나올 때만 채택한다.
@@ -462,9 +466,11 @@ export function findCandidates(text: string, neverMask: Set<string>): Candidate[
     found.set(word, { text: word, kind: 'system', count: n })
   }
 
-  // 기술 용어가 회사/연락처 정규식에 걸린 경우도 최종적으로 걸러낸다.
+  // 허용목록은 어떤 분기로 들어왔든 예외가 없다. `always`는 "1회 등장만으로도
+  // 후보"라는 뜻일 뿐이며(2회 규칙은 코드명 전용), 기술 용어 면제권이 아니다.
+  // 이 검사를 always로 단락시키면 "(주)Kafka"가 Kafka를 후보로 만든다.
   return [...found.values()]
-    .filter((c) => always.has(c.text) || !neverMask.has(normalize(c.text)))
+    .filter((c) => !neverMask.has(normalize(c.text)))
     .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
 }
 
