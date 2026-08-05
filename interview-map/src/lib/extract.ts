@@ -12,16 +12,21 @@ export type ExtractOutcome =
 // UI가 잡아서 "전송을 중단했습니다"로 보여준다. 선언만 있고 아무도 만들 수 없는
 // 실패 사유를 union에 남겨두지 않는다.
 
-// payload를 만드는 명확한 입구. ExtractPayload는 extractPayload.ts 안에서만 알 수
-// 있는 unique symbol로 브랜드되어 있어, 구조가 같은 객체 리터럴을 직접 만들어
-// requestExtract에 넘기는 것이 타입 단계에서 막힌다 — buildExtractPayload(따라서
-// plaintext 검사)를 거치지 않고는 애초에 ExtractPayload 값을 만들 수 없다.
+// 미리보기 전용. 전송되는 값을 UI가 그대로 보여줄 수 있도록 같은 빌더를 돈다.
+// buildExtractPayload는 순수 함수이므로 같은 입력이면 requestExtract가 만드는 것과
+// 같은 값이 나온다 — 미리보기와 전송이 구조적으로 갈라지지 않는다.
 export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPayload {
   return buildExtractPayload(project, nodes)
 }
 
-export async function requestExtract(payload: ExtractPayload): Promise<ExtractOutcome> {
+// payload를 인자로 받지 않고 직접 만든다. 받도록 두면 호출자가 검사를 통과한 값을
+// 스프레드로 덮어써서(`{ ...prepareExtract(...), maskedNarrative: 유출 }`) 검사되지
+// 않은 내용을 전송할 수 있고, 실제로 이전 구조가 그랬다. 전송 직전에 평문 검사가
+// 돌았다는 것을 이 함수 안에서 보장한다 — buildExtractPayload가 검사를 품고 있다.
+export async function requestExtract(project: Project, nodes: GraphNode[]): Promise<ExtractOutcome> {
   if (!supabase) return { ok: false, reason: 'unauthenticated' }
+  // 검사 실패는 throw로 나간다 (위 주석 참조). try 밖에 두어야 network로 오분류되지 않는다.
+  const payload = buildExtractPayload(project, nodes)
   try {
     const { data, error } = await supabase.functions.invoke('extract', { body: payload })
     if (error) {

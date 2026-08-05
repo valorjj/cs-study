@@ -34,8 +34,7 @@ const project: Project = {
 describe('requestExtract wire body — no confirmed mask key ever reaches the network', () => {
   it('sends a body where none of the dictionary keys survive, raw or JSON-escaped', async () => {
     invoke.mockResolvedValue({ data: { nodeIds: [], reasons: {} }, error: null })
-    const payload = prepareExtract(project, nodes)
-    await requestExtract(payload)
+    await requestExtract(project, nodes)
 
     expect(invoke).toHaveBeenCalledTimes(1)
     const [, opts] = invoke.mock.calls[0] as [string, { body: unknown }]
@@ -46,5 +45,26 @@ describe('requestExtract wire body — no confirmed mask key ever reaches the ne
       const escaped = JSON.stringify(plain).slice(1, -1)
       expect(wireBody).not.toContain(escaped)
     }
+  })
+
+  // requestExtract가 payload를 인자로 받던 구조에서는, 검사를 통과한 값을 스프레드로
+  // 덮어써서 검사되지 않은 내용을 보낼 수 있었다. 이제 payload를 직접 만들므로
+  // 전송 직전에 검사가 돈다. 이 테스트는 그 이음새가 다시 생기면 깨진다.
+  it('never reaches the network when the mask leaves plaintext behind', async () => {
+    invoke.mockResolvedValue({ data: { nodeIds: [], reasons: {} }, error: null })
+    // 사전 키가 자기 자신으로 치환되어 원문이 그대로 남는 상태
+    const broken = { ...project, maskDict: { SettleHub: 'SettleHub' } }
+    await expect(requestExtract(broken, nodes)).rejects.toThrow(/전송을 중단/)
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  // 미리보기(prepareExtract)와 전송이 같은 값을 만드는지 — 갈라지면 미리보기는
+  // 거짓 안전감만 주는 장식이 된다.
+  it('sends exactly what the preview showed', async () => {
+    invoke.mockResolvedValue({ data: { nodeIds: [], reasons: {} }, error: null })
+    const preview = prepareExtract(project, nodes)
+    await requestExtract(project, nodes)
+    const [, opts] = invoke.mock.calls[0] as [string, { body: unknown }]
+    expect(opts.body).toEqual(preview)
   })
 })

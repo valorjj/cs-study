@@ -31,15 +31,15 @@ describe('prepareExtract', () => {
     expect(() => prepareExtract(broken, nodes)).toThrow(/전송을 중단/)
   })
 
-  it('exposes exactly the four documented fields as own enumerable keys (the brand symbol is not one)', () => {
+  it('exposes exactly the four documented fields and nothing else', () => {
     const p = prepareExtract(project, nodes)
     expect(Object.keys(p).sort()).toEqual(['catalog', 'lifecycle', 'maskedNarrative', 'stack'])
+    expect(Object.getOwnPropertySymbols(p)).toEqual([])
   })
 })
 
 describe('requestExtract without Supabase configured (test env)', () => {
   it('reports unauthenticated instead of throwing', async () => {
-    const p = prepareExtract(project, nodes)
-    await expect(requestExtract(p)).resolves.toEqual({ ok: false, reason: 'unauthenticated' })
+    await expect(requestExtract(project, nodes)).resolves.toEqual({ ok: false, reason: 'unauthenticated' })
   })
 })

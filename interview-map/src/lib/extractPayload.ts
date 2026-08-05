@@ -15,30 +15,22 @@ export interface CatalogEntry {
   keywords: string[]
 }
 
-// 브랜드 심볼. 모듈 밖에서는 이 심볼을 만들 수 없으므로, 구조만 같은 객체 리터럴을
-// requestExtract에 넘기는 실수가 타입 단계에서 걸린다.
+// 필드는 readonly다 — 검사는 이 객체가 만들어지는 순간 한 번 도니까. 단 얕은
+// readonly라서 `catalog[0].keywords.push(...)` 같은 중첩 변형은 타입이 막지 못한다.
+// 그게 유출로 이어지지 않는 이유는 readonly가 아니라 구조다: 전송되는 payload는
+// requestExtract가 그 자리에서 새로 만들며, 미리보기용 객체를 재사용하지 않는다.
 //
-// 이것은 과속방지턱이지 보안 경계가 아니다. `as unknown as ExtractPayload` 나
-// `{ ...buildExtractPayload(...), maskedNarrative: 유출 }` 로 우회할 수 있다.
-// 실제 강제력은 아래 assertNoPlaintext의 전체 payload 스캔뿐이다.
-//
-// `const checked: unique symbol = ...` 형태여야 한다. `Symbol() as unique symbol` 은
-// TS1335로 거부되며(즉 빌드가 깨지며), 만약 통과했더라도 타입이 평범한 symbol로
-// 내려앉아 브랜드가 아무것도 구별하지 못한다.
-const checked: unique symbol = Symbol('checked')
-
+// 한때 여기에 unique symbol 브랜드가 있었다. "검사를 거치지 않은 객체는 전송 함수에
+// 넘길 수 없다"를 타입으로 강제하려던 것인데, 스프레드가 심볼 키까지 복사하므로
+// `{ ...buildExtractPayload(...), maskedNarrative: 유출 }` 이 그대로 통과했다.
+// 브랜드를 고치는 대신 이음새를 없앴다 — requestExtract가 payload를 받지 않고
+// 직접 만든다(extract.ts 참조). 넘길 수 있는 지점이 없으면 막을 것도 없다.
 export interface ExtractPayload {
-  maskedNarrative: string
-  stack: string[]          // 기술 용어이므로 마스킹하지 않는다 (추출의 핵심 신호)
-  lifecycle: Stage[]
-  catalog: CatalogEntry[]  // 공개 데이터. graph.json을 Edge Function에 복제하지 않기 위해 보낸다
-  readonly [checked]: true
+  readonly maskedNarrative: string
+  readonly stack: readonly string[]          // 기술 용어이므로 마스킹하지 않는다 (추출의 핵심 신호)
+  readonly lifecycle: readonly Stage[]
+  readonly catalog: readonly CatalogEntry[]  // 공개 데이터. graph.json을 Edge Function에 복제하지 않기 위해 보낸다
 }
-
-// assertNoPlaintext가 검사하는 대상. ExtractPayload에서 브랜드 필드만 뺀 모양이라,
-// 아직 검사를 통과하지 않은 평범한 객체 리터럴(테스트가 만드는 것 포함)도 넘길 수
-// 있다. 검사 자체는 필드 유무와 무관하게 구조를 훑으므로 브랜드가 없어도 안전하다.
-export type UncheckedExtractPayload = Omit<ExtractPayload, typeof checked>
 
 // stack 칩과 마스킹 대상 키가 우연히 같은 문자열이면(사용자가 가린 내부 이름을
 // 기술 칩으로도 등록한 경우), 매 추출 시도가 영원히 막힌다 — stack은 매칭 신호의
@@ -48,7 +40,7 @@ export type UncheckedExtractPayload = Omit<ExtractPayload, typeof checked>
 // 것일 뿐 검사의 권위가 아니다 — 전체 payload 스캔이 계속 최종 권위로 남아야,
 // 나중에 필드가 추가돼도 빠짐없이 걸린다.
 function locatePlaintext(
-  payload: UncheckedExtractPayload,
+  payload: ExtractPayload,
   plain: string,
   escaped: string,
 ): string {
@@ -66,7 +58,7 @@ function locatePlaintext(
 // 나중에 payload에 필드가 추가되면 필드별 열거 목록이 조용히 낡기 때문이다 —
 // locatePlaintext는 그 전체 스캔이 이미 걸린 뒤에만, 메시지에 위치를 덧붙이려고
 // 개별 필드를 들여다본다.
-export function assertNoPlaintext(payload: UncheckedExtractPayload, dict: Record<string, string>): void {
+export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, string>): void {
   const json = JSON.stringify(payload)
   for (const plain of Object.keys(dict)) {
     if (!plain) continue   // 빈 키는 모든 문자열에 걸리므로 검사 대상이 아니다
@@ -82,7 +74,7 @@ export function assertNoPlaintext(payload: UncheckedExtractPayload, dict: Record
 
 // 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
 export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
-  const payload: UncheckedExtractPayload = {
+  const payload: ExtractPayload = {
     maskedNarrative: applyMask(project.narrative, project.maskDict),
     stack: project.stack,
     lifecycle: project.lifecycle,
@@ -91,7 +83,5 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
       .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
   }
   assertNoPlaintext(payload, project.maskDict)
-  // 검사를 통과한 뒤에만 브랜드를 붙인다 — 이 함수가 payload를 만드는 유일한
-  // 경로이므로, 브랜드는 "이 경로를 거쳤다"는 표시로만 쓴다(위 심볼 주석 참조).
-  return { ...payload, [checked]: true }
+  return payload
 }
