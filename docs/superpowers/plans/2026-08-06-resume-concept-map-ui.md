@@ -376,7 +376,16 @@ describe('dictOf', () => {
       { text: 'C', kind: 'company', mask: true },
     ]
     expect(dictOf(d)).toEqual({ A: '[COMPANY_1]', B: '[SYSTEM_1]', C: '[COMPANY_2]' })
-    expect(dictOf(d)).toEqual(dictOf(d))
+  })
+
+  // 빈 text는 new RegExp('', 'g')가 되어 모든 위치에 매칭된다 — payload 전체가
+  // 토큰으로 도배되고, assertNoPlaintext는 빈 키를 건너뛰므로 침묵한다.
+  it('drops an empty or whitespace-only text', () => {
+    expect(dictOf([
+      { text: '정산', kind: 'company', mask: true },
+      { text: '', kind: 'company', mask: true },
+      { text: '   ', kind: 'system', mask: true },
+    ])).toEqual({ 정산: '[COMPANY_1]' })
   })
 })
 ```
@@ -533,6 +542,50 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
 
 `assertNoPlaintext` 의 두 번째 인자를 `project.maskDict` 에서 파생 사전으로 바꾼 것이
 핵심이다. 나머지 함수 시그니처는 건드리지 않는다.
+
+**게이트를 넣으면 평문 스캔의 배선 테스트가 사라진다 — 반드시 복구하라.** 기존
+"마스킹이 깨진" 테스트들은 항등 사전(`{X: 'X'}`)으로 잔존 평문을 만들었는데, 사전이
+`dictOf` 파생이 되면 그런 사전을 만들 수 없다. 그 테스트들을 게이트 실패로 바꾸면
+`assertNoPlaintext` 호출을 지워도 전 스위트가 초록이 된다 — 두 예외 메시지가 모두
+`전송을 중단했습니다` 로 끝나서 느슨한 정규식이 구분하지 못한다.
+
+치환 토큰의 부분문자열인 결정 텍스트로 진짜 잔존 케이스를 만든다:
+
+```ts
+it('still catches residual plaintext after the gate passes', () => {
+  // 게이트는 통과한다 — findCandidates의 \b[A-Z]{3,}\b 는 밑줄을 넘지 못해
+  // 'COMPANY_1' 을 후보로 제안하지 않는다. 그런데 치환 결과에 키가 그대로 남는다.
+  const p: Project = {
+    ...project,
+    narrative: 'COMPANY_1 시스템을 썼다',
+    maskDecisions: [{ text: 'COMPANY_1', kind: 'company', mask: true }],
+  }
+  // 게이트가 아니라 스캔이 잡았다는 것까지 단정한다. `전송을 중단` 만 보면 둘이 구분되지 않는다.
+  expect(() => buildExtractPayload(p, nodes)).toThrow(/마스킹되지 않은 원문이 남아 있어/)
+})
+```
+
+이 테스트는 `assertNoPlaintext(payload, dict)` 줄을 주석 처리하면 **실패해야 한다.**
+직접 주석 처리해 실패를 확인하고 되돌린 출력을 보고서에 남긴다.
+
+- [ ] **Step 8b: 마스킹의 대소문자 구멍을 닫는다**
+
+`mask: true` 인 용어가 표기만 다르면 그대로 전송된다:
+
+```
+narrative: 'SettleHub 배치. settlehub 대시보드.'
+decisions: [{ text: 'SettleHub', kind: 'system', mask: true }]
+→ '[SYSTEM_1] 배치. settlehub 대시보드.'
+```
+
+`findCandidates` 는 CamelCase/ALLCAPS만 제안하므로 `settlehub` 는 후보로도 안 뜨고,
+`applyMask` 의 정규식은 대소문자를 구분하며, `assertNoPlaintext` 는 정확한 키를 찾는다.
+URL·호스트명·소문자 산문에서 실제로 일어난다.
+
+- `applyMask`: 치환을 `'gi'` 로. 긴 키 우선 정렬은 유지한다(`Settle` 이 `SettleHub` 를
+  반쪽만 갈아먹는 것을 막는 가드).
+- `assertNoPlaintext`: 원문형과 이스케이프형 **둘 다** 대소문자를 접어 비교한다.
+  건초와 바늘을 함께 접어야 한다 — 한쪽만 접으면 아무것도 안 잡힌다.
 
 - [ ] **Step 9: 픽스처 갱신**
 
