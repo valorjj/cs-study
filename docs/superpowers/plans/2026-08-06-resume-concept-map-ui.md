@@ -907,10 +907,20 @@ const submit = async (e: React.FormEvent) => {
   const local = matchLocal({ stack, narrative }, nodes)
   // llm 매칭은 서술문에 이름이 없는 개념이라 로컬 재실행으로 복원되지 않는다.
   // 로컬 결과로 덮어쓰면 AI 추출 결과가 편집 한 번에 영구히 사라진다.
-  const keptLlm = (project?.matches ?? []).filter((m) => m.via === 'llm')
+  //
+  // 살릴 때 **현재 노드 목록과 대조해야 한다** — mergeLlm이 하는 것과 같은 가드다.
+  // 이 repo는 노드를 자주 쪼개므로, 대조하지 않으면 없어진 노드를 가리키는 유령
+  // 매칭이 영구히 쌓여 '매칭 N개'를 부풀리고 개념 지도가 찾을 수 없는 id를 만난다.
+  // level 0(도메인 헤더)도 개념이 아니므로 함께 떨어낸다.
+  const concept = new Set(nodes.filter((n) => n.level !== 0).map((n) => n.id))
+  const keptLlm = (project?.matches ?? [])
+    .filter((m) => m.via === 'llm' && concept.has(m.nodeId))
   const seen = new Set(local.map((m) => m.nodeId))
   const matches = [...local, ...keptLlm.filter((m) => !seen.has(m.nodeId))]
 
+  // upsertProject는 throw하지 않는다 — 금고가 잠겨 있으면 store의 error만 세팅하고
+  // 조용히 돌아온다. 확인 없이 onDone()을 부르면 폼이 닫히면서 사용자가 방금 쓴
+  // 서술문이 아무 메시지도 없이 사라진다. 저장 성공을 확인한 뒤에만 닫는다.
   await upsertProject({
     id: project?.id ?? crypto.randomUUID(),
     name: name.trim(), period: period.trim(), role: role.trim(),
