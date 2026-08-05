@@ -64,8 +64,12 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
   // 결정을 덮어써 하나를 잃는다. store에서 다시 읽으면 앞선 클릭의 동기 `set()`이 이미
   // 반영된 뒤이므로 잃지 않는다.
   //
-  // 성공 여부는 upsertProject의 반환값(PersistResult)으로 직접 판정한다 — 상태 가드
-  // 거부와 디스크 쓰기 실패를 모두 반환값 하나로 구별할 수 있다.
+  // 성공 여부는 upsertProject의 반환값(PersistResult)의 `ok`로 직접 판정한다.
+  // `reason`('locked' | 'disk')이 원인을 구분해 주지만, 이 컴포넌트는 원인별로 다른 문구를
+  // 보여주지 않고 `result.error`를 그대로 띄우면 충분하므로 여기서는 쓰지 않는다
+  // (review round 1 finding 6 — 이전 주석은 "ok 하나로 원인까지 구별된다"고 썼는데, 그건
+  // 틀린 말이었다: boolean 하나로는 원인을 구별할 수 없다. store가 실제로 `reason`을
+  // 반환값에 담도록 고쳤다).
   //
   // 같은 텍스트에 대한 기존 결정은 덮어쓴다(추가하지 않는다) — UI 클릭 경로로는 이
   // 후보가 이미 결정된 상태면 undecided 목록에서 사라져 버튼 자체가 없어지므로 이

@@ -25,9 +25,21 @@ const project: Project = {
   maskDecisions: [], matches: [], updatedAt: '2026-08-06T00:00:00.000Z',
 }
 
-beforeEach(() => {
+// review round 1 finding 8: 이 fixture는 원래 key/salt를 전혀 세팅하지 않았다. persist()의
+// 키 없음 분기가 (round 0 구현에서) `{ ok: true }`를 돌려주던 시절에는 그게 "성공"처럼
+// 보였지만, 그 분기가 이제 정직하게 ok:false(reason:'locked')를 돌려주면서 "B 성공"·"재시도
+// 성공"을 검증하는 두 테스트가 실은 아무것도 암호화·저장한 적 없는 키 없음 shortcut에
+// 의존하고 있었다는 게 드러났다(mutation으로 확인: persist()의 keyless 분기를 ok:false로
+// 고치자 그 테스트들이 즉시 죽었다). 전역으로 진짜 CryptoKey를 주입해 "성공"이라고 주장하는
+// 모든 경로가 실제로 암호화·저장까지 간다.
+beforeEach(async () => {
   localStorage.clear()
-  useResumeStore.setState({ status: 'unlocked', projects: [project], error: null })
+  const salt = randomSalt()
+  const key = await deriveKey('pw', salt)
+  useResumeStore.setState({
+    ...useResumeStore.getInitialState(),
+    status: 'unlocked', projects: [project], error: null, key, salt: toB64(salt),
+  })
 })
 
 describe('MaskPanel', () => {
@@ -185,9 +197,6 @@ describe('MaskPanel', () => {
   // write fails — landed-in-memory and landed-on-disk are deliberately different things
   // now, and only the return value distinguishes them.
   it('shows a disk-write failure via writeError even though the decision still lands in memory', async () => {
-    const salt = randomSalt()
-    const key = await deriveKey('pw', salt)
-    useResumeStore.setState({ status: 'unlocked', projects: [project], error: null, key, salt: toB64(salt) })
     render(<MaskPanel project={project} nodes={nodes} />)
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')

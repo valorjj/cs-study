@@ -17,6 +17,15 @@ interface ProjectFormProps {
 export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
   const upsertProject = useResumeStore((s) => s.upsertProject)
 
+  // 마운트 시점에 한 번만 정한다 — 실패한 저장을 재시도할 때도 같은 id를 써야
+  // upsertProject의 findIndex가 이 폼이 만든 이전 시도를 찾아 갱신한다. 예전엔 submit()
+  // 안에서 매번 `project?.id ?? crypto.randomUUID()`를 새로 계산했는데, 실패 후 폼이 열린
+  // 채로 재시도하면(설계 판단: 실패해도 폼을 닫지 않는다) 매번 새 id가 나와 findIndex가
+  // -1을 돌려주고 append된다 — 같은 내용의 프로젝트가 디스크에 두 개로 쌓인다
+  // (review round 1 finding 2, 실제로 재현됨: 용량 초과 → 재시도 → 용량 확보 후 저장 →
+  // 동일 내용 두 항목).
+  const [id] = useState(() => project?.id ?? crypto.randomUUID())
+
   const [name, setName] = useState(project?.name ?? '')
   const [period, setPeriod] = useState(project?.period ?? '')
   const [role, setRole] = useState(project?.role ?? '')
@@ -87,7 +96,6 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
       nodes,
     )
 
-    const id = project?.id ?? crypto.randomUUID()
     const updatedAt = new Date().toISOString()
     const result = await upsertProject({
       id,

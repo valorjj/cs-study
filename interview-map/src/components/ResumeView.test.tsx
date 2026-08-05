@@ -157,3 +157,62 @@ describe('ResumeView — unlocked toolbar', () => {
     expect(document.body.innerHTML).not.toContain(PROJECT.narrative)
   })
 })
+
+// review round 1 finding 3/4: 목록의 삭제 버튼이 removeProject의 반환값을 그냥 버렸고,
+// 실패해도 화면에 아무 신호가 없었다. 그리고 lock()이 error를 무조건 지우면서, 저장 실패로
+// 디스크와 어긋난 채 남은 projects를 사용자 모르게 비웠다. renderUnlocked의 가짜 키
+// (`{} as CryptoKey`)를 그대로 쓴다 — sealJson이 그 키로 던지면 outer catch가 잡아
+// reason:'disk'로 분류하므로, localStorage를 따로 흔들 필요 없이 디스크 쓰기 실패를
+// 재현할 수 있다.
+describe('ResumeView — 저장 실패 배너와 잠그기 확인', () => {
+  it("shows removeProject's failure via a persistent banner, and 닫기 dismisses it", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(screen.getByRole('alert').textContent).toMatch(/저장하지 못했습니다|저장 공간/)
+    // 설계 판단: 삭제 자체(메모리 연산)는 반영된다 — 디스크 쓰기만 실패했다.
+    expect(useResumeStore.getState().projects).toEqual([])
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(useResumeStore.getState().error).toBeNull()
+  })
+
+  it('asks for confirmation (mentioning 평문 JSON 내보내기) before locking with an unsaved failure, and honors 취소', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(useResumeStore.getState().hasUnsavedFailure).toBe(true))
+    const errorBefore = useResumeStore.getState().error
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(confirmSpy.mock.calls[0][0]).toContain('평문 JSON 내보내기')
+    // 취소했으니 잠기지 않고, 실패 메시지도 그대로 남아 있어야 한다.
+    expect(useResumeStore.getState().status).toBe('unlocked')
+    expect(useResumeStore.getState().error).toBe(errorBefore)
+  })
+
+  it('locks (without clearing the error) once the user confirms discarding the unsaved failure', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(useResumeStore.getState().hasUnsavedFailure).toBe(true))
+    const errorBefore = useResumeStore.getState().error
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+    expect(useResumeStore.getState().status).toBe('locked')
+    // lock()은 error를 지우지 않는다 — 잠그는 행위가 저장 실패를 해결한 게 아니다.
+    expect(useResumeStore.getState().error).toBe(errorBefore)
+  })
+
+  it('locks without any confirmation prompt when there is no unsaved failure', () => {
+    renderUnlocked()
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+    expect(confirmSpy).not.toHaveBeenCalled()
+    expect(useResumeStore.getState().status).toBe('locked')
+  })
+})

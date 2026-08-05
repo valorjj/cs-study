@@ -12,12 +12,21 @@ import type { Project, VaultPayload } from '../lib/resumeTypes'
 export type VaultStatus = 'none' | 'locked' | 'unlocked'
 
 // upsertProject/removeProject의 반환값. 호출자가 "메모리에는 들어갔지만 디스크에는
-// 못 썼다"를 구별할 수 있어야 한다는 요건 때문에 Promise<void>로 둘 수 없다. ok:false는
-// 두 가지 서로 다른 원인을 모두 담는다 — (1) 상태 가드 거부(금고가 잠겨 있어 애초에
-// set()도 안 함) (2) 디스크 쓰기 실패(set()은 됐지만 writeStoredVault가 false). 호출자
-// 입장에서는 둘 다 "이 호출로 디스크에 반영됐다고 믿으면 안 된다"는 같은 결론이라 하나의
-// 판별자로 충분하다 — 구분이 필요해지면 그때 원인 태그를 추가한다.
-export type PersistResult = { ok: true } | { ok: false; error: string }
+// 못 썼다"를 구별할 수 있어야 한다는 요건 때문에 Promise<void>로 둘 수 없다.
+//
+// round 0에선 ok:false 하나로 두 원인(상태 가드 거부 / 디스크 쓰기 실패)을 다 담고 "하나로
+// 충분하다"고 주장했는데, round 1 리뷰가 그 주장 자체가 거짓이 되는 코드를 찾아냈다 —
+// persist()가 큐에서 실제로 도는 시점에 key/salt가 사라져 있으면(예: set()과 persist() 사이,
+// 다른 동기 호출로 lock()이 끼어든 경우) "아무것도 못 썼다"인데도 `{ ok: true }`를 돌려주고
+// 있었다. 그래서 reason을 실제로 구분한다:
+// - 'locked'  : 애초에 쓰기를 시도조차 못했다(상태 가드 거부, 또는 큐에 있던 작업이 실행될
+//               때 이미 잠겨 있어 key/salt가 없음). 두 경우 모두 디스크는 손대지 않았다.
+// - 'disk'    : 실제로 쓰기를 시도했고(sealJson까지 갔다) 그 시도 자체가 실패했다(용량 초과,
+//               예기치 않은 예외 등).
+export type PersistResult =
+  | { ok: true }
+  | { ok: false; reason: 'locked'; error: string }
+  | { ok: false; reason: 'disk'; error: string }
 
 export const RESUME_KEY = 'interview-map.resume.v1'
 
@@ -57,6 +66,12 @@ interface ResumeState {
   key: CryptoKey | null          // 메모리 전용. 절대 영속화하지 않는다
   projects: Project[]            // 평문. unlocked에서만 채워진다
   error: string | null
+  // 마지막으로 성공한 쓰기 이후 디스크 쓰기가 실패한 적이 있는지(reason:'disk'만 — 'locked'는
+  // 애초에 쓰기를 시도조차 안 했으니 잃을 게 없다). true인 동안 projects는 디스크와 어긋나
+  // 있을 수 있다는 뜻이다. lock()이 이걸 그대로 두면 사용자가 모르는 사이 그 어긋난 내용이
+  // 사라진다(review round 1 finding 4) — 그래서 UI(ResumeView)가 이 플래그를 보고 잠그기
+  // 전에 명시적 확인을 받는다.
+  hasUnsavedFailure: boolean
 
   hydrate: () => void
   createVault: (passphrase: string) => Promise<void>
@@ -66,6 +81,9 @@ interface ResumeState {
   removeProject: (id: string) => Promise<PersistResult>
   exportPlain: () => VaultPayload | null
   destroyVault: () => void
+  // 저장 실패 배너를 사용자가 직접 지운다(설계 판단: 다음 저장 성공 또는 사용자의 명시적
+  // 조치가 있을 때까지 남아야 한다 — 토스트처럼 저절로 사라지면 안 됨).
+  clearError: () => void
 }
 
 export const useResumeStore = create<ResumeState>((set, get) => {
@@ -85,7 +103,18 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     const run: Promise<PersistResult> = writeChain.then(async () => {
       try {
         const { key, salt, projects } = get()
-        if (!key || !salt) return { ok: true }
+        if (!key || !salt) {
+          // set({projects: next})는 호출자(upsertProject/removeProject)의 동기 구간에서
+          // 이미 끝났지만, 그 뒤 이 작업이 큐에서 실제로 실행되기 전에 다른 동기 호출로
+          // lock()이 끼어들면 key/salt가 사라진다(review round 1 finding 1 — 실제로
+          // 재현됨: upsertProject() 호출 직후 동기로 lock()을 부르면 이 분기를 탄다).
+          // 이 경우 디스크에는 아무것도 쓰이지 않았다 — `{ ok: true }`를 돌려주면 쓴 적도
+          // 없는 걸 성공이라 자처하는 거짓 보고가 된다. 상태 가드 거부와 같은 reason으로
+          // 묶는다 — 둘 다 "쓰기를 시도조차 못했다"는 같은 사실이다.
+          const error = '금고가 잠겨 있어 저장하지 못했습니다.'
+          set({ error })
+          return { ok: false, reason: 'locked', error }
+        }
         const blob = await sealJson(key, { version: 1, projects } satisfies VaultPayload)
         const wrote = writeStoredVault({ salt, blob })
         if (!wrote) {
@@ -100,18 +129,26 @@ export const useResumeStore = create<ResumeState>((set, get) => {
           // 있는 것이 저장됐다"는 가정이 깨지므로, 이 실패를 알리는 배너는 사용자가
           // 지우거나 다음 저장이 성공할 때까지 화면에 남아야 한다(토스트처럼 사라지면
           // 안 됨) — 그래야 사용자가 "저장됐다"고 착각한 채 탭을 닫는 일을 막는다.
+          //
+          // hasUnsavedFailure를 세운다 — projects가 디스크와 어긋난 상태로 남았으니,
+          // lock()이 이 어긋남을 사용자 모르게 지우면 안 된다(review round 1 finding 4).
           const error = '저장 공간이 부족하거나 오류가 발생해 변경사항을 저장하지 못했습니다.'
-          set({ error })
-          return { ok: false, error }
+          set({ error, hasUnsavedFailure: true })
+          return { ok: false, reason: 'disk', error }
         }
-        set({ sealed: blob })
+        set({ sealed: blob, hasUnsavedFailure: false })
         return { ok: true }
       } catch (e) {
         // sealJson 등이 예기치 않게 throw해도(예: key 문제) upsertProject/removeProject는
-        // 절대 throw하지 않는다는 계약을 지킨다 — 실패를 반환값으로 알린다.
-        const error = e instanceof Error ? e.message : '변경사항을 저장하지 못했습니다.'
-        set({ error })
-        return { ok: false, error }
+        // 절대 throw하지 않는다는 계약을 지킨다 — 실패를 반환값으로 알린다. 브라우저의
+        // 원본 예외 메시지(예: "Failed to execute 'encrypt' on 'SubtleCrypto': …")는 그대로
+        // 사용자에게 보여주지 않는다 — 내부 구현 세부사항이고 한국어도 아니다(review round 1
+        // finding 7). 콘솔에만 남기고, 화면에는 위 디스크 쓰기 실패와 같은 문구를 쓴다 —
+        // 사용자 입장에서 "쓰기를 시도했지만 실패했다"는 사실 자체는 같다.
+        console.error('resumeStore: persist 중 예기치 않은 예외', e)
+        const error = '저장 공간이 부족하거나 오류가 발생해 변경사항을 저장하지 못했습니다.'
+        set({ error, hasUnsavedFailure: true })
+        return { ok: false, reason: 'disk', error }
       }
     })
     // 체인은 run의 성패와 무관하게 항상 void로 이어간다.
@@ -126,6 +163,7 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     key: null,
     projects: [],
     error: null,
+    hasUnsavedFailure: false,
 
     hydrate: () => {
       // 파생 키는 메모리 전용이다. hydrate는 "탭에 처음 들어왔을 때 저장된 금고가
@@ -165,7 +203,10 @@ export const useResumeStore = create<ResumeState>((set, get) => {
         set({ error: '저장 공간이 부족하거나 오류가 발생해 금고를 만들지 못했습니다.' })
         return
       }
-      set({ status: 'unlocked', salt: saltB64, sealed: blob, key, projects: [], error: null })
+      set({
+        status: 'unlocked', salt: saltB64, sealed: blob, key, projects: [], error: null,
+        hasUnsavedFailure: false,
+      })
     },
 
     unlock: async (passphrase) => {
@@ -174,7 +215,9 @@ export const useResumeStore = create<ResumeState>((set, get) => {
       try {
         const key = await deriveKey(passphrase, fromB64(salt))
         const payload = await openJson<VaultPayload>(key, sealed)
-        set({ status: 'unlocked', key, projects: payload.projects ?? [], error: null })
+        // 방금 디스크에서 새로 복호화한 것이 진실이다 — 이전 세션에서 남은
+        // hasUnsavedFailure는 이번 unlock과 무관하다.
+        set({ status: 'unlocked', key, projects: payload.projects ?? [], error: null, hasUnsavedFailure: false })
         return true
       } catch {
         // GCM 인증 태그 실패 = 틀린 패스프레이즈(또는 변조). 둘을 구분해줄 수 없다.
@@ -183,13 +226,18 @@ export const useResumeStore = create<ResumeState>((set, get) => {
       }
     },
 
-    lock: () => set({ status: 'locked', key: null, projects: [], error: null }),
+    // error는 절대 여기서 지우지 않는다(review round 1 finding 4) — 잠그는 행위 자체가
+    // 저장 실패를 해결한 게 아니다. hasUnsavedFailure는 여기서 false로 되돌린다 — 잠그면
+    // projects가 []로 비워져 그 어긋남 자체가 사라지기 때문이다(이 사라짐에 대한 동의를
+    // 받는 건 이 함수의 책임이 아니라 호출자의 책임이다 — ResumeView가 hasUnsavedFailure를
+    // 보고 lock()을 부르기 전에 확인을 받는다).
+    lock: () => set({ status: 'locked', key: null, projects: [], hasUnsavedFailure: false }),
 
     upsertProject: async (p) => {
       if (get().status !== 'unlocked') {
         const error = '금고가 잠겨 있어 저장하지 못했습니다.'
         set({ error })
-        return { ok: false, error }
+        return { ok: false, reason: 'locked', error }
       }
       const cur = get().projects
       const i = cur.findIndex((x) => x.id === p.id)
@@ -208,7 +256,7 @@ export const useResumeStore = create<ResumeState>((set, get) => {
       if (get().status !== 'unlocked') {
         const error = '금고가 잠겨 있어 저장하지 못했습니다.'
         set({ error })
-        return { ok: false, error }
+        return { ok: false, reason: 'locked', error }
       }
       const next = get().projects.filter((p) => p.id !== id)
       // upsertProject와 같은 이유로 set()은 여기서도 유일한 await 앞에 있어야 한다.
@@ -225,7 +273,12 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     // 의도적으로 요청했을 때만 호출한다.
     destroyVault: () => {
       localStorage.removeItem(RESUME_KEY)
-      set({ status: 'none', salt: null, sealed: null, key: null, projects: [], error: null })
+      set({
+        status: 'none', salt: null, sealed: null, key: null, projects: [], error: null,
+        hasUnsavedFailure: false,
+      })
     },
+
+    clearError: () => set({ error: null }),
   }
 })

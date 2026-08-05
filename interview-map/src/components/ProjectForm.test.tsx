@@ -20,11 +20,25 @@ const nodes: GraphNode[] = [
   node('database', 'Database', ['DB'], 0),
 ]
 
-beforeEach(() => {
+// review round 1 finding 5: 이 fixture는 원래 `key: {} as CryptoKey`라는 가짜 키를 썼다.
+// sealJson이 그 가짜 키로 crypto.subtle.encrypt를 부르면 writeStoredVault(따라서
+// localStorage)에 도달하기도 전에 "2nd argument is not of type CryptoKey"로 throw한다 —
+// Task 5b 이전엔 그 실패가 삼켜지고 (id, updatedAt) 존재 확인만 했으니 상관없었지만,
+// upsertProject가 이제 그 실패를 정직하게 ok:false로 반환하면서 이 파일의 테스트 8개가
+// (저장이 한 번도 성공한 적 없이) 전부 실패 경로로만 돌고 있었다는 게 드러났다 —
+// `toggles lifecycle stages`, `preserves the id when editing`, `re-runs matching…`,
+// `keeps existing llm matches…`, 세 개의 mergeLlm 관련 테스트, `keeps a stable match
+// order…`. 이 테스트들은 `store.projects`(persist()보다 먼저 동기로 갱신됨)만 확인해서
+// 저장이 한 번도 진짜로 성공하지 않았어도 계속 초록이었다 — "저장이 전혀 동작하지
+// 않아도 통과했을" 셈이다. 진짜 CryptoKey를 전역으로 주입해 이 파일의 모든 테스트가
+// 실제 저장 경로를 타게 한다.
+beforeEach(async () => {
   localStorage.clear()
+  const salt = randomSalt()
+  const key = await deriveKey('pw', salt)
   useResumeStore.setState({
     ...useResumeStore.getInitialState(),
-    status: 'unlocked', salt: 'salt', key: {} as CryptoKey,
+    status: 'unlocked', salt: toB64(salt), key,
   })
 })
 
@@ -37,15 +51,6 @@ describe('ProjectForm', () => {
   })
 
   it('saves a new project with a generated id and runs local matching', async () => {
-    // This test asserts onDone actually fires, i.e. that the save is reported as a real
-    // success — the shared beforeEach's `key: {} as CryptoKey` is a fake that is not a
-    // valid CryptoKey, so sealJson would throw and upsertProject would now correctly
-    // report ok:false. A real derived key is needed here so the write can actually
-    // succeed. (Other tests in this file only check `store.projects`, which is set
-    // in memory before the write is attempted and so are indifferent to the fake key.)
-    const salt = randomSalt()
-    const key = await deriveKey('pw', salt)
-    useResumeStore.setState({ key, salt: toB64(salt) })
     const onDone = vi.fn()
     render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
     fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
@@ -161,12 +166,7 @@ describe('ProjectForm', () => {
   // real write failure while the vault stays unlocked — if the component fell back to
   // checking "is (id, updatedAt) present in store.projects" (as it used to), this would
   // pass regardless because upsertProject sets projects before the write is attempted.
-  // Needs a real CryptoKey (not the other tests' fake `{}`) so sealJson actually reaches
-  // writeStoredVault instead of failing earlier on an invalid key.
   it('does not close the form and shows an error when the disk write itself fails', async () => {
-    const salt = randomSalt()
-    const key = await deriveKey('pw', salt)
-    useResumeStore.setState({ key, salt: toB64(salt) })
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')
     })
@@ -183,6 +183,49 @@ describe('ProjectForm', () => {
     expect(useResumeStore.getState().projects).toHaveLength(1)
     expect(screen.getByLabelText('프로젝트 이름')).toHaveValue('정산 서비스')
     expect(screen.getByLabelText('한 일')).toHaveValue('Redis 캐시를 붙였다')
+  })
+
+  // review round 1 finding 1: upsertProject의 동기 구간(가드 → set() → persist() 호출)이
+  // 끝난 뒤, persist()가 큐에서 실제로 돌기 전에 금고가 잠기면 그 시점에 key가 사라져 있다.
+  // round 0 store 구현은 이 경우 `{ ok: true }`를 돌려줬다 — onDone()이 불려 폼이 닫히고,
+  // store.projects는 lock()이 이미 비운 뒤라 사용자가 입력한 내용이 아무 메시지도 없이
+  // 증발했다. fireEvent.click 직후(아직 어떤 await도 지나지 않은 동기 시점)에 동기로
+  // lock()을 불러 정확히 그 경합을 재현한다.
+  it('does not close the form and reports failure when the vault locks mid-flight (before the queued write runs)', async () => {
+    const onDone = vi.fn()
+    render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    useResumeStore.getState().lock()
+    await waitFor(() => expect(screen.getByText(/잠겨 있어 저장하지 못했습니다/)).toBeTruthy())
+    expect(onDone).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('프로젝트 이름')).toHaveValue('정산 서비스')
+    expect(screen.getByLabelText('한 일')).toHaveValue('Redis 캐시를 붙였다')
+  })
+
+  // review round 1 finding 2: 실패한 저장을 재시도할 때 submit()이 매번 새 id를 만들면
+  // (project?.id ?? crypto.randomUUID()) 재시도가 원래 시도를 갱신하지 못하고 append돼
+  // 같은 내용의 프로젝트가 두 개로 쌓인다. id를 마운트 시 한 번만 정해서 재시도가 같은
+  // 항목을 가리키게 고쳤다 — 실제로 실패→재시도→성공 흐름으로 확인한다.
+  it('does not duplicate the project when retrying after a disk-write failure', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    const onDone = vi.fn()
+    render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했습니다|저장 공간/)).toBeTruthy())
+    expect(useResumeStore.getState().projects).toHaveLength(1)
+    const firstId = useResumeStore.getState().projects[0].id
+
+    spy.mockRestore()
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    expect(useResumeStore.getState().projects).toHaveLength(1)
+    expect(useResumeStore.getState().projects[0].id).toBe(firstId)
   })
 
   // Finding 2: a preserved llm match whose nodeId no longer exists among the current
