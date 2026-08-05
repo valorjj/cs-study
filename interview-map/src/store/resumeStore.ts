@@ -66,12 +66,27 @@ interface ResumeState {
   key: CryptoKey | null          // 메모리 전용. 절대 영속화하지 않는다
   projects: Project[]            // 평문. unlocked에서만 채워진다
   error: string | null
-  // 마지막으로 성공한 쓰기 이후 디스크 쓰기가 실패한 적이 있는지(reason:'disk'만 — 'locked'는
-  // 애초에 쓰기를 시도조차 안 했으니 잃을 게 없다). true인 동안 projects는 디스크와 어긋나
-  // 있을 수 있다는 뜻이다. lock()이 이걸 그대로 두면 사용자가 모르는 사이 그 어긋난 내용이
-  // 사라진다(review round 1 finding 4) — 그래서 UI(ResumeView)가 이 플래그를 보고 잠그기
-  // 전에 명시적 확인을 받는다.
+  // 마지막으로 성공한 쓰기 이후 디스크 쓰기가 실패한 적이 있는지. true인 동안 projects는
+  // 디스크와 어긋나 있을 수 있다는 뜻이다. lock()이 이걸 그대로 두면 사용자가 모르는 사이 그
+  // 어긋난 내용이 사라진다(review round 1 finding 4) — 그래서 UI(ResumeView)가 이 플래그를
+  // 보고 잠그기 전에 명시적 확인을 받는다.
+  //
+  // reason:'disk'(실제로 썼는데 실패)뿐 아니라 reason:'locked'의 큐 작업 분기(상태 가드를
+  // 통과한 *뒤에* 잠겨버려 key가 사라진 경우)에도 세운다(review round 2 new important 1) —
+  // 그 경우도 "메모리가 방금 반영하려던 값이 디스크에는 없다"는 같은 사실이다. 다만 이 플래그
+  // 만으로는 그 특정 손실을 막을 수 없다는 게 round 2 리뷰가 재현한 요점이다: 잠금이 이미
+  // 동기로 일어난 *뒤에* 이 큐 작업이 뒤늦게 실행되므로, 확인 창은 잠금 시점엔 아직 실패를
+  // 몰랐다. 그 경합을 실제로 막는 건 아래 pendingWrites다 — 이 플래그는 사후 기록용이다(다음
+  // unlock 전까지 "방금 뭔가 안 됐다"는 사실을 남겨두는 것 이상의 즉각적 방어 효과는 없다).
   hasUnsavedFailure: boolean
+  // 지금 큐에서 실제로 진행 중인 쓰기(sealJson~writeStoredVault) 개수. hasUnsavedFailure는
+  // "이미 실패한 적이 있다"만 알고, "지금 실패할 수도 있는 쓰기가 진행 중이다"는 모른다 —
+  // 그 사이의 창(review round 2 new important 1: 저장 클릭 직후, encrypt가 끝나기 전에 잠그기를
+  // 누르면 두 클릭이 같은 동기 구간에서 실행되어 hasUnsavedFailure가 세워질 기회조차 없이
+  // 잠금이 먼저 끝난다)이 바로 사용자가 입력한 내용이 아무 경고 없이 사라지는 지점이다.
+  // upsertProject/removeProject의 동기 구간(set() 직후, persist() 호출 시)에서 증가시키고,
+  // 그 쓰기가 끝나면(성공/실패 무관) 감소시킨다 — ResumeView가 잠그기 전에 이 값도 함께 본다.
+  pendingWrites: number
 
   hydrate: () => void
   createVault: (passphrase: string) => Promise<void>
@@ -100,6 +115,10 @@ export const useResumeStore = create<ResumeState>((set, get) => {
   let writeChain: Promise<void> = Promise.resolve()
 
   const persist = (): Promise<PersistResult> => {
+    // set() 직후, 실제 쓰기가 큐에 오르는 시점에 동기로 증가시킨다 — upsertProject/
+    // removeProject의 유일한 await 앞(그 동기 구간) 안에서 호출되므로, 같은 동기 구간에서
+    // 뒤이어 실행되는 다른 동기 호출(예: 잠그기 클릭 핸들러)이 이 증가를 놓치지 않는다.
+    set((s) => ({ pendingWrites: s.pendingWrites + 1 }))
     const run: Promise<PersistResult> = writeChain.then(async () => {
       try {
         const { key, salt, projects } = get()
@@ -111,8 +130,12 @@ export const useResumeStore = create<ResumeState>((set, get) => {
           // 이 경우 디스크에는 아무것도 쓰이지 않았다 — `{ ok: true }`를 돌려주면 쓴 적도
           // 없는 걸 성공이라 자처하는 거짓 보고가 된다. 상태 가드 거부와 같은 reason으로
           // 묶는다 — 둘 다 "쓰기를 시도조차 못했다"는 같은 사실이다.
+          //
+          // hasUnsavedFailure도 세운다(review round 2 new important 1) — 이미 늦었지만
+          // (잠금은 이 코드가 실행되기 전에 동기로 끝났다) 플래그의 의미("메모리가 반영하려던
+          // 값이 디스크에 없다")에는 맞다. 이 손실을 실제로 막는 건 pendingWrites다.
           const error = '금고가 잠겨 있어 저장하지 못했습니다.'
-          set({ error })
+          set({ error, hasUnsavedFailure: true })
           return { ok: false, reason: 'locked', error }
         }
         const blob = await sealJson(key, { version: 1, projects } satisfies VaultPayload)
@@ -153,6 +176,12 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     })
     // 체인은 run의 성패와 무관하게 항상 void로 이어간다.
     writeChain = run.then(() => undefined, () => undefined)
+    // run은 절대 reject하지 않도록 만들어져 있지만(위 catch가 전부 흡수), 혹시 모를 미래의
+    // 변경에도 pendingWrites가 영구히 카운트업된 채로 남지 않도록 두 콜백 모두에서 줄인다.
+    run.then(
+      () => set((s) => ({ pendingWrites: Math.max(0, s.pendingWrites - 1) })),
+      () => set((s) => ({ pendingWrites: Math.max(0, s.pendingWrites - 1) })),
+    )
     return run
   }
 
@@ -164,6 +193,7 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     projects: [],
     error: null,
     hasUnsavedFailure: false,
+    pendingWrites: 0,
 
     hydrate: () => {
       // 파생 키는 메모리 전용이다. hydrate는 "탭에 처음 들어왔을 때 저장된 금고가

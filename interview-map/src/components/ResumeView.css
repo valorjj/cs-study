@@ -26,6 +26,8 @@
   padding: 8px 10px; margin-bottom: 14px; background: var(--bg-elev); border-radius: 4px; }
 .rv-error-banner button { padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border);
   background: var(--bg); color: var(--text); cursor: pointer; flex-shrink: 0; }
+.rv-remove-error { color: var(--text-strong); font-size: 13px; font-weight: 700; margin: 0 0 14px;
+  border-left: 3px solid var(--border-strong); padding-left: 8px; }
 .rv-masking { display: flex; flex-direction: column; gap: 14px; }
 .rv-masking > button { align-self: flex-start; padding: 8px 12px; border-radius: 6px;
   border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); cursor: pointer; }

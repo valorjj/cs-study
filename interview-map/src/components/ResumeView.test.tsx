@@ -178,6 +178,18 @@ describe('ResumeView — 저장 실패 배너와 잠그기 확인', () => {
     expect(useResumeStore.getState().error).toBeNull()
   })
 
+  // review round 2 finding 3(두 번째 절): round 1은 "removeProject의 반환값을 실제로
+  // 읽는다"고 주석에 썼지만 실제로는 `await removeProject(id)`만 하고 반환값을 버렸다 — 그
+  // 읽기를 지워도 풀스위트가 그대로 초록이었다(리뷰어가 실제로 확인). 이 테스트는 반환값을
+  // 실제로 소비해서만 나올 수 있는 결과(이 프로젝트의 *이름*이 들어간, store.error의 일반
+  // 문구와는 다른 문장)를 확인한다 — 반환값을 버리면 이 특정 문구를 만들 방법이 없다.
+  it("reads removeProject's return value to name which project failed to delete from disk", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(screen.getByText(new RegExp(`'${PROJECT.name}'.*디스크`))).toBeTruthy())
+  })
+
   it('asks for confirmation (mentioning 평문 JSON 내보내기) before locking with an unsaved failure, and honors 취소', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     renderUnlocked([PROJECT])
@@ -215,4 +227,81 @@ describe('ResumeView — 저장 실패 배너와 잠그기 확인', () => {
     expect(confirmSpy).not.toHaveBeenCalled()
     expect(useResumeStore.getState().status).toBe('locked')
   })
+
+  // review round 2 minor 3: 위 "declining… honors 취소" 테스트는 실패한 쓰기가 *삭제*라서
+  // projects가 이미 []다 — "취소하면 작업물이 안전하다"는 주장을 실제로는 아무것도 검증하지
+  // 않는다(지킬 게 없다). 손으로 쓴 서술문이 실제로 존재하는 시나리오(실패한 *upsert*)로
+  // 다시 검증한다.
+  it("declining the lock prompt actually preserves hand-written prose (not just an already-empty list)", async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([])
+    const withProse: Project = {
+      ...PROJECT, id: 'p-with-prose', name: '중요 프로젝트', narrative: '아주 중요한 서술문',
+    }
+    act(() => { void useResumeStore.getState().upsertProject(withProse) })
+    await waitFor(() => expect(useResumeStore.getState().hasUnsavedFailure).toBe(true))
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    // 취소했으니 잠기지 않았고, 손으로 쓴 서술문도 메모리에 그대로 있다.
+    expect(useResumeStore.getState().status).toBe('unlocked')
+    expect(useResumeStore.getState().projects.find((p) => p.id === 'p-with-prose')?.narrative)
+      .toBe('아주 중요한 서술문')
+  })
+
+  // review round 2 minor 2: clearError는 error만 지운다 — hasUnsavedFailure는 그대로 남아
+  // 있어야 배너를 닫은 뒤에도 "잠그기"가 여전히 확인을 요구한다(디스크와의 어긋남 자체는
+  // 배너를 닫는다고 해소되지 않는다).
+  it('keeps requiring lock confirmation after the banner is dismissed with 닫기', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(useResumeStore.getState().hasUnsavedFailure).toBe(true))
+
+    fireEvent.click(screen.getByRole('button', { name: '닫기' }))
+    expect(useResumeStore.getState().error).toBeNull()
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(true)
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(useResumeStore.getState().status).toBe('unlocked')
+  })
+})
+
+// review round 2 new important 1: hasUnsavedFailure만으로는 "저장 클릭 → 그 encrypt가 끝나기
+// 전에 잠그기 클릭"이라는 실제 경합을 막을 수 없다 — 그 실패는 잠금이 이미 동기로 끝난 *뒤에*
+// 큐 작업에서 뒤늦게 발견되기 때문이다. 이 경합은 standalone ProjectForm으로는 재현할 수 없다
+// (locked가 되면 ResumeView가 ProjectForm을 통째로 unmount하므로, ProjectForm 자신의
+// 필드-보존 단정은 도달 불가능한 상태를 검증하는 셈이다) — 그래서 여기서는 실제 조립
+// (VaultGate → ResumeView 목록/폼)을 통해 재현한다. renderUnlocked의 가짜 키로는 sealJson이
+// 곧바로(진짜 비동기 간극 없이) throw해 경합 창이 사실상 없어지므로, 진짜 CryptoKey가 필요하다
+// — VaultGate의 실제 createVault를 그대로 탄다.
+describe('ResumeView — 저장이 끝나기 전에 잠그면 경고한다 (real composition)', () => {
+  it('warns before locking while a save is still in flight, and honoring 취소 keeps the prose alive', async () => {
+    render(<ResumeView />)
+    fireEvent.change(screen.getByLabelText('패스프레이즈'), { target: { value: 'correct horse battery' } })
+    fireEvent.change(screen.getByLabelText('패스프레이즈 확인'), { target: { value: 'correct horse battery' } })
+    fireEvent.click(screen.getByRole('button', { name: /금고 만들기/ }))
+    await waitFor(() => expect(useResumeStore.getState().status).toBe('unlocked'), { timeout: 5000 })
+
+    fireEvent.click(screen.getByRole('button', { name: '새 프로젝트' }))
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '비밀 프로젝트' } })
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: '아주 중요한 서술문' } })
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    // 두 클릭 사이에 어떤 await도 없다 — sealJson의 real crypto.subtle.encrypt가 끝나기 전에
+    // (JS는 이 동기 구간을 끝까지 실행한 뒤에야 그 microtask를 처리한다) 동기로 잠그기를 누른다.
+    fireEvent.click(screen.getByRole('button', { name: /잠그기/ }))
+
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/저장이 아직 끝나지 않았습니다/)
+    // 취소했으니 안 잠긴다 — 저장이 실제로 끝나길 기다린 뒤 서술문이 살아 있는지 확인한다.
+    expect(useResumeStore.getState().status).toBe('unlocked')
+    await waitFor(() => expect(useResumeStore.getState().projects).toHaveLength(1))
+    expect(useResumeStore.getState().projects[0].narrative).toBe('아주 중요한 서술문')
+    confirmSpy.mockRestore()
+  }, 10000)
 })

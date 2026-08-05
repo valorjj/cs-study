@@ -156,10 +156,20 @@ describe('MaskPanel', () => {
 
     act(() => { useResumeStore.setState({ status: 'unlocked' }) })
     fireEvent.click(screen.getByRole('button', { name: '정산 가리기' }))
-    await waitFor(() =>
-      expect(useResumeStore.getState().projects[0].maskDecisions)
-        .toEqual([{ text: '정산', kind: 'company', mask: true }]))
-    expect(screen.queryByText(/저장하지 못했|잠겨 있어/)).toBeNull()
+    // review round 2 new important 2: store.projects의 maskDecisions는 upsertProject 안에서
+    // persist()보다 먼저 동기로 갱신되지만, 이 컴포넌트의 writeError 클리어는 그 upsertProject
+    // 호출 전체(진짜 CryptoKey로 실제 encrypt까지 끝나는)가 resolve된 *뒤에만* 일어난다. 진짜
+    // 키가 없던(keyless shortcut) round 1 이전에는 그 둘이 같은 microtask 안에서 거의 동시에
+    // 일어나 이 간극이 보이지 않았지만, 실제 AES-GCM 왕복이 들어간 지금은 maskDecisions가
+    // writeError보다 먼저 반영될 수 있는 진짜 창이 생겼다 — 그 순서로 기다리면(먼저 maskDecisions,
+    // 그다음 곧바로 동기 DOM 확인) 아직 writeError가 안 지워진 순간을 잡아 가끔 죽는다(실제로
+    // 재현함 — crypto.subtle.encrypt 앞에 인위적 지연을 넣어 결정론적으로 죽는 것을 확인, 아래
+    // "Fix Round 2" 보고서 참조). 우리가 실제로 원하는 신호(메시지가 지워졌다 = 쓰기가 완전히
+    // 끝났다)를 먼저 기다리면, 그 시점엔 maskDecisions도 이미 반영되어 있다고 믿을 수 있다 —
+    // 인과관계가 반대 방향(메시지 클리어가 언제나 maskDecisions 갱신보다 나중)이기 때문이다.
+    await waitFor(() => expect(screen.queryByText(/저장하지 못했|잠겨 있어/)).toBeNull())
+    expect(useResumeStore.getState().projects[0].maskDecisions)
+      .toEqual([{ text: '정산', kind: 'company', mask: true }])
   })
 
   // 저장 데이터에 같은 text의 결정이 이미 중복으로 들어 있을 수 있다(가져오기 등).
