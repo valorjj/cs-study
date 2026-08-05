@@ -69,10 +69,63 @@ describe('MaskPanel', () => {
     // store에는 결정이 반영되지 않았어야 한다 — upsertProject가 잠긴 금고에서 조용히
     // 거부했으므로.
     expect(useResumeStore.getState().projects[0].maskDecisions).toEqual([])
-    // 미리보기가 "정산"이 가려졌다고 주장하면 안 된다 — 실제로 전송될 payload는
-    // (store 기준으로) 여전히 마스킹되지 않은 상태다.
-    const preview = screen.queryByTestId('mask-preview')
-    if (preview) expect(preview.textContent).not.toContain('[COMPANY_1]')
+    // 미리보기가 "정산"이 가려졌다고 주장하면 안 된다 — 이 상태에서는 게이트가 항상
+    // 막혀 있어(결정이 store에 반영되지 않았으므로) 미리보기 자체가 없어야 한다.
+    // (이전 버전은 `if (preview) expect(...)`였는데, 이 분기가 항상 참이라 preview는
+    // 항상 null이고 안의 expect는 결코 실행되지 않았다 — 실패할 수 없는 위장 단정이었다.)
+    expect(screen.queryByTestId('mask-preview')).toBeNull()
+  })
+
+  // review round 2 finding 1: 두 결정을 첫 쓰기가 끝나기 전에 연달아 클릭하면, 각
+  // persist 호출이 "자신을 만든 렌더의 project prop"이 아니라 store에서 직접 최신
+  // 프로젝트를 읽어야 서로의 결정을 덮어쓰지 않는다. 렌더 클로저의 project를 base로
+  // 삼으면 둘 다 같은(결정이 아직 없는) 예전 배열을 기준으로 next를 계산해 나중에
+  // 쓰는 쪽이 먼저 쓴 쪽을 지운다.
+  it('does not lose either decision when two are dispatched back-to-back', async () => {
+    const twoCompanies: Project = {
+      ...project, narrative: '(주)가가 와 (주)나나 에서 일했다', maskDecisions: [],
+    }
+    useResumeStore.setState({ projects: [twoCompanies] })
+    render(<MaskPanel project={twoCompanies} nodes={nodes} />)
+
+    // 첫 클릭의 비동기 저장이 끝나길 기다리지 않고 바로 두 번째를 클릭한다.
+    fireEvent.click(screen.getByRole('button', { name: '가가 가리기' }))
+    fireEvent.click(screen.getByRole('button', { name: '나나 가리기' }))
+
+    await waitFor(() => {
+      const decisions = useResumeStore.getState().projects[0].maskDecisions
+      expect(decisions).toHaveLength(2)
+    })
+    const decisions = useResumeStore.getState().projects[0].maskDecisions
+    expect(decisions.find((d) => d.text === '가가')).toEqual({ text: '가가', kind: 'company', mask: true })
+    expect(decisions.find((d) => d.text === '나나')).toEqual({ text: '나나', kind: 'company', mask: true })
+    // 둘 다 실제로 반영됐으니 실패 메시지가 남아 있으면 안 된다.
+    expect(screen.queryByText(/저장하지 못했|삭제되어/)).toBeNull()
+  })
+
+  // 저장 데이터에 같은 text의 결정이 이미 중복으로 들어 있을 수 있다(가져오기 등).
+  // persist의 필터(같은 text는 덮어쓴다)가 이런 기존 중복도 정리해야, 결정 목록의
+  // React key(`d.text`)가 충돌하지 않고 dictOf의 종류별 순번도 어긋나지 않는다. 이
+  // 필터는 "같은 후보를 두 번 클릭"해서는 도달할 수 없다 — 이미 결정된 후보는
+  // undecided 목록에서 사라져 버튼 자체가 없어지기 때문이다. 그래서 저장된 데이터에
+  // 중복을 직접 심어야 이 경로를 태울 수 있다.
+  it('collapses a pre-existing duplicate decision for the same text', async () => {
+    const dup: Project = {
+      ...project,
+      maskDecisions: [
+        { text: '정산', kind: 'company', mask: true },
+        { text: '정산', kind: 'company', mask: false },
+      ],
+    }
+    useResumeStore.setState({ projects: [dup] })
+    render(<MaskPanel project={dup} nodes={nodes} />)
+
+    const undoButtons = screen.getAllByRole('button', { name: '되돌리기' })
+    expect(undoButtons).toHaveLength(2)   // 중복이 실제로 두 항목으로 렌더됐다는 전제
+    fireEvent.click(undoButtons[0])
+
+    await waitFor(() =>
+      expect(useResumeStore.getState().projects[0].maskDecisions).toEqual([]))
   })
 
   // 미리보기는 buildExtractPayload의 결과를 그대로 렌더한다. 별도 조립을 하면

@@ -117,6 +117,30 @@ describe('ResumeView — unlocked toolbar', () => {
     }
   })
 
+  it('opens MaskPanel for the clicked project, keeps it fresh from the store, and returns to the list', () => {
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '마스킹' }))
+
+    // 결정할 후보가 없는 서술문이라 게이트가 바로 열려 있고, 미리보기는 원문 그대로다.
+    expect(screen.getByTestId('mask-preview').textContent).toBe(PROJECT.narrative)
+
+    // MaskPanel은 project prop을 그대로 믿는 설계다(review round 1) — 그 신뢰가
+    // 성립하려면 ResumeView가 store를 구독해 매 렌더마다 최신 프로젝트를 다시 찾아
+    // 넘겨야 한다. 패널이 열려 있는 동안 store가 (다른 경로로) 갱신되는 것을 흉내 내,
+    // 화면이 그 갱신을 실제로 반영하는지 확인한다 — 목록↔패널 전환 배선이 깨지면
+    // (예: id를 잊거나 옛 project를 캡처해 두면) 여기서 잡힌다.
+    act(() => {
+      useResumeStore.setState({
+        projects: [{ ...PROJECT, narrative: '갱신된 서술문', updatedAt: '2026-08-07T00:00:00.000Z' }],
+      })
+    })
+    expect(screen.getByTestId('mask-preview').textContent).toBe('갱신된 서술문')
+
+    fireEvent.click(screen.getByRole('button', { name: '목록으로' }))
+    expect(screen.getByText(PROJECT.name)).toBeTruthy()
+    expect(screen.queryByTestId('mask-preview')).toBeNull()
+  })
+
   it('locks the vault and stops rendering the unlocked toolbar/projects', () => {
     renderUnlocked()
     expect(screen.getByRole('button', { name: /잠그기/ })).toBeTruthy()
