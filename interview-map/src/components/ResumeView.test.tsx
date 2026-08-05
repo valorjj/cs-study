@@ -125,5 +125,11 @@ describe('ResumeView — unlocked toolbar', () => {
     expect(useResumeStore.getState().projects).toEqual([])
     expect(screen.queryByRole('button', { name: /잠그기/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /평문 JSON 내보내기/ })).toBeNull()
+    // innerHTML, not textContent — attributes (title/aria-label/value/placeholder/data-*)
+    // can leak plaintext even when no visible text node does. The list/form subtree is
+    // gone via the unlocked-ternary unmount, but this pins that architecture down so a
+    // future switch to CSS-based hiding would be caught here instead of shipping silently.
+    expect(document.body.innerHTML).not.toContain(PROJECT.name)
+    expect(document.body.innerHTML).not.toContain(PROJECT.narrative)
   })
 })

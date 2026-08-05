@@ -11,10 +11,12 @@ const node = (id: string, label: string, keywords: string[], level: 0 | 1 | 2 = 
 })
 
 // db-isolation은 서술문 어디에도 이름이 없어 로컬 매칭에 절대 걸리지 않는다 —
-// 마지막 두 테스트가 그 성질에 기대어 llm 보존을 검증한다.
+// llm 보존을 검증하는 테스트들이 그 성질에 기댄다. database는 level 0 도메인
+// 헤더라 mergeLlm이 개념 노드로 치지 않는다 — 그 규칙을 검증하는 데 쓴다.
 const nodes: GraphNode[] = [
   node('db-nosql', 'SQL vs NoSQL / Redis', ['NoSQL', 'Redis', '캐시']),
   node('db-isolation', '격리수준·이상현상', ['격리수준', '팬텀리드']),
+  node('database', 'Database', ['DB'], 0),
 ]
 
 beforeEach(() => {
@@ -123,5 +125,137 @@ describe('ProjectForm', () => {
       expect(m.some((x) => x.nodeId === 'db-nosql')).toBe(true)
       expect(m.find((x) => x.nodeId === 'db-isolation')?.via).toBe('llm')
     })
+  })
+
+  // Finding 1: upsertProject never throws — it silently refuses when the vault isn't
+  // unlocked and sets store.error. If submit doesn't check that, onDone() fires anyway
+  // and the form closes with the user's typing thrown away.
+  it('does not close the form and shows an error when the vault is locked at submit time', async () => {
+    useResumeStore.setState({ status: 'locked' })
+    const onDone = vi.fn()
+    render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(screen.getByText(/잠겨 있어 저장하지 못했습니다/)).toBeTruthy())
+    expect(onDone).not.toHaveBeenCalled()
+    expect(useResumeStore.getState().projects).toHaveLength(0)
+    expect(screen.getByLabelText('프로젝트 이름')).toHaveValue('정산 서비스')
+    expect(screen.getByLabelText('한 일')).toHaveValue('Redis 캐시를 붙였다')
+  })
+
+  // Finding 2: a preserved llm match whose nodeId no longer exists among the current
+  // concept nodes (deleted/split) must be dropped, not carried forever.
+  it('drops a preserved llm match whose node no longer exists', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000010', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: '아무 기술도 없는 문장', maskDecisions: [],
+      matches: [{ nodeId: 'db-removed-node', via: 'llm', evidence: '더 이상 없는 노드' }],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    render(<ProjectForm project={existing} nodes={nodes} onDone={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].updatedAt).not.toBe(existing.updatedAt))
+    expect(useResumeStore.getState().projects[0].matches.some((m) => m.nodeId === 'db-removed-node'))
+      .toBe(false)
+  })
+
+  // Finding 2: a preserved llm match pointing at a level-0 domain header is not a real
+  // concept — mergeLlm's own rule drops it, and the inline merge must not skip that rule.
+  it('drops a preserved llm match that points at a level-0 domain node', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000011', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: '아무 기술도 없는 문장', maskDecisions: [],
+      matches: [{ nodeId: 'database', via: 'llm', evidence: '도메인 헤더를 잘못 가리킴' }],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    render(<ProjectForm project={existing} nodes={nodes} onDone={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].updatedAt).not.toBe(existing.updatedAt))
+    expect(useResumeStore.getState().projects[0].matches.some((m) => m.nodeId === 'database'))
+      .toBe(false)
+  })
+
+  // Finding 2: if local matching now also finds the node an old llm match pointed at,
+  // the result must have exactly one entry for that node (the local one), not two.
+  it('does not duplicate a node that local matching now also finds', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000012', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: '아무 기술도 없는 문장', maskDecisions: [],
+      matches: [{ nodeId: 'db-nosql', via: 'llm', evidence: '옛 근거' }],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    render(<ProjectForm project={existing} nodes={nodes} onDone={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].updatedAt).not.toBe(existing.updatedAt))
+    const m = useResumeStore.getState().projects[0].matches
+    expect(m.filter((x) => x.nodeId === 'db-nosql')).toHaveLength(1)
+    expect(m.find((x) => x.nodeId === 'db-nosql')?.via).not.toBe('llm')
+  })
+
+  // Finding 2: the surviving-match order must not shuffle between two saves of the
+  // same unchanged data — a modal keyed off array order (or a naive re-render) would
+  // otherwise flicker.
+  it('keeps a stable match order across two identical saves', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000013', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: 'Redis 캐시를 붙였다', maskDecisions: [],
+      matches: [{ nodeId: 'db-isolation', via: 'llm', evidence: '유지되는 근거' }],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    const first = render(<ProjectForm project={existing} nodes={nodes} onDone={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].updatedAt).not.toBe(existing.updatedAt))
+    const afterFirst = useResumeStore.getState().projects[0]
+    const firstOrder = afterFirst.matches.map((m) => m.nodeId)
+    first.unmount()
+
+    render(<ProjectForm project={afterFirst} nodes={nodes} onDone={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].updatedAt).not.toBe(afterFirst.updatedAt))
+    const secondOrder = useResumeStore.getState().projects[0].matches.map((m) => m.nodeId)
+
+    expect(secondOrder).toEqual(firstOrder)
+  })
+
+  // Finding 3: editing a project that was removed elsewhere (e.g. the list's 삭제
+  // button) while the form stayed open must not resurrect it via upsertProject's
+  // findIndex===-1 append path.
+  it('refuses to save and keeps input when the project being edited was deleted elsewhere', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000014', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: '한 일', maskDecisions: [], matches: [],
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    const onDone = vi.fn()
+    render(<ProjectForm project={existing} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: '수정된 서술문' } })
+    // 폼이 열려 있는 동안 다른 경로(목록의 삭제 버튼 등)로 지워졌다.
+    useResumeStore.setState({ projects: [] })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(screen.getByText(/이미 삭제되었습니다/)).toBeTruthy())
+    expect(onDone).not.toHaveBeenCalled()
+    expect(useResumeStore.getState().projects).toHaveLength(0)
+    expect(screen.getByLabelText('한 일')).toHaveValue('수정된 서술문')
+  })
+
+  // Finding 4: chips that only differ by case/spacing are storage duplicates even
+  // though matchLocal already dedupes by nodeId — dedupe input using the same
+  // normalizeTerm equivalence the matcher applies, keeping the original casing shown.
+  it('dedupes stack chips case-insensitively, keeping the original casing', () => {
+    render(<ProjectForm project={null} nodes={nodes} onDone={vi.fn()} />)
+    const input = screen.getByLabelText('기술스택')
+    fireEvent.change(input, { target: { value: 'Redis' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(input, { target: { value: 'redis' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(screen.getAllByText('Redis')).toHaveLength(1)
+    expect(screen.queryByText('redis')).toBeNull()
   })
 })

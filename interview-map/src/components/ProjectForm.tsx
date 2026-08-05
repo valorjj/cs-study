@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import type { FormEvent, KeyboardEvent } from 'react'
 import { useResumeStore } from '../store/resumeStore'
-import { matchLocal } from '../lib/conceptMatch'
+import { matchLocal, mergeLlm, normalizeTerm } from '../lib/conceptMatch'
 import { STAGES, STAGE_LABELS } from '../lib/resumeTypes'
 import type { Project, Stage } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
@@ -29,7 +29,11 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
   const addChip = (): void => {
     const v = stackInput.trim()
     if (!v) return
-    setStack((cur) => (cur.includes(v) ? cur : [...cur, v]))
+    // matchLocal이 실제로 보는 동치 관계(normalizeTerm)로 중복을 잡는다 — 대소문자·공백만
+    // 다른 칩("Redis"/"redis")을 저장 데이터에 두 벌 남기지 않는다. 화면 표기는 사용자가
+    // 처음 입력한 원문 대소문자를 그대로 유지한다.
+    const norm = normalizeTerm(v)
+    setStack((cur) => (cur.some((c) => normalizeTerm(c) === norm) ? cur : [...cur, v]))
     setStackInput('')
   }
 
@@ -53,26 +57,59 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
       setLocalError('이름과 한 일은 비워둘 수 없습니다.')
       return
     }
+
+    // 편집 중인 프로젝트가 그 사이 다른 경로(목록의 삭제 버튼 등)로 지워졌을 수 있다.
+    // 그대로 upsertProject를 부르면 findIndex가 -1을 돌려주고 append되어 지운
+    // 프로젝트가 같은 id로 되살아난다. 폼은 그대로 열어 두어 사용자가 입력한 내용을
+    // 잃지 않고 복사해 갈 수 있게 한다.
+    if (project && !useResumeStore.getState().projects.some((p) => p.id === project.id)) {
+      setLocalError('이 프로젝트는 이미 삭제되었습니다. 필요하면 아래 내용을 복사해 두세요.')
+      return
+    }
+
     setLocalError(null)
 
     // 로컬 매칭은 저장 때 한 번 돈다. 렌더마다 돌리면 122노드 × 서술문을 매 타이핑마다
     // 훑는다.
     const local = matchLocal({ stack, narrative }, nodes)
     // llm 매칭은 서술문에 이름이 없는 개념이라 로컬 재실행으로 복원되지 않는다.
-    // 로컬 결과로 덮어쓰면 AI 추출 결과가 편집 한 번에 영구히 사라진다.
+    // 로컬 결과로 덮어쓰면 AI 추출 결과가 편집 한 번에 영구히 사라진다. mergeLlm을 그대로
+    // 재사용해 conceptMatch.ts의 규칙(환각/도메인 노드 드롭, 로컬과 중복 시 스킵)과
+    // 두 벌로 갈라지지 않게 한다 — 노드가 나중에 쪼개지거나 삭제되면 옛 llm 매칭이
+    // 가리키던 nodeId가 사라질 수 있고, 그 유령 매칭을 걸러내는 게 바로 이 규칙이다.
     const keptLlm = (project?.matches ?? []).filter((m) => m.via === 'llm')
-    const seen = new Set(local.map((m) => m.nodeId))
-    const matches = [...local, ...keptLlm.filter((m) => !seen.has(m.nodeId))]
+    const { matches } = mergeLlm(
+      local,
+      {
+        nodeIds: keptLlm.map((m) => m.nodeId),
+        reasons: Object.fromEntries(keptLlm.map((m) => [m.nodeId, m.evidence])),
+      },
+      nodes,
+    )
 
+    const id = project?.id ?? crypto.randomUUID()
+    const updatedAt = new Date().toISOString()
     await upsertProject({
-      id: project?.id ?? crypto.randomUUID(),
+      id,
       name: name.trim(), period: period.trim(), role: role.trim(),
       stack, lifecycle,
       narrative,
       maskDecisions: project?.maskDecisions ?? [],
       matches,
-      updatedAt: new Date().toISOString(),
+      updatedAt,
     })
+
+    // upsertProject는 금고가 잠겨 있으면 조용히 거부한다(never throws) — store.error를
+    // 세팅하고 리턴만 한다. 그 신호를 직접 확인하지 않으면 onDone()이 무조건 불려 폼이
+    // 닫히고 사용자가 입력한 이름·서술문이 그대로 증발한다. 방금 우리가 쓴 (id, updatedAt)
+    // 조합이 실제로 store에 반영됐는지를 저장 직후 스냅샷으로 확인해, 성공 여부를
+    // store를 고치지 않고도 구분한다.
+    const saved = useResumeStore
+      .getState().projects.some((p) => p.id === id && p.updatedAt === updatedAt)
+    if (!saved) {
+      setLocalError(useResumeStore.getState().error ?? '저장하지 못했습니다.')
+      return
+    }
     onDone()
   }
 
