@@ -577,7 +577,9 @@
       "summary": "ACID와 격리수준",
       "keywords": [
         "ACID",
-        "격리수준"
+        "격리수준",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "position": {
@@ -749,7 +751,9 @@
       "keywords": [
         "B-Tree",
         "커버링",
-        "복합인덱스"
+        "복합인덱스",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "noteRef": "notes/04-database/database-core.md#d1-database-index",
@@ -768,7 +772,9 @@
       "keywords": [
         "MVCC",
         "낙관적락",
-        "비관적락"
+        "비관적락",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "noteRef": "notes/04-database/database-core.md#d3-lock-and-mvcc",
@@ -804,8 +810,6 @@
       "icon": "🧱",
       "summary": "RDB vs NoSQL, Redis 캐시",
       "keywords": [
-        "PostgreSQL",
-        "MySQL",
         "MongoDB",
         "Elasticsearch",
         "NoSQL",
