@@ -77,6 +77,20 @@ describe('resumeStore', () => {
     expect(useResumeStore.getState().status).toBe('locked')
   })
 
+  // 파생 키는 메모리 전용이라, 이미 unlocked인 상태에서 hydrate가 무조건 재실행되면
+  // (컴포넌트 재마운트, StrictMode의 이펙트 이중 호출 등) 키를 잃고 강제로 재잠금된다.
+  // 사용자는 아무것도 안 했는데 200k PBKDF2를 다시 치르게 된다.
+  it('hydrate is a no-op while already unlocked — it must not re-lock or drop the key', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const before = useResumeStore.getState()
+    useResumeStore.getState().hydrate()
+    const after = useResumeStore.getState()
+    expect(after.status).toBe('unlocked')
+    expect(after.key).toBe(before.key)
+    expect(after.projects).toEqual(before.projects)
+  })
+
   it('unlock with the right passphrase restores the projects', async () => {
     await useResumeStore.getState().createVault('pw')
     await useResumeStore.getState().upsertProject(project('p1', '정산'))

@@ -1,6 +1,6 @@
 .rv { position: fixed; inset: 0; display: flex; justify-content: center; background: var(--bg);
   padding-top: 60px; box-sizing: border-box; font-family: system-ui, sans-serif; overflow-y: auto; }
-.rv-list, .rv-gate { width: 100%; max-width: 640px; padding: 22px 26px 80px; box-sizing: border-box;
+.rv-list { width: 100%; max-width: 640px; padding: 22px 26px 80px; box-sizing: border-box;
   color: var(--text); }
 .rv-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 .rv-toolbar button { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);

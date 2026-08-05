@@ -32,6 +32,16 @@ describe('VaultGate — status none', () => {
     expect(useResumeStore.getState().status).toBe('none')
   })
 
+  it('clears a stale mismatch message once the user edits either field (none branch)', () => {
+    render(<VaultGate />)
+    fireEvent.change(screen.getByLabelText('패스프레이즈'), { target: { value: 'correct horse' } })
+    fireEvent.change(screen.getByLabelText('패스프레이즈 확인'), { target: { value: 'typo' } })
+    fireEvent.click(screen.getByRole('button', { name: /금고 만들기/ }))
+    expect(screen.getByText(/일치하지 않습니다/)).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('패스프레이즈 확인'), { target: { value: 'typo2' } })
+    expect(screen.queryByText(/일치하지 않습니다/)).toBeNull()
+  })
+
   // 짧은 패스프레이즈는 PBKDF2 200k로도 무력하다. 막지 않으면 사용자는 '1234'를 쓴다.
   // status만 보면 안 된다 — createVault(passphrase)는 deriveKey를 await하고 나서야
   // status를 바꾸므로, 유효한 21자 passphrase를 넣어도 클릭 직후 status는 여전히

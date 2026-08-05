@@ -95,6 +95,11 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     error: null,
 
     hydrate: () => {
+      // 파생 키는 메모리 전용이다. hydrate는 "탭에 처음 들어왔을 때 저장된 금고가
+      // 있는지 캐시를 데운다"는 뜻인데, 이미 unlocked인 상태에서 무조건 재실행하면
+      // 그 키를 잃고 강제로 다시 잠근다 — 재마운트(StrictMode 이중 호출, 탭 이동 후
+      // 복귀 등)마다 사용자가 매번 패스프레이즈를 다시 치게 된다.
+      if (get().status === 'unlocked') return
       const stored = readStoredVault()
       if (!stored) { set({ status: 'none' }); return }
       set({ status: 'locked', salt: stored.salt, sealed: stored.blob, projects: [], key: null })
