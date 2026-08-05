@@ -13,7 +13,10 @@ const json = (body: unknown, status = 200) =>
 const CAP = Number(Deno.env.get('DAILY_GRADE_CAP') ?? '30')
 const MAX_NARRATIVE = 8000   // 프롬프트 폭주 방지
 const MAX_CATALOG = 300
-const MAX_KEYWORDS_PER_ROW = 20   // 각 카탈로그 행의 키워드 개수 상한. 무제한 키워드는 프롬프트 인젝션 위험.
+const MAX_LIST_ITEMS = 40        // 칩·단계 개수 상한
+const MAX_LIST_ITEM_LEN = 60     // 항목 하나의 길이 상한
+const MAX_KEYWORDS_PER_ROW = 20   // 카탈로그 행 당 키워드 개수 상한. 300행 × 20키워드 × 80자/필드 = 약 528KB.
+                                  // 최악 케이스를 제한해 프롬프트 크기와 비용을 통제한다.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -27,22 +30,33 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return json({ error: 'unauthenticated' }, 401)
 
-  let body: {
-    maskedNarrative?: unknown; stack?: unknown; lifecycle?: unknown; catalog?: unknown
-  }
-  try { body = await req.json() } catch { return json({ error: 'bad body' }, 400) }
+  let body: Record<string, unknown>
+  try {
+    const parsed = await req.json()
+    // JSON.parse("null")·"[]"·'"x"'는 파싱에 성공한다. catch만으로는 부족하므로
+    // 객체인지 확인해야 한다 — 확인 없이 속성에 접근하면 400이 아니라 500이 난다.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return json({ error: 'bad body' }, 400)
+    }
+    body = parsed as Record<string, unknown>
+  } catch { return json({ error: 'bad body' }, 400) }
 
   const narrative = typeof body.maskedNarrative === 'string' ? body.maskedNarrative : ''
   if (!narrative || narrative.length > MAX_NARRATIVE) return json({ error: 'bad body' }, 400)
 
   const asStrings = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string')
+          .slice(0, MAX_LIST_ITEMS)
+          .map((s) => s.slice(0, MAX_LIST_ITEM_LEN))
+      : []
   const stack = asStrings(body.stack)
   const lifecycle = asStrings(body.lifecycle)
 
   const rawCatalog = Array.isArray(body.catalog) ? body.catalog : []
   if (rawCatalog.length === 0 || rawCatalog.length > MAX_CATALOG) return json({ error: 'bad body' }, 400)
   const catalog = rawCatalog
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object' && !Array.isArray(c))
     .map((c) => c as { id?: unknown; label?: unknown; keywords?: unknown })
     .filter((c) => typeof c.id === 'string' && typeof c.label === 'string')
     .map((c) => {
