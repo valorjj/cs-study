@@ -4,14 +4,16 @@
 import { neutralizeDelimiters } from './sanitize.ts'
 import type { ChatMsg } from './prompt.ts'
 
-// 카탈로그는 브라우저가 보낸다(graph.json을 함수에 복제하지 않는 설계). 따라서
-// label·keywords는 와이어로 들어온 신뢰할 수 없는 문자열이다. 구분자 토큰을
-// 중화하는 것만으로는 부족하다 — 여러 줄에 걸쳐 가짜 지시를 심는 쪽이 현실적인
-// 공격이므로, 줄바꿈을 포함한 모든 공백을 한 칸으로 접고 길이를 제한한다.
-const CATALOG_FIELD_MAX = 80
+// 카탈로그·stack·lifecycle 모두 브라우저가 보낸다(graph.json을 함수에 복제하지
+// 않는 설계이고, stack/lifecycle은 사용자가 자유 입력한 값이다). 따라서 셋 다
+// 와이어로 들어온 신뢰할 수 없는 문자열이다. 구분자 토큰을 중화하는 것만으로는
+// 부족하다 — 여러 줄에 걸쳐 가짜 지시를 심는 쪽이 현실적인 공격이므로, 세 필드
+// 모두 줄바꿈을 포함한 모든 공백을 한 칸으로 접고 길이를 제한한다. 필드 하나만
+// 이 처리를 받으면 나머지 두 곳이 펜스 밖의 진짜 줄로 남는다.
+const PROMPT_FIELD_MAX = 80
 
-function sanitizeCatalogField(s: string): string {
-  return neutralizeDelimiters(s).replace(/\s+/g, ' ').trim().slice(0, CATALOG_FIELD_MAX)
+function sanitizePromptField(s: string): string {
+  return neutralizeDelimiters(s).replace(/\s+/g, ' ').trim().slice(0, PROMPT_FIELD_MAX)
 }
 
 export interface ExtractInput {
@@ -40,10 +42,10 @@ JSON 스키마:
 
 export function buildExtractMessages(input: ExtractInput): ChatMsg[] {
   const catalog = input.catalog
-    .map((c) => `${sanitizeCatalogField(c.id)} | ${sanitizeCatalogField(c.label)} | ${c.keywords.map(sanitizeCatalogField).join(', ')}`)
+    .map((c) => `${sanitizePromptField(c.id)} | ${sanitizePromptField(c.label)} | ${c.keywords.map(sanitizePromptField).join(', ')}`)
     .join('\n')
-  const stack = input.stack.map(neutralizeDelimiters).join(', ')
-  const lifecycle = input.lifecycle.map(neutralizeDelimiters).join(', ')
+  const stack = input.stack.map(sanitizePromptField).join(', ')
+  const lifecycle = input.lifecycle.map(sanitizePromptField).join(', ')
 
   return [
     { role: 'system', content: EXTRACT_SYSTEM },
