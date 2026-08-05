@@ -13,7 +13,11 @@
 ## Global Constraints
 
 - 작업 디렉터리는 `interview-map/`. 모든 명령은 그 안에서 실행한다.
-- 테스트: `npx vitest run <path>`. 전체는 `npx vitest run`. 타입체크는 `npx tsc --noEmit`. 린트는 `npm run lint`(oxlint).
+- 테스트: `npx vitest run <path>`. 전체는 `npx vitest run`. 린트는 `npm run lint`(oxlint).
+- **타입체크는 `npx tsc -b` (또는 `npm run build`). `npx tsc --noEmit` 은 절대 쓰지 말 것 —
+  루트 `tsconfig.json` 이 `{"files": [], "references": [...]}` 이므로 파일 0개를 검사하고
+  항상 조용히 성공한다.** `npx vite build` 도 타입 게이트가 아니다(esbuild가 타입을 검사
+  없이 지운다). 실제 게이트는 `npm run build` = `tsc -b && vite build` 하나뿐이다.
 - 커밋 메시지는 한국어 본문 + `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>` 줄 포함.
 - **이 저장소는 공개다.** 실제 회사명·고객명·사내 시스템명·개인 이력을 테스트 픽스처에 넣지 말 것. 픽스처는 가상의 "정산 서비스" 예시만 사용한다.
 - 컬렉션·입출력 규칙은 `CLAUDE.md`를 따른다. `Stack` 클래스 금지, 인터페이스로 받기.
@@ -251,7 +255,7 @@ Expected: PASS (6 tests)
 
 - [ ] **Step 6: 타입체크와 린트**
 
-Run: `npx tsc --noEmit && npm run lint`
+Run: `npx tsc -b && npm run lint`
 Expected: 출력 없음 / 에러 0
 
 - [ ] **Step 7: 커밋**
@@ -1835,7 +1839,7 @@ Expected: PASS (10 tests)
 
 - [ ] **Step 5: 전체 테스트와 타입체크**
 
-Run: `npx vitest run && npx tsc --noEmit && npm run lint`
+Run: `npx vitest run && npx tsc -b && npm run lint`
 Expected: 전부 통과
 
 - [ ] **Step 6: 커밋**
@@ -2511,7 +2515,7 @@ Deno.serve(async (req) => {
 
 - [ ] **Step 2: 타입체크의 한계를 알고 확인한다**
 
-Run: `npx tsc --noEmit`
+Run: `npx tsc -b`
 Expected: 출력 없음.
 
 **단, 이 통과는 이 파일을 검사했다는 뜻이 아니다.** Edge Function 엔트리포인트는 어떤 테스트도 import하지 않으므로 tsc의 프로그램 그래프에 들어오지 않는다 — 기존 `generate/index.ts`·`grade/index.ts`도 같은 상태다. `Deno` 전역이 선언 없이 쓰여도 여기서는 잡히지 않는다.
@@ -2663,7 +2667,7 @@ Expected: PASS (4 tests)
 
 - [ ] **Step 5: 전체 검증**
 
-Run: `npx vitest run && npx tsc --noEmit && npm run lint && npx vite build`
+Run: `npx vitest run && npx tsc -b && npm run lint && npx vite build`
 Expected: 전체 테스트 통과, 타입 에러 0, 린트 에러 0, 빌드 성공
 
 - [ ] **Step 6: 커밋**
