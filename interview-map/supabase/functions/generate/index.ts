@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { buildGenerateMessages, buildBridgeMessages, parseGenerated } from '../_shared/generate-prompt.ts'
 import { chatComplete } from '../_shared/llm.ts'
 import { noteHash } from '../_shared/hash.ts'
+import { asObjectBody } from '../_shared/jsonBody.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -25,11 +26,16 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return json({ error: 'unauthenticated' }, 401)
 
-  let body: {
+  type Body = {
     nodeId?: string; rung?: number; noteText?: string
     bridge?: { toId?: string; toLabel?: string; toSummary?: string }
   }
-  try { body = await req.json() } catch { return json({ error: 'bad body' }, 400) }
+  let body: Body
+  try {
+    const parsed = asObjectBody(await req.json())
+    if (!parsed) return json({ error: 'bad body' }, 400)
+    body = parsed as Body
+  } catch { return json({ error: 'bad body' }, 400) }
   const { nodeId, rung, noteText, bridge } = body
   if (!nodeId || typeof nodeId !== 'string' ||
       typeof rung !== 'number' || !noteText || typeof noteText !== 'string') {

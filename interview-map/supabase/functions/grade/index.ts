@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { buildMessages, parseScoreResponse } from '../_shared/prompt.ts'
 import { chatComplete } from '../_shared/llm.ts'
+import { asObjectBody } from '../_shared/jsonBody.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,8 +30,13 @@ Deno.serve(async (req) => {
   if (!user) return json({ error: 'unauthenticated' }, 401)
 
   // 2. 바디 검증
-  let body: { question?: string; reference?: string; userAnswer?: string }
-  try { body = await req.json() } catch { return json({ error: 'bad body' }, 400) }
+  type Body = { question?: string; reference?: string; userAnswer?: string }
+  let body: Body
+  try {
+    const parsed = asObjectBody(await req.json())
+    if (!parsed) return json({ error: 'bad body' }, 400)
+    body = parsed as Body
+  } catch { return json({ error: 'bad body' }, 400) }
   const { question, reference, userAnswer } = body
   if (!question || !reference || typeof userAnswer !== 'string') return json({ error: 'bad body' }, 400)
 

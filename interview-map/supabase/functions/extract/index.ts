@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { buildExtractMessages, parseExtracted } from '../_shared/extract-prompt.ts'
 import { chatComplete } from '../_shared/llm.ts'
+import { asObjectBody } from '../_shared/jsonBody.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -32,13 +33,9 @@ Deno.serve(async (req) => {
 
   let body: Record<string, unknown>
   try {
-    const parsed = await req.json()
-    // JSON.parse("null")·"[]"·'"x"'는 파싱에 성공한다. catch만으로는 부족하므로
-    // 객체인지 확인해야 한다 — 확인 없이 속성에 접근하면 400이 아니라 500이 난다.
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return json({ error: 'bad body' }, 400)
-    }
-    body = parsed as Record<string, unknown>
+    const parsed = asObjectBody(await req.json())
+    if (!parsed) return json({ error: 'bad body' }, 400)
+    body = parsed
   } catch { return json({ error: 'bad body' }, 400) }
 
   const narrative = typeof body.maskedNarrative === 'string' ? body.maskedNarrative : ''
