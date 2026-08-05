@@ -164,6 +164,32 @@ describe('VaultGate — status locked', () => {
     expect(container.innerHTML).not.toContain('비밀서술문')
   })
 
+  // review round 4 finding 3e: 만들기 경로의 이중 제출만 고정돼 있었다. 열기 경로에서
+  // Enter를 연타하면 200k PBKDF2 유도가 두 번 돈다(느린 기기에서 체감되는 낭비이고,
+  // 두 번째 결과가 나중에 도착해 store를 다시 덮는다). handleUnlock의 `if (busy) return`이
+  // 그걸 막는다 — 그 한 줄을 지우면 이 테스트가 죽는다.
+  it('does not call unlock twice when submitted twice while busy', async () => {
+    await useResumeStore.getState().createVault('correct horse battery')
+    useResumeStore.getState().lock()
+    let resolveUnlock: (v: boolean) => void = () => {}
+    const unlock = vi.fn(() => new Promise<boolean>((resolve) => { resolveUnlock = resolve }))
+    useResumeStore.setState({ unlock })
+
+    render(<VaultGate />)
+    fireEvent.change(screen.getByLabelText('패스프레이즈'), { target: { value: 'correct horse battery' } })
+    const button = screen.getByRole('button', { name: /열기/ })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    // disabled 버튼 클릭과, Enter 재시도(form submit) 둘 다 확인한다 — 후자는 disabled
+    // 속성으로 막히지 않으므로 `if (busy) return` 없이는 그대로 두 번째 유도가 돈다.
+    fireEvent.click(button)
+    fireEvent.submit(button.closest('form')!)
+    expect(unlock).toHaveBeenCalledTimes(1)
+
+    resolveUnlock(false)
+    await waitFor(() => expect(button).not.toBeDisabled())
+  }, 10000)
+
   it('hides a stale wrong-passphrase message once the user starts retyping', async () => {
     await useResumeStore.getState().createVault('correct horse battery')
     useResumeStore.getState().lock()

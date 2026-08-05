@@ -395,6 +395,30 @@ describe('resumeStore', () => {
     expect(useResumeStore.getState().sealed).toBeNull()
   })
 
+  // review round 4 finding 3a: 기존 왕복 테스트("unlock with the right passphrase restores
+  // the projects")는 getInitialState() + hydrate()를 거친다 — 즉 *디스크*를 다시 읽는다.
+  // 하지만 실제 사용자의 잠그기→열기는 한 세션 안에서 일어나고, unlock()은 localStorage가
+  // 아니라 메모리의 get().sealed를 복호화한다. 그래서 persist()의 성공 분기에서
+  // `sealed: blob`을 빼먹으면(세션 중에 추가한 프로젝트가 in-memory 암호문에 반영되지
+  // 않으면) 잠그기→열기에서 그 프로젝트들이 전부 사라지고 새로고침해야 돌아온다 —
+  // 복구 경로가 없는 금고에서 가장 나쁘게 보이는 버그인데, 디스크를 경유하는 기존
+  // 테스트는 이 필드를 전혀 건드리지 않아 그대로 초록이었다. 여기서는 잠근 뒤
+  // localStorage를 지워버려서, 복원이 오직 메모리의 sealed로만 이루어지게 만든다.
+  it('unlock() restores projects added during the session from the in-memory sealed blob', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    await useResumeStore.getState().upsertProject(project('p2', '배치'))
+
+    useResumeStore.getState().lock()
+    expect(useResumeStore.getState().projects).toEqual([])
+    // 디스크를 지운다 — 이 시점 이후의 복원은 메모리의 sealed(=persist가 갱신했어야 하는
+    // 값)로만 가능하다. hydrate()를 부르지 않으므로 salt/sealed도 메모리 그대로다.
+    localStorage.clear()
+
+    expect(await useResumeStore.getState().unlock('pw')).toBe(true)
+    expect(useResumeStore.getState().projects.map((p) => p.name)).toEqual(['정산', '배치'])
+  })
+
   it('persists both of two concurrent upserts', async () => {
     await useResumeStore.getState().createVault('pw')
     // 개별 await 없이 동시에 발사한다 — 직렬화가 없으면 하나가 디스크에서 사라진다.

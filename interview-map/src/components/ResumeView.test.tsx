@@ -2,7 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ResumeView } from './ResumeView'
 import { useResumeStore } from '../store/resumeStore'
+import { deriveKey, randomSalt, toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
+
+// 아래 "목록↔편집 이음새" 테스트만 이 모듈을 쓴다 — 네트워크 왕복을 우리가 붙잡고
+// 있어야(응답 시점을 손으로 정해야) 재현되는 경합이기 때문이다. 다른 테스트들은
+// MaskPanel을 열지 않으므로 이 모킹의 영향을 받지 않는다.
+vi.mock('../lib/extract', () => ({ requestExtract: vi.fn(), prepareExtract: vi.fn() }))
+import { requestExtract } from '../lib/extract'
+import type { ExtractOutcome } from '../lib/extract'
+const mockExtract = vi.mocked(requestExtract)
 
 const PROJECT: Project = {
   id: '7f3c2a91-0000-4000-8000-000000000001', name: '정산 서비스 개편', period: '2025',
@@ -304,4 +313,108 @@ describe('ResumeView — 저장이 끝나기 전에 잠그면 경고한다 (real
     expect(useResumeStore.getState().projects[0].narrative).toBe('아주 중요한 서술문')
     confirmSpy.mockRestore()
   }, 10000)
+})
+
+// review round 4 finding 1: 이 브랜치의 서명 결함(await를 건너 낡은 스냅샷을 읽는다)의
+// 네 번째 인스턴스. ResumeView는 mapProject·maskingProject를 id로만 들고 매 렌더마다
+// store에서 다시 찾는데(그 이유가 주석으로 적혀 있고, MaskPanel은 그 계약을 자기 파일
+// 상단에 명시한다), 유일하게 ProjectForm에만 그 계약이 지켜지지 않아 편집 대상은 객체
+// 스냅샷으로 얼어 있었다. 이 경합은 standalone ProjectForm으로는 절대 재현할 수 없다 —
+// 얼어붙는 지점이 부모의 state이기 때문이다. 그래서 실제 조립(목록 → 마스킹 → 추출 →
+// 목록 → 편집 → 저장)을 통해, 모든 단계를 실제 클릭으로 재현한다.
+describe('ResumeView — 목록↔편집 이음새 (real composition)', () => {
+  const NARRATIVE = '(주)정산 에서 중복 결제가 있었다'
+  const DECIDED: Project = {
+    id: '7f3c2a91-0000-4000-8000-000000000042', name: '오타 있는 이름', period: '2025',
+    role: 'backend', stack: [], lifecycle: [], narrative: NARRATIVE,
+    maskDecisions: [{ text: '정산', kind: 'company', mask: true }],
+    matches: [], updatedAt: '2026-08-06T00:00:00.000Z',
+  }
+
+  it('does not drop the llm matches that landed while the edit form was open', async () => {
+    mockExtract.mockReset()
+    // 진짜 CryptoKey를 쓴다 — 저장이 실제로 암호화·기록까지 가야 "저장됐는데 llm 매칭이
+    // 사라졌다"를 정직하게 관측할 수 있다.
+    const salt = randomSalt()
+    const key = await deriveKey('pw', salt)
+    useResumeStore.setState({
+      ...useResumeStore.getInitialState(),
+      status: 'unlocked', projects: [DECIDED], error: null, key, salt: toB64(salt),
+    })
+
+    let release: (v: ExtractOutcome) => void = () => {}
+    mockExtract.mockReturnValue(new Promise((r) => { release = r }))
+
+    render(<ResumeView />)
+
+    // 1) 마스킹 → AI 개념 추출 (네트워크 왕복이 떠 있는 상태)
+    fireEvent.click(screen.getByRole('button', { name: '마스킹' }))
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(mockExtract).toHaveBeenCalledTimes(1))
+
+    // 2) 목록으로 — MaskPanel은 unmount되지만 runExtract는 설계대로 계속 돈다
+    fireEvent.click(screen.getByRole('button', { name: '목록으로' }))
+
+    // 3) 같은 프로젝트를 편집한다 (이 시점의 matches는 아직 비어 있다)
+    fireEvent.click(screen.getByRole('button', { name: '편집' }))
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '고친 이름' } })
+
+    // 4) 응답 도착 — runExtract가 store의 최신 프로젝트 위에 via:'llm'을 병합한다
+    release({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '중복 결제는 격리 수준 문제로 이어진다' },
+    })
+    await waitFor(() =>
+      expect(useResumeStore.getState().projects[0].matches
+        .find((m) => m.nodeId === 'db-isolation')?.via).toBe('llm'))
+
+    // 5) 사용자가 오타를 고치고 저장한다. 얼어붙은 스냅샷을 base로 쓰면 keptLlm이 빈
+    //    배열이 되어 mergeLlm이 방금 병합된 llm 매칭을 전부 버리고, 그 잘린 결과가
+    //    암호화되어 디스크에 기록된다.
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(useResumeStore.getState().projects[0].name).toBe('고친 이름'))
+    // 폼이 닫혔다 = 저장이 성공했다(실패하면 ProjectForm은 폼을 열어 둔다)
+    await waitFor(() => expect(screen.getByRole('button', { name: '새 프로젝트' })).toBeTruthy())
+
+    const saved = useResumeStore.getState().projects[0]
+    expect(saved.matches.find((m) => m.nodeId === 'db-isolation')?.via).toBe('llm')
+    // 마스킹 결정도 함께 살아남아야 한다 — 같은 base에서 읽는다.
+    expect(saved.maskDecisions).toEqual(DECIDED.maskDecisions)
+  }, 15000)
+
+  // 위 이음새를 id로 고치면 딸려 오는 두 번째 성질: 복호화된 서술문이 부모 state에
+  // 스냅샷으로 남지 않으므로, 잠근 뒤 다시 열었을 때 projects가 비어 있으면 그 문장이
+  // 화면 어디에도 다시 나타나지 않는다(잠긴 동안 DOM에 없는 것과 별개의 성질이다 —
+  // 예전에는 unlock 직후 textarea에 그대로 복원됐다).
+  it('does not resurrect the decrypted narrative in the form after lock → unlock', async () => {
+    useResumeStore.setState({
+      status: 'unlocked', salt: 'salt', key: {} as CryptoKey, projects: [DECIDED], error: null,
+    })
+    render(<ResumeView />)
+    fireEvent.click(screen.getByRole('button', { name: '편집' }))
+    expect(screen.getByLabelText('한 일')).toHaveValue(NARRATIVE)
+
+    act(() => { useResumeStore.getState().lock() })
+    expect(document.body.innerHTML).not.toContain(NARRATIVE)
+
+    // 프로젝트가 없는 상태로 다시 열린다(예: 다른 탭에서 비워졌거나 복호화 결과가 빈 금고).
+    act(() => { useResumeStore.setState({ status: 'unlocked', key: {} as CryptoKey, projects: [] }) })
+    expect(document.body.innerHTML).not.toContain(NARRATIVE)
+    expect(screen.queryByLabelText('한 일')).toBeNull()
+  })
+
+  // removeFailure는 store가 아니라 컴포넌트 state였고, lock/unlock 어느 쪽도 지우지
+  // 않았다 — 잠갔다 열면 이미 목록에 없는 항목에 대한 실패 문단이 되살아나고 닫을
+  // 방법도 없었다.
+  it('does not resurrect a stale delete-failure message after lock → unlock', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    renderUnlocked([PROJECT])
+    fireEvent.click(screen.getByRole('button', { name: '삭제' }))
+    await waitFor(() => expect(screen.getByText(new RegExp(`'${PROJECT.name}'`))).toBeTruthy())
+
+    act(() => { useResumeStore.getState().lock() })
+    act(() => { useResumeStore.setState({ status: 'unlocked', key: {} as CryptoKey, projects: [] }) })
+
+    expect(screen.queryByText(new RegExp(`'${PROJECT.name}'`))).toBeNull()
+  })
 })

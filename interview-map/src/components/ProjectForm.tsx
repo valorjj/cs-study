@@ -25,6 +25,12 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
   // (review round 1 finding 2, 실제로 재현됨: 용량 초과 → 재시도 → 용량 확보 후 저장 →
   // 동일 내용 두 항목).
   const [id] = useState(() => project?.id ?? crypto.randomUUID())
+  // "이 폼이 기존 프로젝트를 편집 중인가"도 마운트 시점에 한 번만 정한다. prop이 나중에
+  // null이 되더라도(부모가 id로 다시 찾는 방식이라, 그 사이 프로젝트가 삭제되면 null이
+  // 온다) 이 폼이 편집 폼이었다는 사실은 변하지 않아야 한다 — 그러지 않으면 아래
+  // "이미 삭제되었습니다" 가드가 조용히 꺼지고, 저장이 삭제된 프로젝트를 같은 id로
+  // 되살린다(review round 4 finding 1).
+  const [editTargetId] = useState<string | null>(project?.id ?? null)
 
   const [name, setName] = useState(project?.name ?? '')
   const [period, setPeriod] = useState(project?.period ?? '')
@@ -67,11 +73,20 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
       return
     }
 
+    // base는 이 렌더의 `project` prop이 아니라 저장을 누른 시점에 store에서 직접 읽는다
+    // (review round 4 finding 1) — MaskPanel.persist / MaskPanel.runExtract가 이미 같은
+    // 이유로 그렇게 한다. 폼이 열려 있는 동안 다른 경로가 이 프로젝트를 갱신할 수 있고
+    // (대표적으로 AI 추출 응답이 뒤늦게 도착해 via:'llm' 매칭이 병합되는 경우), 캡처된
+    // 스냅샷을 기준으로 저장하면 그 갱신이 조용히 되돌아간다.
+    const base = editTargetId
+      ? (useResumeStore.getState().projects.find((p) => p.id === editTargetId) ?? null)
+      : null
+
     // 편집 중인 프로젝트가 그 사이 다른 경로(목록의 삭제 버튼 등)로 지워졌을 수 있다.
     // 그대로 upsertProject를 부르면 findIndex가 -1을 돌려주고 append되어 지운
     // 프로젝트가 같은 id로 되살아난다. 폼은 그대로 열어 두어 사용자가 입력한 내용을
     // 잃지 않고 복사해 갈 수 있게 한다.
-    if (project && !useResumeStore.getState().projects.some((p) => p.id === project.id)) {
+    if (editTargetId && !base) {
       setLocalError('이 프로젝트는 이미 삭제되었습니다. 필요하면 아래 내용을 복사해 두세요.')
       return
     }
@@ -86,7 +101,7 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
     // 재사용해 conceptMatch.ts의 규칙(환각/도메인 노드 드롭, 로컬과 중복 시 스킵)과
     // 두 벌로 갈라지지 않게 한다 — 노드가 나중에 쪼개지거나 삭제되면 옛 llm 매칭이
     // 가리키던 nodeId가 사라질 수 있고, 그 유령 매칭을 걸러내는 게 바로 이 규칙이다.
-    const keptLlm = (project?.matches ?? []).filter((m) => m.via === 'llm')
+    const keptLlm = (base?.matches ?? []).filter((m) => m.via === 'llm')
     const { matches } = mergeLlm(
       local,
       {
@@ -102,7 +117,7 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
       name: name.trim(), period: period.trim(), role: role.trim(),
       stack, lifecycle,
       narrative,
-      maskDecisions: project?.maskDecisions ?? [],
+      maskDecisions: base?.maskDecisions ?? [],
       matches,
       updatedAt,
     })

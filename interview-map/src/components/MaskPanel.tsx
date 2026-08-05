@@ -19,6 +19,7 @@ import { buildExtractPayload } from '../lib/extractPayload'
 import { requestExtract } from '../lib/extract'
 import { mergeLlm } from '../lib/conceptMatch'
 import type { ExtractOutcome } from '../lib/extract'
+import { STAGE_LABELS } from '../lib/resumeTypes'
 import type { CandidateKind, MaskDecision, Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 import './MaskPanel.css'
@@ -252,11 +253,27 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
             <pre className="mp-preview-pre" data-testid="mask-preview">
               {preview.payload.maskedNarrative}
             </pre>
+            {/* stack·lifecycle은 개수가 아니라 값 그대로 보여준다(review round 4 finding 2).
+                이 화면은 "전송 전문 미리보기"이고, mask.ts는 실제 안전 보증을 바로 이
+                미리보기에 걸고 있다 — 그런데 stack은 마스킹하지 않고 원문 그대로 전송된다
+                (extractPayload.ts의 필드 주석: 기술 용어는 추출의 핵심 신호다). "기술스택
+                2개"만 보여주면 사용자는 기기를 떠난 문자열을 끝까지 보지 못한 채 미리보기를
+                승인하게 된다. catalog만 개수로 남긴다 — 100개가 넘는 공개 그래프 id라
+                나열하면 정작 중요한 부분이 묻힌다. */}
             <ul className="mp-preview-stats">
-              <li>기술스택 {preview.payload.stack.length}개</li>
-              <li>담당 단계 {preview.payload.lifecycle.length}개</li>
-              <li>개념 목록 {preview.payload.catalog.length}개</li>
+              <li>
+                기술스택: {preview.payload.stack.length > 0 ? preview.payload.stack.join(', ') : '없음'}
+              </li>
+              <li>
+                담당 단계: {preview.payload.lifecycle.length > 0
+                  ? preview.payload.lifecycle.map((s) => STAGE_LABELS[s]).join(', ')
+                  : '없음'}
+              </li>
+              <li>개념 목록 {preview.payload.catalog.length}개(공개 그래프 id)</li>
             </ul>
+            <p className="mp-preview-note">
+              기술스택은 추출의 핵심 신호라서 마스킹하지 않고 위 문자열 그대로 전송됩니다.
+            </p>
             {/* 이 버튼은 미리보기가 안전하다고 보여줄 때만 뜬다 — 미리보기가 곧 전송
                 본문이므로, 미리보기가 없다는 건 아직 보낼 수 없다는 뜻이다. */}
             {/* pendingWrites도 함께 본다(review round 1 minor) — 마스킹 결정 저장이

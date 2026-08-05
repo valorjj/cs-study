@@ -62,9 +62,17 @@ export function ResumeView() {
   // 증거였다).
   const [removeFailure, setRemoveFailure] = useState<string | null>(null)
 
-  // 폼이 열려 있지 않으면 null. 열려 있으면 편집 대상(신규는 null 그대로 project prop에 전달).
+  // 폼이 열려 있지 않으면 formOpen=false. 열려 있고 editingId가 null이면 신규 등록이다.
+  // 편집 대상은 *객체가 아니라 id만* 들고 있는다 — maskingProject/mapProject와 정확히 같은
+  // 이유다(review round 4 finding 1). 객체 스냅샷을 들고 있으면 (1) 폼이 열려 있는 동안
+  // 다른 경로로 그 프로젝트가 갱신돼도(예: 마스킹 패널에서 띄운 AI 추출 응답이 뒤늦게
+  // 도착해 via:'llm' 매칭이 store에 병합되는 경우) 폼은 낡은 스냅샷을 보고 저장해 그
+  // 갱신을 지워버리고, (2) lock() 이후에도 복호화된 서술문이 이 state 안에 살아남아
+  // 다음 unlock 때 projects가 비어 있어도 textarea에 다시 그려진다. id만 들고 매 렌더마다
+  // projects에서 다시 찾으면 두 문제 모두 사라진다.
   const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Project | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const editingProject = editingId ? (projects.find((p) => p.id === editingId) ?? null) : null
 
   // 마스킹 패널을 여는 프로젝트의 id만 들고 있는다 — id로 store.projects에서 매번
   // 다시 찾아야, 패널을 여는 동안 다른 경로(편집 등)로 프로젝트가 갱신돼도 최신
@@ -77,6 +85,20 @@ export function ResumeView() {
   // 알 수 있고, 그 읽기는 이 탭에 들어올 때 한 번이면 된다 — 다른 탭만 쓰는 사용자에게
   // 이력 기능의 존재를 알릴 필요가 없다(패스프레이즈 요구 시점 = 이 탭 진입).
   useEffect(() => { hydrate() }, [hydrate])
+
+  // 금고가 unlocked를 벗어나면(잠그기, 파기) 이 컴포넌트의 세션 UI 상태도 함께 버린다.
+  // removeFailure는 store가 아니라 여기 있는 값이라 lock()이 지워주지 않는다 — 그대로
+  // 두면 다음 unlock 화면에 "'X' 삭제가 …" 같은 낡은 실패 문단이 다시 나타나고, 그 항목은
+  // 이미 목록에 없어 사용자가 그 문장을 지울 방법조차 없다(review round 4 finding 1).
+  // 폼 상태도 함께 닫는다 — 잠그면 편집 대상 자체가 사라지므로, 다음 unlock에서 열려 있을
+  // 이유가 없다(빈 신규 폼이 열린 채로 복귀하는 것도 혼란스럽다).
+  useEffect(() => {
+    if (status === 'unlocked') return
+    setRemoveFailure(null)
+    setFormOpen(false)
+    setEditingId(null)
+    setMaskingId(null)
+  }, [status])
 
   const handleExport = () => {
     const payload = exportPlain()
@@ -100,9 +122,9 @@ export function ResumeView() {
     }
   }
 
-  const openNew = () => { setEditing(null); setFormOpen(true) }
-  const openEdit = (p: Project) => { setEditing(p); setFormOpen(true) }
-  const closeForm = () => { setFormOpen(false); setEditing(null) }
+  const openNew = () => { setEditingId(null); setFormOpen(true) }
+  const openEdit = (p: Project) => { setEditingId(p.id); setFormOpen(true) }
+  const closeForm = () => { setFormOpen(false); setEditingId(null) }
 
   // 잠그기는 store.projects를 비운다(lock()). 두 가지 경우를 확인한다 — 순서가 중요하다.
   // (1) pendingWrites > 0: 지금 진행 중인 쓰기가 있다. hasUnsavedFailure는 아직 이 쓰기가
@@ -176,7 +198,7 @@ export function ResumeView() {
               <MaskPanel key={maskingProject.id} project={maskingProject} nodes={data.nodes} />
             </div>
           ) : formOpen ? (
-            <ProjectForm project={editing} nodes={data.nodes} onDone={closeForm} />
+            <ProjectForm project={editingProject} nodes={data.nodes} onDone={closeForm} />
           ) : (
             <>
               <div className="rv-list-toolbar">

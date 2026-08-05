@@ -15,8 +15,9 @@
 .mp-preview summary { cursor: pointer; font-weight: 600; }
 .mp-preview-pre { white-space: pre-wrap; word-break: break-word; margin: 10px 0; padding: 10px;
   border-radius: 6px; background: var(--bg); border: 1px solid var(--border); font: inherit; }
-.mp-preview-stats { list-style: none; margin: 0; padding: 0; display: flex; gap: 14px;
-  font-size: 12px; color: var(--text-dim); }
+.mp-preview-stats { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+  gap: 4px; font-size: 12px; color: var(--text-dim); word-break: break-word; }
+.mp-preview-note { margin: 8px 0 0; font-size: 12px; color: var(--text-dim); }
 .mp-preview-blocked, .mp-write-error { color: var(--text-strong); font-size: 13px; font-weight: 700;
   border-left: 3px solid var(--border-strong); padding-left: 8px; margin: 0; }
 .mp-extract-btn { margin-top: 10px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);

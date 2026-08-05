@@ -144,6 +144,31 @@ describe('ProjectForm', () => {
     })
   })
 
+  // review round 4 finding 3c: 편집 저장은 maskDecisions를 그대로 보존해야 한다. 지우면
+  // (`maskDecisions: []`) 사용자가 후보 하나하나 확정한 결정이 편집 한 번에 조용히
+  // 사라진다 — 게이트가 다시 막아주니 유출은 없지만, 사용자는 이유도 모르고 처음부터
+  // 다시 결정해야 한다. 어떤 테스트도 이걸 붙잡고 있지 않았다.
+  it('preserves the mask decisions across an edit', async () => {
+    const existing: Project = {
+      id: '7f3c2a91-0000-4000-8000-000000000020', name: 'p', period: '', role: '',
+      stack: [], lifecycle: [], narrative: '(주)정산 에서 Redis 캐시를 붙였다',
+      maskDecisions: [
+        { text: '정산', kind: 'company', mask: true },
+        { text: 'ops@corp.example.com', kind: 'contact', mask: false },
+      ],
+      matches: [], updatedAt: '2026-01-01T00:00:00.000Z',
+    }
+    useResumeStore.setState({ projects: [existing] })
+    const onDone = vi.fn()
+    render(<ProjectForm project={existing} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '고친 이름' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
+    const saved = useResumeStore.getState().projects[0]
+    expect(saved.name).toBe('고친 이름')
+    expect(saved.maskDecisions).toEqual(existing.maskDecisions)
+  })
+
   // Finding 1: upsertProject never throws — it silently refuses when the vault isn't
   // unlocked and sets store.error. If submit doesn't check that, onDone() fires anyway
   // and the form closes with the user's typing thrown away.

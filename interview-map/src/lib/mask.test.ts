@@ -95,6 +95,20 @@ describe('applyMask', () => {
     expect(applyMask('SettleHub', dict)).toBe('[SYSTEM_1]')
   })
 
+  // review round 4 finding 3d: 마스킹 키에 정규식 메타문자가 들어간 케이스가 어디에서도
+  // 검증되지 않았다. 그 캐리어는 contact 종류다 — 이메일에는 `.`과 `+`가 흔하다. escapeRe가
+  // 사라지면(또는 새 치환 경로가 그걸 잊으면) `.`은 임의 문자, `v+`는 반복이 되어 전혀 다른
+  // 문자열까지 함께 가려진다. 실패해도 안전한 쪽으로 무너지지만(전송 게이트가 다시 막는다),
+  // 사용자에게는 가장 흔한 후보 종류에서 영구히 설명 불가능한 전송 차단으로 보인다.
+  it('escapes regex metacharacters in a contact key, masking it and nothing else', () => {
+    const dict = { 'kim.dev+ops@corp.example.com': '[CONTACT_1]' }
+    // 두 번째 주소는 첫 키를 정규식으로 그대로 쓰면(`.`=임의 문자, `v+`=v 반복) 함께
+    // 걸려버리는 문자열이다 — 이스케이프가 실제로 돌고 있어야 그대로 남는다.
+    const text = '문의는 kim.dev+ops@corp.example.com 로. 무관한 kimXdevops@corpXexampleXcom 는 그대로.'
+    expect(applyMask(text, dict))
+      .toBe('문의는 [CONTACT_1] 로. 무관한 kimXdevops@corpXexampleXcom 는 그대로.')
+  })
+
   it('leaves text untouched with an empty dict', () => {
     expect(applyMask('그대로', {})).toBe('그대로')
   })

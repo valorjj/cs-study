@@ -4,6 +4,7 @@ import { MaskPanel } from './MaskPanel'
 import { useResumeStore } from '../store/resumeStore'
 import { buildExtractPayload } from '../lib/extractPayload'
 import { deriveKey, randomSalt, toB64 } from '../lib/vault'
+import { STAGE_LABELS } from '../lib/resumeTypes'
 import type { Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 
@@ -247,6 +248,32 @@ describe('MaskPanel', () => {
     expect(shown).toContain('HashMap')     // 기술 용어는 그대로 나간다
   })
 
+  // review round 4 finding 2: 이 화면은 "전송 전문 미리보기"이고 mask.ts는 실제 안전
+  // 보증을 여기에 걸고 있다. 그런데 stack·lifecycle은 마스킹 없이 원문 그대로 전송된다 —
+  // 개수만 보여주면("기술스택 2개") 사용자는 기기를 떠난 문자열을 끝까지 보지 못한 채
+  // 미리보기를 승인한다. 실제 값이 화면에 있어야 한다.
+  it('shows the actual stack and lifecycle values that go over the wire, not just counts', () => {
+    const decided: Project = {
+      ...project,
+      stack: ['SettleHub-정산', 'Redis'],
+      lifecycle: ['tx'],
+      maskDecisions: [{ text: '정산', kind: 'company', mask: false }],
+    }
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    const payload = buildExtractPayload(decided, nodes)
+    expect(payload.stack).toEqual(['SettleHub-정산', 'Redis'])   // 전제: 실제로 전송된다
+
+    const preview = screen.getByTestId('mask-preview').closest('details')!
+    // 개수가 아니라 값 그대로 — 이 문자열이 곧 기기를 떠나는 문자열이다.
+    expect(preview.textContent).toContain('SettleHub-정산')
+    expect(preview.textContent).toContain('Redis')
+    // 단계는 UI 다른 곳과 같은 한국어 라벨로 읽혀야 한다('tx'가 아니라).
+    expect(preview.textContent).toContain(STAGE_LABELS.tx)
+    expect(preview.textContent).not.toContain('기술스택 2개')
+    // 마스킹하지 않고 보낸다는 사실 자체를 화면이 말해준다.
+    expect(preview.textContent).toMatch(/마스킹하지 않고/)
+  })
+
   it('shows why the preview is unavailable while a candidate is undecided', () => {
     render(<MaskPanel project={project} nodes={nodes} />)
     expect(screen.queryByTestId('mask-preview')).toBeNull()
@@ -450,6 +477,10 @@ describe('AI 개념 추출', () => {
     })
     render(<MaskPanel project={decided} nodes={nodes} />)
     fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
-    await waitFor(() => expect(screen.getByText(/1개/)).toBeTruthy())
+    // review round 4 finding 4: 예전엔 /1개/ 였다 — 같은 서브트리의 미리보기 통계
+    // ("기술스택 N개" 등)와도 매치될 수 있는 모호한 정규식이라, 이 배너가 사라져도
+    // 초록일 수 있었다. 배너 문구를 그대로 단정한다.
+    await waitFor(() =>
+      expect(screen.getByText('AI가 준 개념 1개는 그래프에 없어 버렸습니다.')).toBeTruthy())
   })
 })
