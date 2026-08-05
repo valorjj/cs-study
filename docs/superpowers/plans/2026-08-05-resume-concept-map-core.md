@@ -694,6 +694,17 @@ function buildIndex(nodes: GraphNode[]): Map<string, string[]> {
 // 라틴 낱말과 한글 낱말을 각각 한 토큰으로. 2글자 용어의 오탐(부분문자열)을 막는 데 쓴다.
 const TOKEN_RE = /[a-z0-9]+|[가-힣]+/g
 
+// 한국어 조사·어미는 공백 없이 붙는다("캐시를"). 그래서 2글자 용어를 토큰 완전일치로
+// 찾으면 graph.json의 2글자 한글 키워드 19개(캐시·복제·샤딩·롤백·인증·인가·해시 …)가
+// 서술문에서 절대 잡히지 않는다. 부분일치로 낮추면 "확인가능한" 안의 "인가"가 오탐된다.
+// 그래서 토큰의 접두사로 인정하되 남는 꼬리가 조사/어미일 때만 통과시킨다 —
+// "링크드"의 "드"는 조사가 아니므로 "링크"에 매칭되지 않는다.
+const PARTICLES = new Set([
+  '', '을', '를', '이', '가', '은', '는', '의', '에', '도', '만', '로', '으로',
+  '와', '과', '나', '이나', '에서', '에게', '에도', '으로도', '로도', '부터', '까지',
+  '이라', '라', '이라는', '라는', '이란', '란', '처럼', '보다', '마다', '조차',
+])
+
 export function matchLocal(
   input: { stack: string[]; narrative: string }, nodes: GraphNode[],
 ): Match[] {
@@ -713,10 +724,16 @@ export function matchLocal(
   }
 
   const flat = normalizeTerm(input.narrative)
-  const tokens = new Set((input.narrative.toLowerCase().match(TOKEN_RE) ?? []))
+  // 2글자 용어용 인덱스: 각 토큰에서 "앞 2글자 + 조사 꼬리" 형태만 미리 뽑아둔다.
+  // 용어마다 토큰 전체를 훑지 않으므로 O(토큰 + 용어)로 유지된다. PARTICLES에 ''가
+  // 들어 있어 기존의 토큰 완전일치도 그대로 포함된다.
+  const shortHits = new Set<string>()
+  for (const tok of input.narrative.toLowerCase().match(TOKEN_RE) ?? []) {
+    if (tok.length >= 2 && PARTICLES.has(tok.slice(2))) shortHits.add(tok.slice(0, 2))
+  }
   for (const [term, ids] of idx) {
-    // 3글자 이상은 정규화 본문 부분일치, 2글자는 토큰 완전일치만 인정한다.
-    const hit = term.length >= 3 ? flat.includes(term) : tokens.has(term)
+    // 3글자 이상은 정규화 본문 부분일치, 2글자는 접두사+조사 일치만 인정한다.
+    const hit = term.length >= 3 ? flat.includes(term) : shortHits.has(term)
     if (!hit) continue
     for (const id of ids) push(id, 'keyword', term)
   }
@@ -1263,6 +1280,13 @@ describe('matchLocal on a realistic project narrative', () => {
     expect(ids).toContain('db-nosql')   // Redis
     expect(ids).toContain('sd-mq')      // Kafka
     expect(ids).toContain('devops-docker')
+  })
+
+  it('finds a 2-char Korean keyword that only appears with a particle attached', () => {
+    // 서술문의 "캐시에 올렸다" — 조사 '에'가 붙어 토큰이 "캐시에"가 된다.
+    // 이 단정이 깨지면 PARTICLES 경로가 회귀한 것이고, 그 구멍은 LLM 패스도
+    // 메우지 못한다(LLM은 이름이 안 나온 개념만 찾도록 프롬프트되어 있다).
+    expect(ids).toContain('sd-cache')
   })
 
   it('stays in a range a radial map can render', () => {
