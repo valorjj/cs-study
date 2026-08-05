@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MaskPanel } from './MaskPanel'
 import { useResumeStore } from '../store/resumeStore'
 import { buildExtractPayload } from '../lib/extractPayload'
+import { deriveKey, randomSalt, toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 
@@ -172,6 +173,32 @@ describe('MaskPanel', () => {
 
     await waitFor(() =>
       expect(useResumeStore.getState().projects[0].maskDecisions).toEqual([]))
+  })
+
+  // Task 5b: the earlier "locked vault" failure tests above only exercise the
+  // status-guard rejection — upsertProject refuses before ever calling persist(), so it
+  // never proves MaskPanel can see a real disk-write failure. This test uses a genuine
+  // CryptoKey and makes localStorage.setItem throw, so persist() actually runs and its
+  // write fails. If MaskPanel fell back to checking "does the decision exist in
+  // store.projects" (as it used to), this would wrongly read as success, because the
+  // design decision (brief Step 3) is to keep the decision in memory even when the disk
+  // write fails — landed-in-memory and landed-on-disk are deliberately different things
+  // now, and only the return value distinguishes them.
+  it('shows a disk-write failure via writeError even though the decision still lands in memory', async () => {
+    const salt = randomSalt()
+    const key = await deriveKey('pw', salt)
+    useResumeStore.setState({ status: 'unlocked', projects: [project], error: null, key, salt: toB64(salt) })
+    render(<MaskPanel project={project} nodes={nodes} />)
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    fireEvent.click(screen.getByRole('button', { name: '정산 가리기' }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했|저장 공간/)).toBeTruthy())
+    spy.mockRestore()
+    // 설계 판단: 메모리는 유지한다 — 디스크 실패에도 결정 자체는 store.projects에
+    // 반영되어 있어야 한다(사용자가 클릭한 결과가 사라지면 안 된다).
+    expect(useResumeStore.getState().projects[0].maskDecisions)
+      .toEqual([{ text: '정산', kind: 'company', mask: true }])
   })
 
   // 미리보기는 buildExtractPayload의 결과를 그대로 렌더한다. 별도 조립을 하면

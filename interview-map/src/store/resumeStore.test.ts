@@ -192,10 +192,61 @@ describe('resumeStore', () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')
     })
-    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
     spy.mockRestore()
+    // 이 단정이 핵심이다 — 반환값을 무시하고 memory만 보면(store.projects에 p1이
+    // 있는지) 이 실패를 절대 볼 수 없다. 실제로 있음도 확인한다(설계 판단: 롤백하지
+    // 않고 메모리는 유지한다).
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/저장하지 못했습니다|저장 공간/)
     expect(useResumeStore.getState().error).toMatch(/저장하지 못했습니다|저장 공간/)
     expect(useResumeStore.getState().sealed).toBe(sealedBefore)
+    expect(useResumeStore.getState().projects.map((p) => p.id)).toEqual(['p1'])
+  })
+
+  it('upsertProject returns ok:true when the disk write succeeds', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('upsertProject returns ok:false with an error when the vault is locked', async () => {
+    await useResumeStore.getState().createVault('pw')
+    useResumeStore.getState().lock()
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toMatch(/잠겨/)
+  })
+
+  it('removeProject sets an error but still reports the disk-write failure via the return value', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const sealedBefore = useResumeStore.getState().sealed
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    const result = await useResumeStore.getState().removeProject('p1')
+    spy.mockRestore()
+    expect(result.ok).toBe(false)
+    // 설계 판단(brief Step 3)은 "메모리는 그 호출이 만든 결과를 그대로 유지하고 실패를
+    // 반환한다"이다 — removeProject의 경우 그 결과는 "제거됨"이므로 메모리에서도
+    // 제거된 채로 둔다. 롤백하지 않는다는 건 sealed(디스크 스냅샷)가 그대로라는
+    // 뜻이지, 방금 한 메모리 연산을 되돌린다는 뜻이 아니다.
+    expect(useResumeStore.getState().projects).toEqual([])
+    expect(useResumeStore.getState().sealed).toBe(sealedBefore)
+  })
+
+  it('createVault rolls back to status "none" and reports an error when the first disk write fails', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().createVault('pw')
+    spy.mockRestore()
+    // 지킬 사용자 입력이 없는 케이스(빈 금고)라 롤백을 택했다 — status는 'none'에
+    // 머물러야 하고, 디스크에도 아무것도 남지 않아야 한다(반쪽 상태 방지).
+    expect(useResumeStore.getState().status).toBe('none')
+    expect(useResumeStore.getState().error).toMatch(/저장 공간|금고를 만들지 못했습니다/)
+    expect(localStorage.getItem(RESUME_KEY)).toBeNull()
   })
 
   it('persists both of two concurrent upserts', async () => {

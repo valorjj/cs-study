@@ -89,7 +89,7 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
 
     const id = project?.id ?? crypto.randomUUID()
     const updatedAt = new Date().toISOString()
-    await upsertProject({
+    const result = await upsertProject({
       id,
       name: name.trim(), period: period.trim(), role: role.trim(),
       stack, lifecycle,
@@ -99,15 +99,10 @@ export function ProjectForm({ project, nodes, onDone }: ProjectFormProps) {
       updatedAt,
     })
 
-    // upsertProject는 금고가 잠겨 있으면 조용히 거부한다(never throws) — store.error를
-    // 세팅하고 리턴만 한다. 그 신호를 직접 확인하지 않으면 onDone()이 무조건 불려 폼이
-    // 닫히고 사용자가 입력한 이름·서술문이 그대로 증발한다. 방금 우리가 쓴 (id, updatedAt)
-    // 조합이 실제로 store에 반영됐는지를 저장 직후 스냅샷으로 확인해, 성공 여부를
-    // store를 고치지 않고도 구분한다.
-    const saved = useResumeStore
-      .getState().projects.some((p) => p.id === id && p.updatedAt === updatedAt)
-    if (!saved) {
-      setLocalError(useResumeStore.getState().error ?? '저장하지 못했습니다.')
+    // upsertProject가 금고 잠김이든 디스크 쓰기 실패든 실패를 반환값으로 알린다.
+    // 폼을 닫지 않고 입력을 그대로 남겨 사용자가 복사해 갈 수 있게 한다.
+    if (!result.ok) {
+      setLocalError(result.error)
       return
     }
     onDone()

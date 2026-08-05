@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ProjectForm } from './ProjectForm'
 import { useResumeStore } from '../store/resumeStore'
+import { deriveKey, randomSalt, toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 
@@ -36,16 +37,27 @@ describe('ProjectForm', () => {
   })
 
   it('saves a new project with a generated id and runs local matching', async () => {
+    // This test asserts onDone actually fires, i.e. that the save is reported as a real
+    // success — the shared beforeEach's `key: {} as CryptoKey` is a fake that is not a
+    // valid CryptoKey, so sealJson would throw and upsertProject would now correctly
+    // report ok:false. A real derived key is needed here so the write can actually
+    // succeed. (Other tests in this file only check `store.projects`, which is set
+    // in memory before the write is attempted and so are indifferent to the fake key.)
+    const salt = randomSalt()
+    const key = await deriveKey('pw', salt)
+    useResumeStore.setState({ key, salt: toB64(salt) })
     const onDone = vi.fn()
     render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
     fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
     fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
     fireEvent.click(screen.getByRole('button', { name: /저장/ }))
-    await waitFor(() => expect(useResumeStore.getState().projects).toHaveLength(1))
+    // 실제 CryptoKey를 쓰므로 sealJson의 crypto.subtle.encrypt가 진짜 비동기로 돈다 —
+    // store.projects는 persist()보다 먼저(동기) 갱신되므로 onDone까지 기다려야
+    // 디스크 쓰기가 실제로 끝났다고 볼 수 있다.
+    await waitFor(() => expect(onDone).toHaveBeenCalled())
     const p = useResumeStore.getState().projects[0]
     expect(p.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(p.matches.some((m) => m.nodeId === 'db-nosql')).toBe(true)
-    expect(onDone).toHaveBeenCalled()
   })
 
   it('adds and removes stack chips', () => {
@@ -140,6 +152,35 @@ describe('ProjectForm', () => {
     await waitFor(() => expect(screen.getByText(/잠겨 있어 저장하지 못했습니다/)).toBeTruthy())
     expect(onDone).not.toHaveBeenCalled()
     expect(useResumeStore.getState().projects).toHaveLength(0)
+    expect(screen.getByLabelText('프로젝트 이름')).toHaveValue('정산 서비스')
+    expect(screen.getByLabelText('한 일')).toHaveValue('Redis 캐시를 붙였다')
+  })
+
+  // Task 5b: the check ProjectForm uses to decide success must actually see a disk-write
+  // failure, not just a status-guard refusal. Making localStorage.setItem throw forces a
+  // real write failure while the vault stays unlocked — if the component fell back to
+  // checking "is (id, updatedAt) present in store.projects" (as it used to), this would
+  // pass regardless because upsertProject sets projects before the write is attempted.
+  // Needs a real CryptoKey (not the other tests' fake `{}`) so sealJson actually reaches
+  // writeStoredVault instead of failing earlier on an invalid key.
+  it('does not close the form and shows an error when the disk write itself fails', async () => {
+    const salt = randomSalt()
+    const key = await deriveKey('pw', salt)
+    useResumeStore.setState({ key, salt: toB64(salt) })
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    const onDone = vi.fn()
+    render(<ProjectForm project={null} nodes={nodes} onDone={onDone} />)
+    fireEvent.change(screen.getByLabelText('프로젝트 이름'), { target: { value: '정산 서비스' } })
+    fireEvent.change(screen.getByLabelText('한 일'), { target: { value: 'Redis 캐시를 붙였다' } })
+    fireEvent.click(screen.getByRole('button', { name: /저장/ }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했습니다|저장 공간/)).toBeTruthy())
+    spy.mockRestore()
+    expect(onDone).not.toHaveBeenCalled()
+    // 설계 판단(brief Step 3): 메모리는 유지한다 — 방금 타이핑한 게 store에는 들어가
+    // 있어야 한다(디스크에 못 갔을 뿐).
+    expect(useResumeStore.getState().projects).toHaveLength(1)
     expect(screen.getByLabelText('프로젝트 이름')).toHaveValue('정산 서비스')
     expect(screen.getByLabelText('한 일')).toHaveValue('Redis 캐시를 붙였다')
   })
