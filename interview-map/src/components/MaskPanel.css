@@ -1,0 +1,21 @@
+.mp { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 640px; color: var(--text); }
+.mp h3 { font-size: 14px; margin: 0 0 8px; color: var(--text-dim); }
+.mp-candidates, .mp-decisions { list-style: none; margin: 0; padding: 0; display: flex;
+  flex-direction: column; gap: 6px; }
+.mp-candidate, .mp-decision { display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg-elev); flex-wrap: wrap; }
+.mp-candidate-text, .mp-decision-text { font-weight: 600; }
+.mp-decision-token { font-size: 12px; color: var(--text-dim); }
+.mp-candidate-actions { display: flex; gap: 6px; }
+.mp-candidate-actions button, .mp-decision button { padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+.mp-preview details { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+  background: var(--bg-elev); }
+.mp-preview summary { cursor: pointer; font-weight: 600; }
+.mp-preview-pre { white-space: pre-wrap; word-break: break-word; margin: 10px 0; padding: 10px;
+  border-radius: 6px; background: var(--bg); border: 1px solid var(--border); font: inherit; }
+.mp-preview-stats { list-style: none; margin: 0; padding: 0; display: flex; gap: 14px;
+  font-size: 12px; color: var(--text-dim); }
+.mp-preview-blocked { color: var(--text-strong); font-size: 13px; font-weight: 700;
+  border-left: 3px solid var(--border-strong); padding-left: 8px; margin: 0; }

@@ -21,3 +21,6 @@
 .rv-project-actions { display: flex; gap: 6px; }
 .rv-project-actions button { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
   background: var(--bg); color: var(--text); cursor: pointer; }
+.rv-masking { display: flex; flex-direction: column; gap: 14px; }
+.rv-masking > button { align-self: flex-start; padding: 8px 12px; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--bg-elev); color: var(--text); cursor: pointer; }

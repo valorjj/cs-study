@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useResumeStore } from '../store/resumeStore'
 import { VaultGate } from './VaultGate'
 import { ProjectForm } from './ProjectForm'
+import { MaskPanel } from './MaskPanel'
 import type { Project } from '../lib/resumeTypes'
 import graphData from '../graph/graph.json'
 import type { GraphData } from '../graph/types'
@@ -20,6 +21,13 @@ export function ResumeView() {
   // 폼이 열려 있지 않으면 null. 열려 있으면 편집 대상(신규는 null 그대로 project prop에 전달).
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Project | null>(null)
+
+  // 마스킹 패널을 여는 프로젝트의 id만 들고 있는다 — id로 store.projects에서 매번
+  // 다시 찾아야, 패널을 여는 동안 다른 경로(편집 등)로 프로젝트가 갱신돼도 최신
+  // narrative/maskDecisions를 본다. 대상이 삭제되면 lookup이 undefined가 되어
+  // 패널이 자동으로 닫힌다.
+  const [maskingId, setMaskingId] = useState<string | null>(null)
+  const maskingProject = maskingId ? (projects.find((p) => p.id === maskingId) ?? null) : null
 
   // store는 status:'none'으로 시작한다. 저장된 금고가 있는지는 localStorage를 읽어야
   // 알 수 있고, 그 읽기는 이 탭에 들어올 때 한 번이면 된다 — 다른 탭만 쓰는 사용자에게
@@ -62,7 +70,12 @@ export function ResumeView() {
             <span className="rv-export-warning">이 파일은 암호화되어 있지 않습니다</span>
           </div>
 
-          {formOpen ? (
+          {maskingProject ? (
+            <div className="rv-masking">
+              <button type="button" onClick={() => setMaskingId(null)}>목록으로</button>
+              <MaskPanel key={maskingProject.id} project={maskingProject} nodes={data.nodes} />
+            </div>
+          ) : formOpen ? (
             <ProjectForm project={editing} nodes={data.nodes} onDone={closeForm} />
           ) : (
             <>
@@ -85,6 +98,7 @@ export function ResumeView() {
                       <div className="rv-project-actions">
                         <button type="button" onClick={() => openEdit(p)}>편집</button>
                         <button type="button" onClick={() => { void removeProject(p.id) }}>삭제</button>
+                        <button type="button" onClick={() => setMaskingId(p.id)}>마스킹</button>
                         <button type="button">개념 지도</button>
                       </div>
                     </li>
