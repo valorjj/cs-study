@@ -1,0 +1,11 @@
+.vg { display: flex; justify-content: center; padding-top: 40px; }
+.vg-form { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
+.vg-form h2 { margin: 0 0 4px; color: var(--text); }
+.vg-notice { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.vg-form label { font-size: 13px; color: var(--text); }
+.vg-form input { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); }
+.vg-form button { padding: 9px 14px; border-radius: 6px; border: none; cursor: pointer;
+  background: var(--accent); color: var(--bg); }
+.vg-form button:disabled { opacity: 0.5; cursor: not-allowed; }
+.vg-error { color: var(--accent); font-size: 13px; margin: 0; font-weight: 600; }
