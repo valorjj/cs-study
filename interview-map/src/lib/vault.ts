@@ -11,7 +11,10 @@ const PBKDF2_ITERATIONS = 200_000
 const SALT_BYTES = 16
 const IV_BYTES = 12
 
-export function randomSalt(): Uint8Array {
+// 반환형을 Uint8Array<ArrayBuffer>로 좁힌다. 기본 Uint8Array는
+// Uint8Array<ArrayBufferLike>이고, 그 안에는 SharedArrayBuffer 백업도 포함되므로
+// WebCrypto의 BufferSource 파라미터에 그대로 넘길 수 없다.
+export function randomSalt(): Uint8Array<ArrayBuffer> {
   return crypto.getRandomValues(new Uint8Array(SALT_BYTES))
 }
 
@@ -21,14 +24,14 @@ export function toB64(bytes: Uint8Array): string {
   return btoa(s)
 }
 
-export function fromB64(s: string): Uint8Array {
+export function fromB64(s: string): Uint8Array<ArrayBuffer> {
   const raw = atob(s)
   const out = new Uint8Array(raw.length)
   for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i)
   return out
 }
 
-export async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+export async function deriveKey(passphrase: string, salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey(
     'raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey'],
   )

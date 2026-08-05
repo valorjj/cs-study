@@ -15,10 +15,17 @@ export interface CatalogEntry {
   keywords: string[]
 }
 
-// 브랜드 심볼. 모듈 밖에서는 이 심볼을 만들 수 없으므로, 구조가 같은 객체 리터럴을
-// 만들어 requestExtract에 넘기는 우회가 타입 단계에서 막힌다("검사를 거쳤다"는
-// 사실이 주석이 아니라 타입에 실린다).
-const checked = Symbol('checked') as unique symbol
+// 브랜드 심볼. 모듈 밖에서는 이 심볼을 만들 수 없으므로, 구조만 같은 객체 리터럴을
+// requestExtract에 넘기는 실수가 타입 단계에서 걸린다.
+//
+// 이것은 과속방지턱이지 보안 경계가 아니다. `as unknown as ExtractPayload` 나
+// `{ ...buildExtractPayload(...), maskedNarrative: 유출 }` 로 우회할 수 있다.
+// 실제 강제력은 아래 assertNoPlaintext의 전체 payload 스캔뿐이다.
+//
+// `const checked: unique symbol = ...` 형태여야 한다. `Symbol() as unique symbol` 은
+// TS1335로 거부되며(즉 빌드가 깨지며), 만약 통과했더라도 타입이 평범한 symbol로
+// 내려앉아 브랜드가 아무것도 구별하지 못한다.
+const checked: unique symbol = Symbol('checked')
 
 export interface ExtractPayload {
   maskedNarrative: string
@@ -84,7 +91,7 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
       .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
   }
   assertNoPlaintext(payload, project.maskDict)
-  // 검사를 통과한 뒤에만 브랜드를 붙인다. 이 파일 밖에서는 checked 심볼을 알 수
-  // 없으므로, 다른 어떤 코드도 이 필드를 흉내 내 ExtractPayload를 자칭할 수 없다.
+  // 검사를 통과한 뒤에만 브랜드를 붙인다 — 이 함수가 payload를 만드는 유일한
+  // 경로이므로, 브랜드는 "이 경로를 거쳤다"는 표시로만 쓴다(위 심볼 주석 참조).
   return { ...payload, [checked]: true }
 }

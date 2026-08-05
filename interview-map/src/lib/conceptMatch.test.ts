@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { normalizeTerm, matchLocal, mergeLlm } from './conceptMatch'
+import type { Match } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
 
 const node = (id: string, label: string, keywords: string[], level: 0 | 1 | 2 = 1): GraphNode => ({
