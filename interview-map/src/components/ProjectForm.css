@@ -1,0 +1,22 @@
+.pf { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 520px; }
+.pf label { font-size: 13px; color: var(--text); }
+.pf input, .pf textarea { padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font: inherit; }
+.pf textarea { min-height: 90px; resize: vertical; }
+.pf-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pf-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px;
+  border-radius: 999px; border: 1px solid var(--border); background: var(--bg-elev);
+  color: var(--text); font-size: 13px; }
+.pf-chip button { border: none; background: none; color: var(--text-dim); cursor: pointer;
+  font-size: 14px; line-height: 1; padding: 0; }
+.pf-stages { display: flex; flex-wrap: wrap; gap: 8px 14px; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px 12px; margin: 0; }
+.pf-stages legend { font-size: 13px; color: var(--text-dim); padding: 0 4px; }
+.pf-stage-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.pf-error { color: var(--text-strong); font-size: 13px; margin: 0; font-weight: 700;
+  border-left: 3px solid var(--border-strong); padding-left: 8px; }
+.pf-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.pf-actions button { padding: 9px 14px; border-radius: 6px; border: none; cursor: pointer; }
+.pf-actions button[type='submit'] { background: var(--accent); color: var(--bg); }
+.pf-actions button[type='button'] { background: var(--bg-elev); color: var(--text);
+  border: 1px solid var(--border); }

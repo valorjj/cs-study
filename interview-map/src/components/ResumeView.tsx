@@ -1,13 +1,25 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useResumeStore } from '../store/resumeStore'
 import { VaultGate } from './VaultGate'
+import { ProjectForm } from './ProjectForm'
+import type { Project } from '../lib/resumeTypes'
+import graphData from '../graph/graph.json'
+import type { GraphData } from '../graph/types'
 import './ResumeView.css'
+
+const data = graphData as GraphData
 
 export function ResumeView() {
   const status = useResumeStore((s) => s.status)
   const hydrate = useResumeStore((s) => s.hydrate)
   const lock = useResumeStore((s) => s.lock)
   const exportPlain = useResumeStore((s) => s.exportPlain)
+  const projects = useResumeStore((s) => s.projects)
+  const removeProject = useResumeStore((s) => s.removeProject)
+
+  // 폼이 열려 있지 않으면 null. 열려 있으면 편집 대상(신규는 null 그대로 project prop에 전달).
+  const [formOpen, setFormOpen] = useState(false)
+  const [editing, setEditing] = useState<Project | null>(null)
 
   // store는 status:'none'으로 시작한다. 저장된 금고가 있는지는 localStorage를 읽어야
   // 알 수 있고, 그 읽기는 이 탭에 들어올 때 한 번이면 된다 — 다른 탭만 쓰는 사용자에게
@@ -36,6 +48,10 @@ export function ResumeView() {
     }
   }
 
+  const openNew = () => { setEditing(null); setFormOpen(true) }
+  const openEdit = (p: Project) => { setEditing(p); setFormOpen(true) }
+  const closeForm = () => { setFormOpen(false); setEditing(null) }
+
   return (
     <div className="rv">
       {status === 'unlocked' ? (
@@ -45,7 +61,38 @@ export function ResumeView() {
             <button type="button" onClick={handleExport}>평문 JSON 내보내기</button>
             <span className="rv-export-warning">이 파일은 암호화되어 있지 않습니다</span>
           </div>
-          준비 중
+
+          {formOpen ? (
+            <ProjectForm project={editing} nodes={data.nodes} onDone={closeForm} />
+          ) : (
+            <>
+              <div className="rv-list-toolbar">
+                <button type="button" onClick={openNew}>새 프로젝트</button>
+              </div>
+              {projects.length === 0 ? (
+                <p className="rv-empty">등록된 프로젝트가 없습니다.</p>
+              ) : (
+                <ul className="rv-projects">
+                  {projects.map((p) => (
+                    <li key={p.id} className="rv-project">
+                      <div className="rv-project-main">
+                        <span className="rv-project-name">{p.name}</span>
+                        <span className="rv-project-meta">
+                          {p.period && <span>{p.period}</span>}
+                          <span>매칭 {p.matches.length}개</span>
+                        </span>
+                      </div>
+                      <div className="rv-project-actions">
+                        <button type="button" onClick={() => openEdit(p)}>편집</button>
+                        <button type="button" onClick={() => { void removeProject(p.id) }}>삭제</button>
+                        <button type="button">개념 지도</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       ) : (
         <VaultGate />

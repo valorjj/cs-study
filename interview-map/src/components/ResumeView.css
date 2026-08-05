@@ -6,3 +6,18 @@
 .rv-toolbar button { padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border);
   background: var(--bg-elev); color: var(--text); cursor: pointer; }
 .rv-export-warning { font-size: 12px; color: var(--text-dim); }
+.rv-list-toolbar { margin-bottom: 14px; }
+.rv-list-toolbar button { padding: 8px 12px; border-radius: 6px; border: none; cursor: pointer;
+  background: var(--accent); color: var(--bg); }
+.rv-empty { color: var(--text-dim); font-size: 14px; }
+.rv-projects { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column;
+  gap: 10px; }
+.rv-project { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-elev); flex-wrap: wrap; }
+.rv-project-main { display: flex; flex-direction: column; gap: 4px; }
+.rv-project-name { font-weight: 600; color: var(--text); }
+.rv-project-meta { display: flex; gap: 10px; font-size: 12px; color: var(--text-dim); }
+.rv-project-actions { display: flex; gap: 6px; }
+.rv-project-actions button { padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); cursor: pointer; }
