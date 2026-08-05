@@ -1729,13 +1729,23 @@ interface ResumeState {
 }
 
 export const useResumeStore = create<ResumeState>((set, get) => {
-  // 현재 프로젝트 목록을 봉인해 localStorage에 쓴다. 모든 변경의 마지막 단계.
-  const persist = async (projects: Project[]): Promise<void> => {
-    const { key, salt } = get()
-    if (!key || !salt) return
-    const blob = await sealJson(key, { version: 1, projects } satisfies VaultPayload)
-    writeStoredVault({ salt, blob })
-    set({ sealed: blob })
+  // 저장 직렬화. sealJson이 비동기여서, 두 변경이 겹치면 나중에 끝난 암호화가 이전
+  // 스냅샷을 디스크에 덮어써 중간 편집이 조용히 사라진다. 체인으로 한 번에 하나씩
+  // 쓰고, 인자로 받은 스냅샷이 아니라 그때그때의 최신 get().projects를 암호화한다.
+  let writeChain: Promise<void> = Promise.resolve()
+
+  const persist = (): Promise<void> => {
+    writeChain = writeChain
+      .then(async () => {
+        const { key, salt, projects } = get()
+        if (!key || !salt) return
+        const blob = await sealJson(key, { version: 1, projects } satisfies VaultPayload)
+        writeStoredVault({ salt, blob })
+        set({ sealed: blob })
+      })
+      // 한 번의 실패가 이후 저장을 영구히 막지 않도록 체인을 되살린다.
+      .catch(() => { /* ignore */ })
+    return writeChain
   }
 
   return {
@@ -1778,18 +1788,29 @@ export const useResumeStore = create<ResumeState>((set, get) => {
 
     lock: () => set({ status: 'locked', key: null, projects: [], error: null }),
 
+    // 잠긴 상태에서 변경을 받으면 메모리만 바뀌고 디스크 쓰기는 조용히 버려진다
+    // (persist가 key 없으면 조기 반환). 그건 금고에서 조용한 데이터 유실이므로,
+    // 상태를 건드리기 전에 거절하고 사용자에게 알린다.
     upsertProject: async (p) => {
+      if (get().status !== 'unlocked') {
+        set({ error: '금고가 잠겨 있어 저장하지 못했습니다.' })
+        return
+      }
       const cur = get().projects
       const i = cur.findIndex((x) => x.id === p.id)
       const next = i === -1 ? [...cur, p] : cur.map((x) => (x.id === p.id ? p : x))
       set({ projects: next })
-      await persist(next)
+      await persist()
     },
 
     removeProject: async (id) => {
+      if (get().status !== 'unlocked') {
+        set({ error: '금고가 잠겨 있어 저장하지 못했습니다.' })
+        return
+      }
       const next = get().projects.filter((p) => p.id !== id)
       set({ projects: next })
-      await persist(next)
+      await persist()
     },
 
     exportPlain: () => {
