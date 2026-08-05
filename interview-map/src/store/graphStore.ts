@@ -22,6 +22,34 @@ export function readGuestStudied(): string[] {
   }
 }
 
+// Where the user is inside a quiz sub-mode. Lives in the store, not in the view,
+// because App renders each viewMode conditionally: "이 개념 보기" flips viewMode to
+// 'list' and unmounts the whole quiz tab, so component-local state would be lost
+// and the deck would restart from card 1 on the way back.
+//
+// The card is identified by its note-pool `key` (path#slug#index), never by a
+// numeric deck index: grading a card mutates srs/quizStats, which re-sorts the
+// deck under the 'weak' order, so an index would point at a different card on
+// return. Session-only (not persisted) — a reload legitimately starts fresh.
+//
+// One flat shape covers every sub-mode; fields a mode doesn't use stay at their
+// defaults (flash ignores step/firstMiss/finished, drill ignores deckKeys, …).
+export interface QuizPos {
+  scope: string             // 'all' 또는 도메인 id (flash·drill 범위 필터)
+  cardKey: string | null    // 현재 카드의 pool key. null = 덱의 첫 장
+  revealed: boolean         // 답을 펼친 상태인지
+  nonce: number             // flash '다시 섞기' 시드
+  step: number              // drill 체인 단계 (0 = 메인 Q)
+  firstMiss: number | null  // drill 생존 깊이
+  finished: boolean         // drill 체인 종료 화면
+  deckKeys: string[] | null // review 세션 덱 고정 (srs 변화에도 순서·길이 유지)
+}
+
+export const EMPTY_QUIZ_POS: QuizPos = {
+  scope: 'all', cardKey: null, revealed: false, nonce: 0,
+  step: 0, firstMiss: null, finished: false, deckKeys: null,
+}
+
 export interface QuizStat { correct: number; seen: number }
 export const QUIZSTATS_KEY = 'interview-map.quizstats.v1'
 export function readGuestQuizStats(): Record<string, QuizStat> {
@@ -56,6 +84,9 @@ interface GraphState {
   setViewMode: (m: ViewMode) => void
   quizMode: QuizMode              // 퀴즈 탭 내부 서브모드 (플래시카드/드릴/복습/모의면접)
   setQuizMode: (m: QuizMode) => void
+  quizPos: Record<QuizMode, QuizPos>        // 서브모드별 진행 위치 (탭 이탈에도 유지)
+  setQuizPos: (m: QuizMode, patch: Partial<QuizPos>) => void
+  resetQuizPos: (m: QuizMode, patch?: Partial<QuizPos>) => void
   studiedIds: string[]            // 학습 완료 체크된 노드 (localStorage 저장)
   toggleStudied: (id: string) => void
   setStudiedIds: (ids: string[]) => void
@@ -88,6 +119,20 @@ export const useGraphStore = create<GraphState>((set) => ({
   setViewMode: (m) => set({ viewMode: m }),
   quizMode: 'flash',
   setQuizMode: (m) => set({ quizMode: m }),
+  quizPos: {
+    flash: { ...EMPTY_QUIZ_POS },
+    drill: { ...EMPTY_QUIZ_POS },
+    review: { ...EMPTY_QUIZ_POS },
+    graph: { ...EMPTY_QUIZ_POS },
+  },
+  setQuizPos: (m, patch) => set((s) => ({
+    quizPos: { ...s.quizPos, [m]: { ...s.quizPos[m], ...patch } },
+  })),
+  // Back to card 1 with every per-card flag cleared (scope switch, reshuffle).
+  // `patch` carries the values that must survive the reset (the new scope, …).
+  resetQuizPos: (m, patch) => set((s) => ({
+    quizPos: { ...s.quizPos, [m]: { ...EMPTY_QUIZ_POS, ...patch } },
+  })),
   studiedIds: readGuestStudied(),
   toggleStudied: (id) => set((s) => ({
     studiedIds: s.studiedIds.includes(id)

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import Markdown from 'react-markdown'
 import { remarkPlugins } from '../lib/markdownPlugins'
 import rehypeRaw from 'rehype-raw'
@@ -29,10 +29,13 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
   const srs = useGraphStore((s) => s.srs)
   const quizSettings = useGraphStore((s) => s.quizSettings)
   const setQuizSettings = useGraphStore((s) => s.setQuizSettings)
-  const [nonce, setNonce] = useState(0)
-  const [scope, setScope] = useState<string>('all')
-  const [index, setIndex] = useState(0)
-  const [revealed, setRevealed] = useState(false)
+  // Position lives in the store so "이 개념 보기" (which unmounts this whole tab)
+  // doesn't throw the user back to card 1. See QuizPos in graphStore.
+  const pos = useGraphStore((s) => s.quizPos.flash)
+  const setPos = useGraphStore((s) => s.setQuizPos)
+  const resetPos = useGraphStore((s) => s.resetQuizPos)
+  const { scope, revealed, nonce } = pos
+  const setRevealed = (v: boolean) => setPos('flash', { revealed: v })
 
   const { loading, buildItems } = useNotePool(nodes)
   const pool = useMemo(() => buildItems(extractQuizItems), [buildItems])
@@ -56,14 +59,20 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
     })
   }, [pool, scope, quizSettings.order, nonce, quizStats, srs])
 
-  useEffect(() => { setIndex(0); setRevealed(false) }, [scope])
-
   if (loading) return <div className="quiz"><p className="quiz-dim">퀴즈 불러오는 중…</p></div>
+
+  // Resolve the saved card by key, not by index — an answered card re-sorts the
+  // deck under the 'weak' order. Unknown key (deck rebuilt without it) → card 1.
+  const found = pos.cardKey ? deck.findIndex((c) => c.key === pos.cardKey) : -1
+  const index = found === -1 ? 0 : found
   const card = deck[index]
 
   const domainLabel = new Map(nodes.filter((n) => n.level === 0).map((n) => [n.domain, n.label]))
   const weak = weakDomains(quizStats)
-  const advance = () => { setIndex((i) => (i + 1) % deck.length); setRevealed(false) }
+  const advance = () => {
+    const next = deck[(index + 1) % deck.length]
+    setPos('flash', { cardKey: next?.key ?? null, revealed: false })
+  }
   const assess = (correct: boolean) => {
     if (card) recordReview(card.srsKey, card, correct ? 4 : 0, todayStr())
     advance()
@@ -82,7 +91,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
           ))}
         </div>
         {quizSettings.order === 'random' && (
-          <button className="quiz-reshuffle" onClick={() => setNonce((n) => n + 1)}>
+          <button className="quiz-reshuffle" onClick={() => resetPos('flash', { scope, nonce: nonce + 1 })}>
             <LuRefreshCw size={13} /> 다시 섞기
           </button>
         )}
@@ -90,7 +99,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
       </div>
 
       <div className="quiz-scopes">
-        <button className="quiz-scope" data-active={scope === 'all'} onClick={() => setScope('all')}>
+        <button className="quiz-scope" data-active={scope === 'all'} onClick={() => resetPos('flash', { scope: 'all', nonce })}>
           <LuShuffle size={13} /> 전체 랜덤
         </button>
         {domains.map((d) => (
@@ -99,7 +108,7 @@ export function QuizView({ nodes }: { nodes: GraphNode[] }) {
             className="quiz-scope"
             data-active={scope === d.domain}
             style={{ ['--c' as string]: domainColor(d.domain) }}
-            onClick={() => setScope(d.domain)}
+            onClick={() => resetPos('flash', { scope: d.domain, nonce })}
           >
             {d.label}
           </button>

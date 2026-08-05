@@ -27,12 +27,15 @@ function todayStr(): string {
 export function DrillView({ nodes }: { nodes: GraphNode[] }) {
   const openNote = useGraphStore((s) => s.openNote)
   const recordQuizResult = useGraphStore((s) => s.recordQuizResult)
-  const [scope, setScope] = useState<string>('all')
-  const [index, setIndex] = useState(0)
-  const [step, setStep] = useState(0)          // 0 = main Q, 1..n = followups
-  const [revealed, setRevealed] = useState(false)
-  const [firstMiss, setFirstMiss] = useState<number | null>(null)
-  const [finished, setFinished] = useState(false)
+  // Chain position lives in the store: the summary's "이 개념 보기" unmounts the quiz
+  // tab (App renders per viewMode), which used to throw the drill back to card 1
+  // step 0 and erase the survival depth the user just earned. See QuizPos.
+  const pos = useGraphStore((s) => s.quizPos.drill)
+  const setPos = useGraphStore((s) => s.setQuizPos)
+  const resetPos = useGraphStore((s) => s.resetQuizPos)
+  const { scope, step, revealed, firstMiss, finished } = pos
+  const setScope = (next: string) => resetPos('drill', { scope: next })
+  const setRevealed = (v: boolean) => setPos('drill', { revealed: v })
 
   const { user } = useAuth()
   const aiEnabled = !!user                    // 로그인 시에만 AI 채점 가능
@@ -56,15 +59,16 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
     return seededShuffle(scoped, hashSeed(`${todayStr()}:${scope}:drill`))
   }, [pool, scope])
 
-  useEffect(() => {
-    setIndex(0)
-    setStep(0); setRevealed(false); setFirstMiss(null); setFinished(false)
-    setDraft(''); setScored(null); setGradeErr(null)
-  }, [scope])
+  // Chain position itself is reset by setScope; this clears the AI-grading state,
+  // which is deliberately local (a draft answer isn't worth persisting).
+  useEffect(() => { setDraft(''); setScored(null); setGradeErr(null) }, [scope])
 
   if (loading) return <div className="drill"><p className="drill-dim">불러오는 중…</p></div>
 
-  const chain = deck[index] as (DrillChain & { domain: string; nodeId: string; nodeLabel: string }) | undefined
+  // Resolve by pool key, not index: the deck is rebuilt on every mount.
+  const found = pos.cardKey ? deck.findIndex((c) => c.key === pos.cardKey) : -1
+  const index = found === -1 ? 0 : found
+  const chain = deck[index] as (DrillChain & { key: string; domain: string; nodeId: string; nodeLabel: string }) | undefined
 
   const scopes = (
     <div className="drill-scopes">
@@ -112,16 +116,17 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
   const cur = steps[step]
 
   const nextCard = () => {
-    setIndex((i) => (i + 1) % deck.length)
-    setStep(0); setRevealed(false); setFirstMiss(null); setFinished(false)
+    const next = deck[(index + 1) % deck.length]
+    resetPos('drill', { scope, cardKey: next?.key ?? null })
     setDraft(''); setScored(null); setGradeErr(null)   // ← AI 상태 리셋 추가
   }
 
   const assess = (correct: boolean) => {
     recordQuizResult(chain.domain, correct)
-    if (!correct && firstMiss === null) setFirstMiss(step)
-    if (step < total - 1) { setStep((s) => s + 1); setRevealed(false) }
-    else setFinished(true)
+    const miss = !correct && firstMiss === null ? step : firstMiss
+    setPos('drill', step < total - 1
+      ? { firstMiss: miss, step: step + 1, revealed: false }
+      : { firstMiss: miss, finished: true })
   }
 
   // 답변을 서버로 보내 채점받고, score로 체인을 진행하거나(≥3) 코칭을 띄운다(≤2).
@@ -142,7 +147,7 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
     setScored(out.result)
     recordQuizResult(chain.domain, out.result.score >= 3)   // ≥3 = 정답 취급
     if (out.action === 'EASIER') {
-      if (firstMiss === null) setFirstMiss(step)             // 생존 깊이 = 첫 막힘
+      if (firstMiss === null) setPos('drill', { firstMiss: step })   // 생존 깊이 = 첫 막힘
     }
     // ≥3(PASS/DRILL_DOWN): 사용자가 결과 확인 후 "다음 단계"를 누르면 진행(advanceAfterScore)
   }
@@ -152,8 +157,8 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
     const wasLast = step >= total - 1
     const easier = scored !== null && scored.score <= 2
     setScored(null); setDraft(''); setGradeErr(null)
-    if (easier || wasLast) { setFinished(true); return }     // 막힘 or 체인 끝 → 종료
-    setStep((s) => s + 1)                                     // 더 깊은 꼬리질문
+    if (easier || wasLast) { setPos('drill', { finished: true }); return }  // 막힘 or 체인 끝 → 종료
+    setPos('drill', { step: step + 1 })                       // 더 깊은 꼬리질문
   }
 
   const survived = firstMiss === null ? total : firstMiss
