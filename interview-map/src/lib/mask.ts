@@ -63,9 +63,10 @@ export function findCandidates(text: string, neverMask: Set<string>): Candidate[
     found.set(word, { text: word, kind: 'system', count: n })
   }
 
-  // 기술 용어가 회사/연락처 정규식에 걸린 경우도 최종적으로 걸러낸다.
+  // 기술 용어는 어떤 경로(회사/연락처/코드명)로 발견되든 최종적으로 걸러낸다.
+  // always는 회사/연락처 1회 등장 규칙을 제어할 뿐, 기술 사전 검사를 우회하지 않는다.
   return [...found.values()]
-    .filter((c) => always.has(c.text) || !neverMask.has(normalize(c.text)))
+    .filter((c) => !neverMask.has(normalize(c.text)))
     .sort((a, b) => b.count - a.count || a.text.localeCompare(b.text))
 }
 

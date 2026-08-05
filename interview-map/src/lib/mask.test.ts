@@ -55,6 +55,11 @@ describe('findCandidates', () => {
     expect(c.map((x) => x.text)).toEqual(['AlphaSvc', 'BetaSvc'])
     expect(c[0].count).toBe(3)
   })
+
+  it('never proposes a tech term even when a company marker wraps it', () => {
+    const c = findCandidates('(주)Kafka 컨설팅에서 일했다', never)
+    expect(c.map((x) => x.text)).not.toContain('Kafka')
+  })
 })
 
 describe('buildMaskDict', () => {
