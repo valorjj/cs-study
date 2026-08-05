@@ -96,7 +96,10 @@ export function ConceptMapModal({ project, nodes }: ConceptMapModalProps) {
           <p className="cmm-empty">매칭된 개념이 없습니다. 프로젝트를 편집해 기술스택·서술문을 채워보세요.</p>
         ) : (
           <div className="cmm-canvas">
-            <svg className="cmm-lines" viewBox="-450 -450 900 900" aria-hidden="true">
+            <svg
+              className="cmm-lines" width={900} height={900} viewBox="-450 -450 900 900"
+              aria-hidden="true"
+            >
               {lines.map((l, i) => (
                 <line key={i} x1={l.x1} y1={l.y1} x2={l.x2} y2={l.y2} />
               ))}
@@ -133,7 +136,10 @@ function renderPlaced(p: Placed, loading: boolean, openNote: (id: string) => voi
   const tier = p.tier ?? 'unverified'
   const via = p.via ?? 'chip'
   const icon = loading ? '…' : TIER_ICON[tier]
-  const title = loading ? '학습 기록 확인 중' : VIA_LABEL[via]
+  const reason = loading ? '학습 기록 확인 중' : VIA_LABEL[via]
+  // title은 마우스 hover에서만 닿는다 — 스크린리더 사용자는 이유를 아예 못 듣는다.
+  // aria-label로 옮긴다. label을 포함시켜 접근성 이름이 여전히 label 부분일치 쿼리로
+  // 찾아지게 한다(예: screen.getByRole('button', { name: /트랜잭션/ })).
   return (
     <button
       key={p.id}
@@ -142,7 +148,7 @@ function renderPlaced(p: Placed, loading: boolean, openNote: (id: string) => voi
       style={style}
       data-tier={loading ? 'loading' : tier}
       data-via={via}
-      title={title}
+      aria-label={`${p.label} — ${reason}`}
       onClick={() => openNote(p.id)}
     >
       <span className="cmm-concept-icon" aria-hidden="true">{icon}</span>

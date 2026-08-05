@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useResumeStore, readStoredVault, RESUME_KEY } from './resumeStore'
+import { useGraphStore } from './graphStore'
 import { toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
 
@@ -67,6 +68,22 @@ describe('resumeStore', () => {
     expect(s.status).toBe('locked')
     expect(s.projects).toEqual([])
     expect(s.sealed).not.toBeNull()
+  })
+
+  // Task 7 fix round 1, finding 1: 잠긴 뒤에는 그릴 데이터(projects)가 없으므로 지도가
+  // 열려 있으면 안 된다. activeProjectId는 graphStore에 있지만(라우트 상태), 그게 잠긴
+  // 채로 남아 있으면 다음에 언락했을 때 지도가 이전에 보던 프로젝트로 자동으로 다시
+  // 열리는 것처럼 보일 수 있다 — 둘 다 lock()이 지워야 한다.
+  it('lock() closes the concept map and clears the active project', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.setState({ mapOpen: true })
+    useGraphStore.setState({ activeProjectId: 'p1' })
+
+    useResumeStore.getState().lock()
+
+    expect(useResumeStore.getState().mapOpen).toBe(false)
+    expect(useGraphStore.getState().activeProjectId).toBeNull()
   })
 
   it('hydrate finds a stored vault and reports locked', async () => {
@@ -174,6 +191,21 @@ describe('resumeStore', () => {
     await useResumeStore.getState().createVault('pw2')
     expect(useResumeStore.getState().status).toBe('unlocked')
     expect(useResumeStore.getState().projects).toEqual([])
+  })
+
+  // Task 7 fix round 1, finding 1: destroyVault도 lock()과 같은 이유로 mapOpen과
+  // activeProjectId를 지운다 — 금고 자체가 없어졌는데 이전 프로젝트를 가리키는 지도가
+  // 열려 있으면 안 된다.
+  it('destroyVault() closes the concept map and clears the active project', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.setState({ mapOpen: true })
+    useGraphStore.setState({ activeProjectId: 'p1' })
+
+    useResumeStore.getState().destroyVault()
+
+    expect(useResumeStore.getState().mapOpen).toBe(false)
+    expect(useGraphStore.getState().activeProjectId).toBeNull()
   })
 
   it('destroyVault clears localStorage', async () => {

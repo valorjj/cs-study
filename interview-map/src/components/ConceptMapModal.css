@@ -10,8 +10,15 @@
 .cmm-empty { color: var(--text-dim); font-size: 13px; border-left: 3px solid var(--border-strong);
   padding-left: 8px; margin: 0; }
 
-.cmm-canvas { position: relative; width: 900px; height: 900px; max-width: 100%; margin: 0 auto; }
-.cmm-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* 900x900 고정, 스케일하지 않는다(의도적) — 이 지도는 반응형 범위 밖이다(플랜 제약).
+   svg는 width/height 속성을 900으로 못박아 뒀다(viewBox와 1:1) — CSS로 %를 주면 컨테이너
+   폭이 좁아질 때(다이얼로그가 min(960px, 94vw)라 좁은 화면에서 줄어든다) svg만 비율대로
+   줄어들고, 노드는 calc(50% + Npx)로 그 컨테이너의 50%를 기준으로 움직여 서로 다른
+   좌표계로 갈라진다 — 연결선이 중심으로 쪼그라드는데 버튼은 그대로 있는 시각적 깨짐이
+   됐었다. max-width:100%를 빼서 캔버스 자체를 항상 900px로 고정하면 두 좌표계가 항상
+   일치한다 — 좁은 화면에서는 다이얼로그가 스크롤(overflow:auto, 위에서 이미 설정)된다. */
+.cmm-canvas { position: relative; width: 900px; height: 900px; margin: 0 auto; }
+.cmm-lines { position: absolute; top: 0; left: 0; pointer-events: none; }
 .cmm-lines line { stroke: var(--edge); stroke-width: 1; }
 
 .cmm-project, .cmm-domain, .cmm-concept { position: absolute; white-space: nowrap; }

@@ -120,6 +120,29 @@ describe('ConceptMapModal', () => {
     const { container } = render(<ConceptMapModal project={project} nodes={nodes} />)
     expect(container.textContent).toBe('')
   })
+
+  // Task 7 fix round 1, finding 3: srsKeysByNode가 아직 안 왔을 때(노트 fetch가 아직 진행
+  // 중일 때) 모든 개념을 'unverified'로 그리면 "아직 안 읽었다"를 "다 모른다"로 오독시킨다
+  // (brief). 이 테스트가 없으면 loading·icon·title 세 분기를 다 지워도 9/9가 초록이었다
+  // — 아래에서 그 상태로 검증한다. noteRef가 있는 노드가 하나라도 있으면 useNotePool이
+  // fetch를 걸고, 그 fetch가 영원히 pending이면 loading이 계속 true다.
+  it('shows a loading state (not a mastery grade) while the note pool fetch is still pending', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => { /* 영원히 대기 */ })))
+    const nodesWithNoteRef = nodes.map((n) => (
+      n.id === 'db-tx' ? { ...n, noteRef: '/notes/04-database/tx.md#트랜잭션' } : n
+    ))
+    render(<ConceptMapModal project={project} nodes={nodesWithNoteRef} />)
+
+    const conceptButtons = screen.getAllByRole('button')
+      .filter((b) => b.className.includes('cmm-concept'))
+    expect(conceptButtons.length).toBeGreaterThan(0)
+    for (const b of conceptButtons) {
+      expect(b.getAttribute('data-tier')).toBe('loading')
+      expect(b.getAttribute('data-tier')).not.toBe('unverified')
+      // title이 아니라 aria-label로 접근 가능해야 한다(스크린리더가 hover 없이도 듣는다).
+      expect(b.getAttribute('aria-label')).toMatch(/확인 중/)
+    }
+  })
 })
 
 // 이게 이 태스크의 핵심 회귀 테스트다. 노트를 보고 돌아오면 지도가 다시 열려 있어야
@@ -130,8 +153,19 @@ describe('ConceptMapModal', () => {
 // 마운트하지 않고 ResumeView를 통해서만 마운트한다 — DrillView의 "이 개념 보기 이후
 // 재마운트" 테스트와 같은 패턴이다.
 describe('ConceptMapModal — 내 이력을 떠났다 돌아와도 지도가 열려 있다 (real composition)', () => {
-  it('stays open across the unmount/remount that openNote causes when leaving and returning to 내 이력', () => {
+  // Task 7 fix round 1, finding 2: 이전 버전은 beforeEach가 이미 세팅해 둔
+  // mapOpen:true/activeProjectId로 시작해 지도가 열려 있는지만 확인했다 — '개념 지도'
+  // 버튼의 onClick 핸들러 자체는 한 번도 눌리지 않아, 그 핸들러가 통째로 no-op이 돼도
+  // (setMapOpen(true)/setActiveProject를 잃어도) 이 테스트는 몰랐다. 여기서는 닫힌
+  // 상태로 시작해 그 버튼을 실제로 눌러서 연다 — 진입점과 회귀를 한 테스트가 함께 덮는다.
+  it('opens via the 개념 지도 button, and stays open across the unmount/remount that openNote causes when leaving and returning to 내 이력', () => {
+    useResumeStore.setState({ mapOpen: false })
+    useGraphStore.setState({ activeProjectId: null })
+
     const first = render(<ResumeView />)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '개념 지도' }))
     // ResumeView가 실제로 activeProjectId + mapOpen을 보고 지도를 그렸는지부터 확인한다
     // (스탠드얼론 렌더가 아니라 이 조립 자체가 배선돼 있음을 증명).
     expect(screen.getByRole('dialog')).toBeTruthy()
