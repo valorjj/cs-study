@@ -45,8 +45,18 @@
 | `src/lib/mask.ts` (수정) | `CandidateKind` 를 resumeTypes에서 import, `maskGate()` 추가 |
 | `src/lib/extractPayload.ts` (수정) | 마스킹 게이트를 전송 경로에서 강제, dict를 결정에서 파생 |
 | `src/lib/route.ts` (수정) | `#/resume`·`#/resume/<projectId>` 문법 |
-| `src/store/graphStore.ts` (수정) | `ViewMode` 에 `'resume'` 추가 |
-| `src/store/resumeStore.ts` (수정) | 세션 UI 위치 슬라이스(`activeProjectId`/`mapOpen`), `maskDecisions` 반영 |
+| `src/store/graphStore.ts` (수정) | `ViewMode` 에 `'resume'` 추가, `activeProjectId` 라우트 상태 |
+| `src/store/resumeStore.ts` (수정) | 세션 UI 위치(`mapOpen`), `maskDecisions` 반영 |
+
+> **`activeProjectId` 는 `graphStore` 에 둔다** — `selectedId`·`trackId`·`quizMode` 와 같은
+> 라우트 상태이고 URL에 실린다. 금고 데이터가 아니므로 `resumeStore` 분리 이유(복호화된
+> 평문과 키를 포화된 graphStore에서 떼어놓기)가 적용되지 않는다.
+>
+> 이걸 `resumeStore` 에 두면 `useUrlSync` 가 두 store를 같은 콜백으로 구독해야 하고,
+> 그 콜백이 양쪽의 합성값을 읽는 순간 파일 헤더가 문서화한 단일구독 loop guard가
+> 무효화된다 — `applyRoute` 가 두 store를 순차로 `setState` 하므로 첫 알림이 옛 값을
+> 읽어 가짜 `pushState` 를 낸다. Task 1 리뷰에서 `history.length` 1→3 으로 실증됐다.
+> `mapOpen` 은 URL에 실리지 않으므로 `resumeStore` 에 남는다.
 | `src/lib/conceptGroups.ts` (신규) | `Match[]` + 그래프 + 숙련도 증거 → `DomainGroup[]` 어댑터 |
 | `src/hooks/useSrsKeysByNode.ts` (신규) | 노트 풀에서 노드별 SRS 카드 키 맵 구성 |
 | `src/components/ResumeView.tsx` + `.css` (신규) | 탭 루트. 금고 상태 분기 + 프로젝트 목록 |
@@ -173,16 +183,29 @@ Expected: PASS. 기존 라우트 테스트도 전부 통과해야 한다 — `DE
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide' | 'resume'
 ```
 
-`src/hooks/useUrlSync.ts` — `routeFromState` 와 `applyRoute` 에 `projectId` 를 넣는다.
-프로젝트 id는 `resumeStore` 에 있고 `graphStore` 에 없으므로, 두 store를 함께 읽는다:
+`src/store/graphStore.ts` — `trackId`/`setTrackId` **바로 옆에** 같은 형태로 넣는다.
+라우트 상태이므로 여기가 집이다(위 File Structure의 주의 참조):
 
 ```ts
-import { useResumeStore } from '../store/resumeStore'
+  activeProjectId: string | null            // 내 이력 탭에서 열린 프로젝트 (URL에 실린다)
+  setActiveProject: (id: string | null) => void
+```
 
+```ts
+  activeProjectId: null,
+  setActiveProject: (id) => set({ activeProjectId: id }),
+```
+
+`src/hooks/useUrlSync.ts` — `routeFromState` 와 `applyRoute` 에 `projectId` 를 넣는다.
+**두 번째 store를 구독하지 말 것.** 필드가 `graphStore` 에 있으므로 다른 라우트
+필드와 똑같이 인자에서 읽고, 하나의 `setState` 안에서 쓴다 — 알림 한 번, loop
+guard의 전제(한 알림 = 한 원자적 전이) 유지:
+
+```ts
 function routeFromState(s: ReturnType<typeof useGraphStore.getState>): Route {
   return {
     view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode,
-    projectId: useResumeStore.getState().activeProjectId,
+    projectId: s.activeProjectId,
   }
 }
 
@@ -191,36 +214,30 @@ function applyRoute(r: Route): void {
     viewMode: r.view,
     selectedId: r.nodeId,
     trackId: r.trackId,
+    // quizMode와 같은 이유로 조건부다: resume 뷰가 아닐 때 activeProjectId를 지우면,
+    // 노트를 보고 돌아왔을 때 열려 있던 프로젝트를 잃는다.
     ...(r.view === 'quiz' ? { quizMode: r.quizMode } : {}),
+    ...(r.view === 'resume' ? { activeProjectId: r.projectId } : {}),
     focusRequestId: null,
   })
-  // resume 뷰가 아닐 때 activeProjectId를 지우지 않는다 — 노트를 보고 돌아왔을 때
-  // 열려 있던 프로젝트로 복귀해야 한다(Task 7). URL에 안 실릴 뿐이다.
-  if (r.view === 'resume') useResumeStore.setState({ activeProjectId: r.projectId })
 }
 ```
 
-`activeProjectId` 는 Task 7에서 store에 추가한다. **이 태스크에서는 `resumeStore` 에
-`activeProjectId: string | null` 과 `setActiveProject(id)` 만 먼저 넣어라**(빈 슬라이스):
+기존 `useGraphStore.subscribe(...)` 는 **그대로 둔다.** 구독을 추가하지 않는다.
 
-```ts
-  activeProjectId: null,
-  setActiveProject: (id: string | null) => set({ activeProjectId: id }),
-```
+- [ ] **Step 5b: 두 상태가 함께 움직이는 경로에 테스트를 붙인다**
 
-`useUrlSync` 의 `useGraphStore.subscribe(...)` 는 graphStore만 구독한다. resumeStore의
-`activeProjectId` 변경도 URL에 반영되어야 하므로, 같은 콜백을 resumeStore에도 구독시킨다:
+`src/hooks/useUrlSync.test.ts` 또는 `useUrlSync.integration.test.ts` — 이미 `popstate` 를
+구동하는 쪽을 읽고 그 하네스에 맞춰 넣는다. 이 두 건은 회귀 방지다:
 
-```ts
-    const pushIfChanged = () => {
-      const next = formatHash(routeFromState(useGraphStore.getState()))
-      if (next !== window.location.hash) window.history.pushState(null, '', next)
-    }
-    const unsubscribe = useGraphStore.subscribe(pushIfChanged)
-    const unsubscribeResume = useResumeStore.subscribe(pushIfChanged)
-```
+1. `#/resume/<idA>` → `#/resume/<idB>` 를 `popstate` 로 이동할 때 히스토리 항목이
+   **늘지 않는다.** `window.history.length` 를 전후로 단정하고 최종 `location.hash` 도 본다.
+2. `#/resume/<id>` → `#/list/<nodeId>` → 뒤로가기 → `#/resume/<id>` 로 돌아오고
+   `activeProjectId` 가 유지된다.
 
-정리(cleanup)에서 둘 다 해제한다.
+1번은 `activeProjectId` 가 `resumeStore` 에 있고 `useUrlSync` 가 두 store를 구독하던
+구조에서 실패한다(가짜 `pushState` 2건, `history.length` 1→3). 그 구조로 돌아가려는
+어떤 변경도 이 테스트가 잡는다.
 
 - [ ] **Step 6: 탭 버튼**
 
@@ -1156,7 +1173,7 @@ git commit -m "feat(resume): 도메인 그룹 어댑터와 노드별 SRS 키 수
 - Test: `src/components/ConceptMapModal.test.tsx`
 
 **Interfaces:**
-- Consumes: `layoutRadial`·`Placed` (radial), `toDomainGroups`, `useSrsKeysByNode`, `useGraphStore.openNote`, `useResumeStore` 의 `activeProjectId`·`mapOpen`
+- Consumes: `layoutRadial`·`Placed` (radial), `toDomainGroups`, `useSrsKeysByNode`, `useGraphStore` 의 `openNote`·`activeProjectId`, `useResumeStore.mapOpen`
 - Produces: `ConceptMapModal({ project, nodes })`; store에 `mapOpen: boolean`·`setMapOpen`
 
 **직전 세션에서 고친 버그와 같은 부류다:** `openNote(nodeId)` 는 `viewMode` 를 `'list'` 로
@@ -1261,7 +1278,8 @@ describe('ConceptMapModal', () => {
 
 - [ ] **Step 3: store 슬라이스 추가**
 
-`src/store/resumeStore.ts` — Task 1에서 넣은 `activeProjectId` 옆에:
+`src/store/resumeStore.ts` — `error` 옆에 (`activeProjectId` 는 graphStore에 있다. 라우트
+상태와 UI 위치는 다른 것이다 — `mapOpen` 은 URL에 실리지 않으므로 여기가 맞다):
 
 ```ts
   // 세션 전용 UI 위치. 영속화하지 않는다 — 새로고침하면 금고가 잠기므로 복원할 지도가
@@ -1271,7 +1289,8 @@ describe('ConceptMapModal', () => {
   setMapOpen: (open: boolean) => void
 ```
 
-`lock()` 과 `destroyVault()` 에서 `mapOpen: false`, `activeProjectId: null` 로 함께 초기화한다 —
+`lock()` 과 `destroyVault()` 에서 `mapOpen: false` 로 초기화한다. `activeProjectId` 는
+`graphStore` 에 있으므로 `useGraphStore.getState().setActiveProject(null)` 로 함께 지운다 —
 잠긴 뒤 지도가 열려 있으면 안 된다.
 
 - [ ] **Step 4: 구현**
