@@ -657,12 +657,28 @@ describe('VaultGate — status none', () => {
   })
 
   // 짧은 패스프레이즈는 PBKDF2 200k로도 무력하다. 막지 않으면 사용자는 '1234'를 쓴다.
+  //
+  // **렌더된 메시지를 단정해야 한다.** `status`만 보면 어떤 구현에서도 통과한다 —
+  // createVault는 deriveKey를 await하기 전에 상태를 건드리지 않으므로, 완벽히 유효한
+  // 패스프레이즈로 클릭한 직후에도 status는 동기적으로 'none'이다.
   it('requires a minimum length', () => {
     render(<VaultGate />)
     fireEvent.change(screen.getByLabelText('패스프레이즈'), { target: { value: 'abc' } })
     fireEvent.change(screen.getByLabelText('패스프레이즈 확인'), { target: { value: 'abc' } })
     fireEvent.click(screen.getByRole('button', { name: /금고 만들기/ }))
+    expect(screen.getByText(/최소 12자/)).toBeTruthy()
     expect(useResumeStore.getState().status).toBe('none')
+  })
+
+  // 키 파생이 200k 반복이라 눈에 보이게 느리다. 두 번 눌리면 두 번 돈다.
+  it('does not derive a second key on a double submit', async () => { /* 스파이로 호출 1회 확인, 버튼과 Enter 둘 다 */ })
+
+  // finally 블록을 지워도 스위트가 통과하면 안 된다 — 이 파일에서 가장 보안 민감한 줄이다.
+  it('clears both fields after submit, success or failure', async () => { /* 양쪽 경로 '' 확인 */ })
+
+  it('shows a message when createVault throws', async () => {
+    // crypto.subtle을 쓸 수 없는 환경(비-secure context)에서 deriveKey가 throw한다.
+    // 메시지가 없으면 입력만 비워지고 사용자는 성공과 실패를 구분할 수 없다.
   })
 
   it('creates the vault on a matching entry', async () => {
@@ -696,8 +712,11 @@ describe('VaultGate — status locked', () => {
     })
     useResumeStore.getState().lock()
     const { container } = render(<VaultGate />)
-    expect(container.textContent).not.toContain('비밀프로젝트명')
-    expect(container.textContent).not.toContain('비밀서술문')
+    // innerHTML이다. textContent는 title·aria-label·value·placeholder·data-* 를 보지
+    // 않는다 — 이 단정이 플랜의 하드 제약("잠긴 상태에서 평문이 DOM에 들어가지
+    // 않는다")을 지키는 유일한 장치이므로 속성까지 봐야 한다.
+    expect(container.innerHTML).not.toContain('비밀프로젝트명')
+    expect(container.innerHTML).not.toContain('비밀서술문')
   })
 })
 ```
