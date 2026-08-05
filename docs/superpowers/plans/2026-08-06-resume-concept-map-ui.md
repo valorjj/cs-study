@@ -1072,6 +1072,74 @@ git commit -m "feat(resume): 마스킹 확정 패널과 전송 전문 미리보�
 
 ---
 
+### Task 5b: 저장 성공을 store가 정직하게 보고하게 한다
+
+Task 4·5 리뷰가 같은 구멍을 두 번 잡았고, 원인은 내가 두 태스크에 처방한 판정 방식이다.
+
+**문제.** `upsertProject` 는 `set({ projects: next })` 를 내부 `persist()` 를 `await` 하기
+**전에** 실행하고, `writeStoredVault` 가 실패하면 `error` 만 세팅하고 `projects` 는 그대로
+둔다(`resumeStore.ts:69-87`, `:142-151`). 그래서 호출자가 "방금 쓴 값이 `store.projects` 에
+있는가"로 성공을 판정하면 **디스크 쓰기 실패를 절대 볼 수 없다.** 잡히는 것은 상태 가드
+거부(잠긴 금고)뿐이다. 용량 초과·직렬화 실패 시 사용자는 아무 안내도 못 받고, 새로고침하면
+결정이나 프로젝트가 사라져 있다. 리뷰어가 `await` 를 지워도 테스트가 전부 통과하는 것으로
+확인했다 — `await` 가 판정에 아무 일도 하지 않고 있었다.
+
+같은 판정이 `ProjectForm.tsx` 와 `MaskPanel.tsx` 두 곳에 복사돼 있고, Task 8이 세 번째를
+추가하게 된다. 그래서 호출 지점을 늘리기 전에 store에서 한 번에 고친다.
+
+**Files:**
+- Modify: `src/store/resumeStore.ts`
+- Modify: `src/components/ProjectForm.tsx`, `src/components/MaskPanel.tsx`
+- Test: `src/store/resumeStore.test.ts`, 두 컴포넌트 테스트
+
+**Interfaces:**
+- Produces: `upsertProject`·`removeProject` 가 저장 결과를 반환한다. 정확한 모양은 구현자가
+  정하되 **호출자가 "메모리에는 들어갔지만 디스크에는 못 썼다"를 구별할 수 있어야 한다.**
+  `Promise<void>` 로 남겨두면 안 된다.
+
+- [ ] **Step 1: 실패하는 store 테스트**
+
+`localStorage.setItem` 이 throw하도록 만들고(용량 초과 재현) `upsertProject` 를 부른다.
+반환값이 실패를 알려야 하고, `store.error` 도 세팅돼야 한다. 메모리 상태를 어떻게 할지는
+설계 판단이다 — 아래 Step 3에서 정한다.
+
+- [ ] **Step 2: 실패 확인** → 현재는 `undefined` 를 돌려주므로 실패한다.
+
+- [ ] **Step 3: 설계 판단 하나를 내리고 근거를 주석에 남긴다**
+
+디스크 쓰기가 실패했을 때 메모리의 `projects` 를 어떻게 할지 두 갈래다.
+
+| 선택 | 결과 |
+|---|---|
+| 롤백한다 | 화면이 진실(저장 안 됨)을 보여준다. 대신 사용자가 방금 타이핑한 것이 사라진다 |
+| 유지하고 실패를 반환한다 | 사용자의 입력이 화면에 남아 복사해 갈 수 있다. 대신 화면과 디스크가 다르다 |
+
+**후자를 택한다.** 이 데이터는 손으로 쓴 이력서다 — 사라지는 것이 어긋나 있는 것보다 나쁘고,
+어긋남은 반환값과 배너로 사용자에게 알릴 수 있다. 다만 그러면 "화면에 있는 것이 저장됐다"는
+가정이 깨지므로, **저장 실패 배너는 사용자가 지우거나 다음 저장이 성공할 때까지 남아야 한다.**
+이 판단과 그 대가를 `resumeStore.ts` 주석에 적는다.
+
+- [ ] **Step 4: 세 호출 지점을 새 반환값으로 옮긴다**
+
+`ProjectForm` 과 `MaskPanel` 의 `(id, updatedAt)`·결정-상태 확인을 지우고 반환값을 쓴다.
+두 곳의 주석에 적힌 "이 검사는 디스크 실패를 못 본다"는 한계 설명도 함께 지운다 — 더 이상
+사실이 아니게 되므로.
+
+- [ ] **Step 5: 각 테스트가 실패할 수 있음을 확인**
+
+반환값 확인을 지우고 세 테스트가 죽는지 본다. 출력을 보고서에 남긴다.
+
+- [ ] **Step 6: 전체 검증 + 커밋**
+
+`npx vitest run && npm run build && npm run lint`
+
+**함께 볼 것:** 재리뷰가 지적한 취약점 — 두 `persist` 호출이 직렬화되는 이유는
+`upsertProject` 의 모든 동기 작업이 유일한 `await` 앞에 있기 때문이다(JS run-to-first-await).
+`set()` 앞에 `await` 가 하나라도 들어가면 read-modify-write 창이 다시 열린다. 그 순서에
+의존한다는 사실을 주석에 적어, 나중에 비동기 검사를 추가하려는 사람이 알 수 있게 한다.
+
+---
+
 ### Task 6: 숙련도 증거 수집 + 도메인 그룹 어댑터
 
 `Match[]` 는 노드 id 목록이고 `layoutRadial` 은 `DomainGroup[]` 을 원한다. 그 사이를 잇는다. `mastery.tierOf` 는 `srsKeysByNode` 를 요구하고, 그건 노트 파일을 읽어야 나온다.
