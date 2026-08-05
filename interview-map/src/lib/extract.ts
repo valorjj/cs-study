@@ -12,8 +12,10 @@ export type ExtractOutcome =
 // UI가 잡아서 "전송을 중단했습니다"로 보여준다. 선언만 있고 아무도 만들 수 없는
 // 실패 사유를 union에 남겨두지 않는다.
 
-// payload를 만드는 명확한 입구. buildExtractPayload가 plaintext를 검사하므로,
-// 이 함수를 거치지 않은 호출도 안전하다.
+// payload를 만드는 명확한 입구. ExtractPayload는 extractPayload.ts 안에서만 알 수
+// 있는 unique symbol로 브랜드되어 있어, 구조가 같은 객체 리터럴을 직접 만들어
+// requestExtract에 넘기는 것이 타입 단계에서 막힌다 — buildExtractPayload(따라서
+// plaintext 검사)를 거치지 않고는 애초에 ExtractPayload 값을 만들 수 없다.
 export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPayload {
   return buildExtractPayload(project, nodes)
 }

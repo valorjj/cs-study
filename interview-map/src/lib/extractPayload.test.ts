@@ -94,4 +94,16 @@ describe('assertNoPlaintext', () => {
     const p = buildExtractPayload({ ...project, maskDict: {} }, nodes)
     expect(() => assertNoPlaintext(p, { '': '[X]' })).not.toThrow()
   })
+
+  it('names the stack chip field when a masked key collides with a chip', () => {
+    const p = buildExtractPayload(project, nodes)
+    const leaky = { ...p, stack: [...p.stack, 'SettleHub'] }
+    expect(() => assertNoPlaintext(leaky, project.maskDict)).toThrow(/기술스택 칩/)
+  })
+
+  it('names the narrative field when a masked key survives there', () => {
+    const p = buildExtractPayload(project, nodes)
+    const leaky = { ...p, maskedNarrative: `${p.maskedNarrative} SettleHub` }
+    expect(() => assertNoPlaintext(leaky, project.maskDict)).toThrow(/서술문/)
+  })
 })

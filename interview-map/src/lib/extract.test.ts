@@ -31,7 +31,7 @@ describe('prepareExtract', () => {
     expect(() => prepareExtract(broken, nodes)).toThrow(/전송을 중단/)
   })
 
-  it('is the single path a caller can use — the payload is exactly what gets sent', () => {
+  it('exposes exactly the four documented fields as own enumerable keys (the brand symbol is not one)', () => {
     const p = prepareExtract(project, nodes)
     expect(Object.keys(p).sort()).toEqual(['catalog', 'lifecycle', 'maskedNarrative', 'stack'])
   })
