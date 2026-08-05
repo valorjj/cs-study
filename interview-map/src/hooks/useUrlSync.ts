@@ -4,6 +4,7 @@ import type { GraphData } from '../graph/types'
 import { ALL_TRACKS } from '../lib/tracks'
 import { parseHash, formatHash, type Route, type RouteVocab } from '../lib/route'
 import { useGraphStore } from '../store/graphStore'
+import { useResumeStore } from '../store/resumeStore'
 import { VIEW_KEY } from './useTheme'
 
 const data = graphData as GraphData
@@ -22,7 +23,10 @@ const VOCAB: RouteVocab = {
 // Which store fields ride in the URL, per view. Everything else (theme,
 // progress, quiz settings) is preference state and belongs in localStorage.
 function routeFromState(s: ReturnType<typeof useGraphStore.getState>): Route {
-  return { view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode }
+  return {
+    view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode,
+    projectId: useResumeStore.getState().activeProjectId,
+  }
 }
 
 // parseHash defaults quizMode to 'flash' for every non-quiz view (it's not part
@@ -37,6 +41,9 @@ function applyRoute(r: Route): void {
     ...(r.view === 'quiz' ? { quizMode: r.quizMode } : {}),
     focusRequestId: null,
   })
+  // resume 뷰가 아닐 때 activeProjectId를 지우지 않는다 — 노트를 보고 돌아왔을 때
+  // 열려 있던 프로젝트로 복귀해야 한다(Task 7). URL에 안 실릴 뿐이다.
+  if (r.view === 'resume') useResumeStore.setState({ activeProjectId: r.projectId })
 }
 
 // A bare visit ('' or '#') has no route to restore, so fall back to the tab the
@@ -84,15 +91,18 @@ export function useUrlSync(): void {
     window.addEventListener('popstate', applyFromUrl)
     window.addEventListener('hashchange', applyFromUrl)
 
-    const unsubscribe = useGraphStore.subscribe(() => {
+    const pushIfChanged = () => {
       const next = formatHash(routeFromState(useGraphStore.getState()))
       if (next !== window.location.hash) window.history.pushState(null, '', next)
-    })
+    }
+    const unsubscribe = useGraphStore.subscribe(pushIfChanged)
+    const unsubscribeResume = useResumeStore.subscribe(pushIfChanged)
 
     return () => {
       window.removeEventListener('popstate', applyFromUrl)
       window.removeEventListener('hashchange', applyFromUrl)
       unsubscribe()
+      unsubscribeResume()
     }
   }, [])
 }

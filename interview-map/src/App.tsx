@@ -12,6 +12,7 @@ import { QuizTab } from './components/QuizTab'
 import { HomeView } from './components/HomeView'
 import { PathView } from './components/PathView'
 import { GuideView } from './components/GuideView'
+import { ResumeView } from './components/ResumeView'
 import { SearchBar } from './components/SearchBar'
 import { ThemeSwitcher } from './components/ThemeSwitcher'
 import { AuthButton } from './components/AuthButton'
@@ -53,6 +54,7 @@ export default function App() {
       {viewMode === 'quiz' && <QuizTab nodes={data.nodes} />}
       {viewMode === 'path' && <PathView nodes={data.nodes} nodesById={nodesById} />}
       {viewMode === 'guide' && <GuideView />}
+      {viewMode === 'resume' && <ResumeView />}
       {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
       <AuthButton />
       <ThemeSwitcher />

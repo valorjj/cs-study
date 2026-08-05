@@ -3,7 +3,7 @@ import { DEFAULT_THEME } from '../styles/themes'
 import { review, type SrsState } from '../lib/srs'
 import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
-export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide'
+export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide' | 'resume'
 export type QuizMode = 'flash' | 'drill' | 'review' | 'graph'
 
 // Study-path progress key. Loaded synchronously at store creation so the first

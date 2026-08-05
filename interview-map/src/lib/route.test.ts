@@ -7,8 +7,8 @@ const vocab: RouteVocab = {
 }
 
 describe('parseHash', () => {
-  it('maps the six top-level views', () => {
-    for (const v of ['home', 'graph', 'list', 'quiz', 'path', 'guide'] as const) {
+  it('maps the top-level views', () => {
+    for (const v of ['home', 'graph', 'list', 'quiz', 'path', 'guide', 'resume'] as const) {
       expect(parseHash(`#/${v}`, vocab).view).toBe(v)
     }
   })
@@ -95,5 +95,36 @@ describe('formatHash', () => {
       const twice = formatHash(parseHash(once, vocab))
       expect(twice).toBe(once)
     }
+  })
+})
+
+describe('resume route', () => {
+  it('parses #/resume', () => {
+    expect(parseHash('#/resume', vocab)).toEqual({
+      view: 'resume', nodeId: null, trackId: null, projectId: null, quizMode: 'flash',
+    })
+  })
+
+  // 프로젝트 id는 금고 안에서 생성된 uuid다. 라우트 어휘(VOCAB)로 검증할 수 없다 —
+  // 잠긴 상태에서는 id 목록 자체를 모르기 때문이다. 그래서 형식만 본다.
+  it('parses a project segment when it looks like an id', () => {
+    expect(parseHash('#/resume/7f3c2a91-0000-4000-8000-000000000001', vocab).projectId)
+      .toBe('7f3c2a91-0000-4000-8000-000000000001')
+  })
+
+  it('drops a project segment that is not id-shaped', () => {
+    expect(parseHash('#/resume/../etc/passwd', vocab).projectId).toBeNull()
+    expect(parseHash('#/resume/<script>', vocab).projectId).toBeNull()
+  })
+
+  it('round-trips', () => {
+    for (const h of ['#/resume', '#/resume/7f3c2a91-0000-4000-8000-000000000001']) {
+      expect(formatHash(parseHash(h, vocab))).toBe(h)
+    }
+  })
+
+  it('does not put a project id on other views', () => {
+    expect(formatHash({ view: 'home', nodeId: null, trackId: null, projectId: 'x', quizMode: 'flash' }))
+      .toBe('#/home')
   })
 })

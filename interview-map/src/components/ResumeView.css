@@ -1,0 +1,4 @@
+.rv { position: fixed; inset: 0; display: flex; justify-content: center; background: var(--bg);
+  padding-top: 60px; box-sizing: border-box; font-family: system-ui, sans-serif; overflow-y: auto; }
+.rv-list, .rv-gate { width: 100%; max-width: 640px; padding: 22px 26px 80px; box-sizing: border-box;
+  color: var(--text); }

@@ -12,6 +12,7 @@ export interface Route {
   view: ViewMode
   nodeId: string | null
   trackId: string | null
+  projectId: string | null
   quizMode: QuizMode
 }
 
@@ -22,10 +23,17 @@ export interface RouteVocab {
   trackIds: Set<string>
 }
 
-export const DEFAULT_ROUTE: Route = { view: 'home', nodeId: null, trackId: null, quizMode: 'flash' }
+export const DEFAULT_ROUTE: Route = {
+  view: 'home', nodeId: null, trackId: null, projectId: null, quizMode: 'flash',
+}
 
-const VIEWS: readonly string[] = ['home', 'graph', 'list', 'quiz', 'path', 'guide']
+const VIEWS: readonly string[] = ['home', 'graph', 'list', 'quiz', 'path', 'guide', 'resume']
 const QUIZ_MODES: readonly string[] = ['flash', 'drill', 'review', 'graph']
+
+// 프로젝트 id는 crypto.randomUUID() 결과다. VOCAB으로 검증할 수 없다(잠긴 금고의
+// id 목록을 모른다) → 형식만 확인한다. 형식 검사는 보안 장치가 아니라, 주소창에
+// 손으로 넣은 쓰레기가 store에 들어가지 않게 하는 위생 장치다.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Total function: never throws, always returns a valid Route. Anything the
 // grammar doesn't recognise degrades to the nearest valid state (unknown view
@@ -42,6 +50,8 @@ export function parseHash(hash: string, vocab: RouteVocab): Route {
     route.trackId = arg && vocab.trackIds.has(arg) ? arg : null
   } else if (view === 'quiz') {
     route.quizMode = arg && QUIZ_MODES.includes(arg) ? (arg as QuizMode) : 'flash'
+  } else if (view === 'resume') {
+    route.projectId = arg && UUID_RE.test(arg) ? arg : null
   }
   return route
 }
@@ -58,6 +68,8 @@ export function formatHash(route: Route): string {
       return route.trackId ? `#/path/${route.trackId}` : '#/path'
     case 'quiz':
       return `#/quiz/${route.quizMode}`
+    case 'resume':
+      return route.projectId ? `#/resume/${route.projectId}` : '#/resume'
     default:
       return `#/${route.view}`
   }
