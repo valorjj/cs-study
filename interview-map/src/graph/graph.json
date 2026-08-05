@@ -1136,6 +1136,7 @@
       "icon": "archive",
       "summary": "캐시 계층, 무효화, TTL",
       "keywords": [
+        "캐시",
         "Look-Aside",
         "무효화"
       ],
