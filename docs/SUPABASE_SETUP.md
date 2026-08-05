@@ -56,3 +56,12 @@ alter table public.user_state
 ```
 
 기존 RLS(own-row) 정책이 컬럼과 무관하게 적용되므로 정책 변경은 필요 없습니다.
+
+### Schema files
+
+다음 SQL 파일들을 Supabase SQL Editor에서 실행하여 테이블/RPC를 생성하세요:
+
+- `supabase/schema/question_cache.sql` — 계단 질문 캐시(전체 사용자 공유, 사용자 무관)
+- `supabase/schema/grade_events.sql` — AI 호출 이벤트 로그(실시간 사용량 미터)
+- `supabase/schema/grade_usage.sql` — AI 채점 일일 사용량(상한 관리, 슬롯 예약/환불)
+- `supabase/schema/resume_vault.sql` — 이력 금고(암호문 저장, RLS + 낙관적 동시성 RPC)
