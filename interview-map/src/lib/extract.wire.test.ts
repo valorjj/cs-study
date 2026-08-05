@@ -64,6 +64,7 @@ describe('requestExtract wire body — no confirmed mask key ever reaches the ne
     invoke.mockResolvedValue({ data: { nodeIds: [], reasons: {} }, error: null })
     const preview = prepareExtract(project, nodes)
     await requestExtract(project, nodes)
+    expect(invoke).toHaveBeenCalledTimes(1)
     const [, opts] = invoke.mock.calls[0] as [string, { body: unknown }]
     expect(opts.body).toEqual(preview)
   })

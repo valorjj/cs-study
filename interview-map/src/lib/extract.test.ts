@@ -42,4 +42,11 @@ describe('requestExtract without Supabase configured (test env)', () => {
   it('reports unauthenticated instead of throwing', async () => {
     await expect(requestExtract(project, nodes)).resolves.toEqual({ ok: false, reason: 'unauthenticated' })
   })
+
+  // 마스킹 실패가 "로그인 필요"로 둔갑하면 사용자는 로그인만 반복하고 진짜 원인을
+  // 못 본다. 평문 검사가 supabase 유무 확인보다 앞에 있어야 한다.
+  it('surfaces a broken mask even when Supabase is not configured', async () => {
+    const broken: Project = { ...project, maskDict: { 'SettleHub': 'SettleHub' } }
+    await expect(requestExtract(broken, nodes)).rejects.toThrow(/전송을 중단/)
+  })
 })

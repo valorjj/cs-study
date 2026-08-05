@@ -17,8 +17,12 @@ export interface CatalogEntry {
 
 // 필드는 readonly다 — 검사는 이 객체가 만들어지는 순간 한 번 도니까. 단 얕은
 // readonly라서 `catalog[0].keywords.push(...)` 같은 중첩 변형은 타입이 막지 못한다.
-// 그게 유출로 이어지지 않는 이유는 readonly가 아니라 구조다: 전송되는 payload는
-// requestExtract가 그 자리에서 새로 만들며, 미리보기용 객체를 재사용하지 않는다.
+// 게다가 아래 빌더는 stack·lifecycle·keywords 를 복사하지 않고 참조로 담으므로,
+// 미리보기 payload와 전송 payload는 그 배열들을 실제로 공유한다.
+//
+// 그래도 마스킹된 원문이 새지 않는 이유는 객체가 새것이라서가 아니라, 전송 직전에
+// assertNoPlaintext가 다시 돌기 때문이다 — requestExtract가 그 자리에서 빌더를
+// 호출하고, 빌더는 검사를 품고 있다. 권위는 재스캔이지 readonly가 아니다.
 //
 // 한때 여기에 unique symbol 브랜드가 있었다. "검사를 거치지 않은 객체는 전송 함수에
 // 넘길 수 없다"를 타입으로 강제하려던 것인데, 스프레드가 심볼 키까지 복사하므로

@@ -9,12 +9,17 @@ export type ExtractOutcome =
   | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'extract_error' | 'network' }
 
 // 평문 잔존은 Outcome이 아니라 예외로 나온다 — buildExtractPayload가 throw하고,
-// UI가 잡아서 "전송을 중단했습니다"로 보여준다. 선언만 있고 아무도 만들 수 없는
-// 실패 사유를 union에 남겨두지 않는다.
+// UI가 잡아서 "전송을 중단했습니다"로 보여준다. union에 넣지 않는 이유는 "아무도
+// 만들 수 없어서"가 아니다(검사가 requestExtract 안으로 들어온 뒤로는 만들 수 있다).
+// 나머지 사유는 전부 정상 동작 중 일어나는 일인데 평문 잔존은 불변식 위반이라,
+// 호출자가 다른 실패와 같은 모양으로 무심히 흘려보내면 안 되기 때문이다.
+//
+// **그래서 requestExtract는 Promise를 reject할 수 있다. 호출자에게 try/catch가
+// 필요하다** — Promise<ExtractOutcome> 이라는 서명만으로는 드러나지 않는 사실이다.
 
 // 미리보기 전용. 전송되는 값을 UI가 그대로 보여줄 수 있도록 같은 빌더를 돈다.
-// buildExtractPayload는 순수 함수이므로 같은 입력이면 requestExtract가 만드는 것과
-// 같은 값이 나온다 — 미리보기와 전송이 구조적으로 갈라지지 않는다.
+// 같은 입력이면 requestExtract가 만드는 것과 같은 값이 나온다. (빌더는 순수하지
+// 않다 — throw하고, 인자의 배열을 참조로 담는다. extractPayload.ts 주석 참조.)
 export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPayload {
   return buildExtractPayload(project, nodes)
 }
@@ -24,9 +29,11 @@ export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPay
 // 않은 내용을 전송할 수 있고, 실제로 이전 구조가 그랬다. 전송 직전에 평문 검사가
 // 돌았다는 것을 이 함수 안에서 보장한다 — buildExtractPayload가 검사를 품고 있다.
 export async function requestExtract(project: Project, nodes: GraphNode[]): Promise<ExtractOutcome> {
-  if (!supabase) return { ok: false, reason: 'unauthenticated' }
-  // 검사 실패는 throw로 나간다 (위 주석 참조). try 밖에 두어야 network로 오분류되지 않는다.
+  // 검사가 supabase 유무보다 먼저다. 뒤에 두면 마스킹이 깨진 상태가 "로그인 필요"로
+  // 보고되어, 사용자는 로그인만 반복하고 진짜 원인을 영원히 못 본다.
+  // try 밖에 두는 이유: 안에 두면 catch가 삼켜서 network로 오분류된다.
   const payload = buildExtractPayload(project, nodes)
+  if (!supabase) return { ok: false, reason: 'unauthenticated' }
   try {
     const { data, error } = await supabase.functions.invoke('extract', { body: payload })
     if (error) {
