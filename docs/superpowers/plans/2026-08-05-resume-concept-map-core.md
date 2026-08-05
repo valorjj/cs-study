@@ -1486,8 +1486,13 @@ export interface ExtractPayload {
 }
 
 // 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
+//
+// 평문 잔존 검사는 이 함수 안에서 돈다. 규약(주석)으로만 두면 호출자가 건너뛸 수
+// 있다 — 실제로 이 파일의 원래 주석이 다음 UI 작업에게 이 함수를 직접 쓰라고
+// 권하고 있어서, 권장 경로가 곧 우회 경로였다. 안전 속성은 문장이 아니라 코드가
+// 강제해야 한다. 그래서 export를 막는 대신 검사를 안으로 옮겼다(모든 경로가 검사됨).
 export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
-  return {
+  const payload: ExtractPayload = {
     maskedNarrative: applyMask(project.narrative, project.maskDict),
     stack: project.stack,
     lifecycle: project.lifecycle,
@@ -1495,6 +1500,8 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
       .filter((n) => n.level !== 0)
       .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
   }
+  assertNoPlaintext(payload, project.maskDict)
+  return payload
 }
 
 // 방어의 마지막 층. 조용한 유출을 시끄러운 예외로 바꾼다.
@@ -2610,16 +2617,17 @@ import { buildExtractPayload, assertNoPlaintext, type ExtractPayload } from './e
 import type { Project } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
 
+// 평문 잔존은 Outcome이 아니라 예외로 나온다 — buildExtractPayload가 throw하고,
+// UI가 잡아서 "전송을 중단했습니다"로 보여준다. 선언만 있고 아무도 만들 수 없는
+// 실패 사유를 union에 남겨두지 않는다.
 export type ExtractOutcome =
   | { ok: true; nodeIds: string[]; reasons: Record<string, string> }
-  | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'extract_error' | 'network' | 'unsafe' }
+  | { ok: false; reason: 'unauthenticated' | 'rate_limited' | 'extract_error' | 'network' }
 
-// payload를 만드는 유일한 입구. 평문이 남아 있으면 여기서 throw하므로,
-// 미리보기 UI도 전송 코드도 이 함수의 결과만 다루면 된다.
+// payload를 만드는 유일한 입구. 검사는 buildExtractPayload 안에서 이미 돌기 때문에
+// 여기서 다시 부르지 않는다 — 강제 지점은 하나여야 한다.
 export function prepareExtract(project: Project, nodes: GraphNode[]): ExtractPayload {
-  const payload = buildExtractPayload(project, nodes)
-  assertNoPlaintext(payload, project.maskDict)
-  return payload
+  return buildExtractPayload(project, nodes)
 }
 
 export async function requestExtract(payload: ExtractPayload): Promise<ExtractOutcome> {
