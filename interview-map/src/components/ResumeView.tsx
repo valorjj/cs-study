@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useResumeStore } from '../store/resumeStore'
+import { useGraphStore } from '../store/graphStore'
 import { VaultGate } from './VaultGate'
 import { ProjectForm } from './ProjectForm'
 import { MaskPanel } from './MaskPanel'
+import { ConceptMapModal } from './ConceptMapModal'
 import type { Project } from '../lib/resumeTypes'
 import graphData from '../graph/graph.json'
 import type { GraphData } from '../graph/types'
@@ -43,6 +45,15 @@ export function ResumeView() {
   const clearError = useResumeStore((s) => s.clearError)
   const hasUnsavedFailure = useResumeStore((s) => s.hasUnsavedFailure)
   const pendingWrites = useResumeStore((s) => s.pendingWrites)
+  const setMapOpen = useResumeStore((s) => s.setMapOpen)
+
+  // activeProjectId는 graphStore에 있다(라우트 상태, URL에 실린다). id로 매 렌더마다
+  // projects에서 다시 찾는다 — maskingProject와 같은 이유다: 지도가 열려 있는 동안
+  // 다른 경로로 프로젝트가 갱신돼도 최신 매칭을 보여줘야 하고, 프로젝트가 삭제되면
+  // 지도가 자동으로 닫혀야 한다(lookup이 null이 되므로).
+  const activeProjectId = useGraphStore((s) => s.activeProjectId)
+  const setActiveProject = useGraphStore((s) => s.setActiveProject)
+  const mapProject = activeProjectId ? (projects.find((p) => p.id === activeProjectId) ?? null) : null
 
   // 특정 항목의 삭제가 디스크에 반영되지 않았을 때, 어떤 항목이었는지와 reason을 이용해
   // store.error(일반 문구)보다 구체적인 안내를 보여준다 — result를 실제로 읽어서 쓴다
@@ -129,6 +140,15 @@ export function ResumeView() {
     <div className="rv">
       {status === 'unlocked' ? (
         <div className="rv-list">
+          {/* mapProject가 있으면(=activeProjectId가 살아있는 프로젝트를 가리키면) 항상
+              마운트해 둔다 — 열림 여부는 컴포넌트 내부에서 store.mapOpen을 직접 구독해
+              결정한다. 그래서 mapOpen이 false여도 여기서 조건부로 걷어내지 않는다: 걷어내면
+              다음에 mapOpen이 true가 될 때 새로 마운트되어 store 구독이 한 틱 늦어질 수
+              있고, 무엇보다 "열림 위치는 store가 유일한 진실"이라는 이 태스크의 요점이
+              부모 쪽 조건문으로 다시 새어나간다. key={mapProject.id}는 MaskPanel과 같은
+              이유 — 다른 프로젝트로 바뀌면 이전 프로젝트의 내부 상태를 물려받지 않는다. */}
+          {mapProject && <ConceptMapModal key={mapProject.id} project={mapProject} nodes={data.nodes} />}
+
           <div className="rv-toolbar">
             <button type="button" onClick={handleLock}>잠그기</button>
             <button type="button" onClick={handleExport}>평문 JSON 내보내기</button>
@@ -179,7 +199,12 @@ export function ResumeView() {
                         <button type="button" onClick={() => openEdit(p)}>편집</button>
                         <button type="button" onClick={() => { void handleRemove(p) }}>삭제</button>
                         <button type="button" onClick={() => setMaskingId(p.id)}>마스킹</button>
-                        <button type="button">개념 지도</button>
+                        <button
+                          type="button"
+                          onClick={() => { setActiveProject(p.id); setMapOpen(true) }}
+                        >
+                          개념 지도
+                        </button>
                       </div>
                     </li>
                   ))}

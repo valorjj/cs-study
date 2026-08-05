@@ -7,6 +7,7 @@ import { create } from 'zustand'
 import {
   deriveKey, sealJson, openJson, randomSalt, toB64, fromB64, type SealedBlob,
 } from '../lib/vault'
+import { useGraphStore } from './graphStore'
 import type { Project, VaultPayload } from '../lib/resumeTypes'
 
 export type VaultStatus = 'none' | 'locked' | 'unlocked'
@@ -78,6 +79,12 @@ interface ResumeState {
   // 동기로 일어난 *뒤에* 이 큐 작업이 뒤늦게 실행되므로, 확인 창은 잠금 시점엔 아직 실패를
   // 몰랐다. 그 경합을 실제로 막는 건 아래 pendingWrites다 — 이 플래그는 사후 기록용이다(다음
   // unlock 전까지 "방금 뭔가 안 됐다"는 사실을 남겨두는 것 이상의 즉각적 방어 효과는 없다).
+  // 세션 전용 UI 위치. 영속화하지 않는다 — 새로고침하면 금고가 잠기므로 복원할 지도가
+  // 없다. store에 두는 이유는 "이 개념 보기"가 viewMode를 바꿔 ResumeView를 unmount
+  // 시키기 때문이다(퀴즈 탭에서 같은 이유로 카드 위치를 store로 옮겼다). activeProjectId는
+  // graphStore에 있다 — 그건 라우트 상태(URL에 실린다)고, mapOpen은 아니다.
+  mapOpen: boolean
+  setMapOpen: (open: boolean) => void
   hasUnsavedFailure: boolean
   // 지금 큐에서 실제로 진행 중인 쓰기(sealJson~writeStoredVault) 개수. hasUnsavedFailure는
   // "이미 실패한 적이 있다"만 알고, "지금 실패할 수도 있는 쓰기가 진행 중이다"는 모른다 —
@@ -192,6 +199,7 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     key: null,
     projects: [],
     error: null,
+    mapOpen: false,
     hasUnsavedFailure: false,
     pendingWrites: 0,
 
@@ -256,12 +264,19 @@ export const useResumeStore = create<ResumeState>((set, get) => {
       }
     },
 
+    setMapOpen: (open) => set({ mapOpen: open }),
+
     // error는 절대 여기서 지우지 않는다(review round 1 finding 4) — 잠그는 행위 자체가
     // 저장 실패를 해결한 게 아니다. hasUnsavedFailure는 여기서 false로 되돌린다 — 잠그면
     // projects가 []로 비워져 그 어긋남 자체가 사라지기 때문이다(이 사라짐에 대한 동의를
     // 받는 건 이 함수의 책임이 아니라 호출자의 책임이다 — ResumeView가 hasUnsavedFailure를
-    // 보고 lock()을 부르기 전에 확인을 받는다).
-    lock: () => set({ status: 'locked', key: null, projects: [], hasUnsavedFailure: false }),
+    // 보고 lock()을 부르기 전에 확인을 받는다). mapOpen도 여기서 닫는다 — 잠긴 뒤에는
+    // 그릴 데이터(projects)가 없으므로 지도가 열려 있으면 안 된다. activeProjectId는
+    // graphStore에 있으므로 함께 지운다.
+    lock: () => {
+      useGraphStore.getState().setActiveProject(null)
+      set({ status: 'locked', key: null, projects: [], hasUnsavedFailure: false, mapOpen: false })
+    },
 
     upsertProject: async (p) => {
       if (get().status !== 'unlocked') {
@@ -303,9 +318,10 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     // 의도적으로 요청했을 때만 호출한다.
     destroyVault: () => {
       localStorage.removeItem(RESUME_KEY)
+      useGraphStore.getState().setActiveProject(null)
       set({
         status: 'none', salt: null, sealed: null, key: null, projects: [], error: null,
-        hasUnsavedFailure: false,
+        hasUnsavedFailure: false, mapOpen: false,
       })
     },
 
