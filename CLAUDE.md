@@ -7,6 +7,11 @@
 - CS 개념 노트: `notes/`
 - 지식 그래프 앱: `interview-map/` (semantic-zoom으로 개념 간 연결을 탐색하는 웹앱)
 
+> **`interview-map/` 타입 검증은 `npm run build` 로만 한다.**
+> `npx tsc --noEmit` 은 파일 0개를 검사하고 항상 성공한다 (루트 `tsconfig.json` 이
+> `{"files": [], "references": [...]}`). `npx vite build` 도 게이트가 아니다
+> (esbuild가 타입을 검사 없이 지운다). `npm run build` = `tsc -b && vite build`.
+
 > ⚠️ 이 repo는 **공개**입니다. 회사 기밀·개인 이력·프로젝트 상세는 절대 커밋하지 마세요.
 > (그런 내용은 별도 private repo에서 관리)
 
