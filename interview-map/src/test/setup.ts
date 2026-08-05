@@ -1,5 +1,10 @@
 import '@testing-library/jest-dom'
 
+// Unset Supabase credentials for tests. Tests that need to verify
+// "when supabase is null" behavior rely on these being undefined.
+delete import.meta.env.VITE_SUPABASE_URL
+delete import.meta.env.VITE_SUPABASE_ANON_KEY
+
 // Node 22+'s built-in experimental global `localStorage` is a non-functional
 // stub without --localstorage-file (throws "clear is not a function") and it
 // shadows jsdom's own implementation. Replace it with a minimal in-memory
