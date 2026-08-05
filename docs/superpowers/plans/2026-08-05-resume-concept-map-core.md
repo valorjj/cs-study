@@ -2420,6 +2420,13 @@ const json = (body: unknown, status = 200) =>
 const CAP = Number(Deno.env.get('DAILY_GRADE_CAP') ?? '30')
 const MAX_NARRATIVE = 8000   // 프롬프트 폭주 방지
 const MAX_CATALOG = 300
+// 카탈로그 행 수만 묶어도 부족하다 — 행 안의 keywords 개수가 무제한이면 유효해
+// 보이는 요청으로 프롬프트가 폭주한다. 인젝션 방어가 아니라 크기·비용 방어다
+// (브레이크아웃은 _shared의 중화 + 필드당 80자 절단이 개수와 무관하게 막는다).
+// 두 상한은 곱해진다: 300행 × 20키워드 × 80자/필드 ≈ 528KB가 최악이다.
+const MAX_KEYWORDS_PER_ROW = 20
+const MAX_LIST_ITEMS = 40      // stack·lifecycle 항목 수 상한
+const MAX_LIST_ITEM_LEN = 60   // 항목 하나의 길이 상한 (중화는 절단하지 않는다)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
@@ -2433,25 +2440,43 @@ Deno.serve(async (req) => {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return json({ error: 'unauthenticated' }, 401)
 
-  let body: {
-    maskedNarrative?: unknown; stack?: unknown; lifecycle?: unknown; catalog?: unknown
-  }
-  try { body = await req.json() } catch { return json({ error: 'bad body' }, 400) }
+  let body: Record<string, unknown>
+  try {
+    const parsed = await req.json()
+    // JSON.parse("null")·"[]"·'"x"'·"123"은 모두 파싱에 성공한다. catch만으로는
+    // 부족하고, 확인 없이 속성에 접근하면 400이 아니라 처리되지 않은 500이 난다.
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return json({ error: 'bad body' }, 400)
+    }
+    body = parsed as Record<string, unknown>
+  } catch { return json({ error: 'bad body' }, 400) }
 
   const narrative = typeof body.maskedNarrative === 'string' ? body.maskedNarrative : ''
   if (!narrative || narrative.length > MAX_NARRATIVE) return json({ error: 'bad body' }, 400)
 
+  // 타입 필터를 먼저 둔다 — 비문자열이 .slice에 닿지 않게. 개수와 길이를 함께 묶는다.
   const asStrings = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === 'string')
+          .slice(0, MAX_LIST_ITEMS)
+          .map((s) => s.slice(0, MAX_LIST_ITEM_LEN))
+      : []
   const stack = asStrings(body.stack)
   const lifecycle = asStrings(body.lifecycle)
 
   const rawCatalog = Array.isArray(body.catalog) ? body.catalog : []
   if (rawCatalog.length === 0 || rawCatalog.length > MAX_CATALOG) return json({ error: 'bad body' }, 400)
   const catalog = rawCatalog
+    // catalog:[null] 이나 catalog:[[]] 도 유효한 JSON이고 길이 검사를 통과한다.
+    // 필드를 읽기 전에 객체가 아닌 항목을 걷어내야 500이 나지 않는다.
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === 'object' && !Array.isArray(c))
     .map((c) => c as { id?: unknown; label?: unknown; keywords?: unknown })
     .filter((c) => typeof c.id === 'string' && typeof c.label === 'string')
-    .map((c) => ({ id: c.id as string, label: c.label as string, keywords: asStrings(c.keywords) }))
+    .map((c) => ({
+      id: c.id as string,
+      label: c.label as string,
+      keywords: asStrings(c.keywords).slice(0, MAX_KEYWORDS_PER_ROW),
+    }))
   if (catalog.length === 0) return json({ error: 'bad body' }, 400)
 
   // 프로젝트 서술문은 사용자별 비밀이다. question_cache는 전체 공유 캐시이므로
