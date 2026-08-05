@@ -30,8 +30,16 @@ export function readStoredVault(): StoredVault | null {
   }
 }
 
-function writeStoredVault(v: StoredVault): void {
-  try { localStorage.setItem(RESUME_KEY, JSON.stringify(v)) } catch { /* 용량 초과 등은 무시 */ }
+// 용량 초과 등으로 실제 디스크 쓰기가 실패하면 false를 돌려준다. 호출자(persist)가
+// 이를 무시하고 성공을 자처하면, 메모리는 새 값을 들고 있는데 디스크는 옛 바이트인
+// 채로 남는다 — Task 8에서 고친 것과 같은 부류의 결함이다.
+function writeStoredVault(v: StoredVault): boolean {
+  try {
+    localStorage.setItem(RESUME_KEY, JSON.stringify(v))
+    return true
+  } catch {
+    return false
+  }
 }
 
 interface ResumeState {
@@ -49,6 +57,7 @@ interface ResumeState {
   upsertProject: (p: Project) => Promise<void>
   removeProject: (id: string) => Promise<void>
   exportPlain: () => VaultPayload | null
+  destroyVault: () => void
 }
 
 export const useResumeStore = create<ResumeState>((set, get) => {
@@ -63,7 +72,13 @@ export const useResumeStore = create<ResumeState>((set, get) => {
         const { key, salt, projects } = get()
         if (!key || !salt) return
         const blob = await sealJson(key, { version: 1, projects } satisfies VaultPayload)
-        writeStoredVault({ salt, blob })
+        const wrote = writeStoredVault({ salt, blob })
+        if (!wrote) {
+          // 디스크에 실제로 쓰이지 않았다. sealed를 갱신하면 메모리가 "저장됨"을
+          // 자처하게 되므로, 실패를 그대로 알리고 in-memory 스냅샷은 옛 상태로 둔다.
+          set({ error: '저장 공간이 부족하거나 오류가 발생해 변경사항을 저장하지 못했습니다.' })
+          return
+        }
         set({ sealed: blob })
       })
       // 한 번의 실패가 이후 저장을 영구히 막지 않도록 체인을 되살린다.
@@ -86,6 +101,14 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     },
 
     createVault: async (passphrase) => {
+      // 이미 금고가 있으면(locked든 unlocked든) 거부한다. 새 salt로 덮어쓰면 기존
+      // 암호문의 복호화 경로(구 salt)가 사라져 모든 프로젝트가 영구히 읽을 수 없게
+      // 된다 — upsertProject/removeProject의 "덮어쓰기 방지"보다 훨씬 큰 피해라
+      // 되돌릴 방법이 없다. 명시적으로 지우려면 destroyVault를 먼저 호출해야 한다.
+      if (get().status !== 'none') {
+        set({ error: '이미 금고가 있습니다. 새로 만들려면 먼저 명시적으로 삭제해야 합니다.' })
+        return
+      }
       const salt = randomSalt()
       const key = await deriveKey(passphrase, salt)
       const saltB64 = toB64(salt)
@@ -136,6 +159,13 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     exportPlain: () => {
       const { status, projects } = get()
       return status === 'unlocked' ? { version: 1, projects } : null
+    },
+
+    // 명시적 파기. createVault가 절대 하지 않는 "기존 금고를 지운다"를 사용자가
+    // 의도적으로 요청했을 때만 호출한다.
+    destroyVault: () => {
+      localStorage.removeItem(RESUME_KEY)
+      set({ status: 'none', salt: null, sealed: null, key: null, projects: [], error: null })
     },
   }
 })

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useResumeStore, readStoredVault, RESUME_KEY } from './resumeStore'
 import { toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
@@ -128,6 +128,60 @@ describe('resumeStore', () => {
     await useResumeStore.getState().removeProject('p1')
     expect(useResumeStore.getState().projects).toEqual([])   // 잠금 상태라 목록 자체가 비어 있다
     expect(useResumeStore.getState().error).toMatch(/잠겨/)
+  })
+
+  it('createVault refuses while locked, leaving the stored blob untouched', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.getState().lock()
+    const before = localStorage.getItem(RESUME_KEY)
+    await useResumeStore.getState().createVault('new-pw')
+    expect(localStorage.getItem(RESUME_KEY)).toBe(before)
+    expect(useResumeStore.getState().status).toBe('locked')
+    expect(useResumeStore.getState().error).toMatch(/이미 금고/)
+  })
+
+  it('createVault refuses while unlocked, leaving the stored blob untouched', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const before = localStorage.getItem(RESUME_KEY)
+    await useResumeStore.getState().createVault('new-pw')
+    expect(localStorage.getItem(RESUME_KEY)).toBe(before)
+    expect(useResumeStore.getState().status).toBe('unlocked')
+    expect(useResumeStore.getState().projects.map((p) => p.name)).toEqual(['정산'])
+    expect(useResumeStore.getState().error).toMatch(/이미 금고/)
+  })
+
+  it('destroyVault then createVault succeeds', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.getState().destroyVault()
+    expect(useResumeStore.getState().status).toBe('none')
+    await useResumeStore.getState().createVault('pw2')
+    expect(useResumeStore.getState().status).toBe('unlocked')
+    expect(useResumeStore.getState().projects).toEqual([])
+  })
+
+  it('destroyVault clears localStorage', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.getState().destroyVault()
+    expect(localStorage.getItem(RESUME_KEY)).toBeNull()
+    expect(useResumeStore.getState().salt).toBeNull()
+    expect(useResumeStore.getState().sealed).toBeNull()
+    expect(useResumeStore.getState().key).toBeNull()
+  })
+
+  it('upsertProject sets an error and leaves sealed unchanged when the disk write fails', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const sealedBefore = useResumeStore.getState().sealed
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    spy.mockRestore()
+    expect(useResumeStore.getState().error).toMatch(/저장하지 못했습니다|저장 공간/)
+    expect(useResumeStore.getState().sealed).toBe(sealedBefore)
   })
 
   it('persists both of two concurrent upserts', async () => {
