@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import Markdown from 'react-markdown'
 import { remarkPlugins } from '../lib/markdownPlugins'
 import rehypeRaw from 'rehype-raw'
@@ -25,6 +25,10 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
   const quizStats = useGraphStore((s) => s.quizStats)
   const recordReview = useGraphStore((s) => s.recordReview)
   const quizSettings = useGraphStore((s) => s.quizSettings)
+  // Position + session deck live in the store: "이 개념 보기" unmounts the quiz tab
+  // (App renders per viewMode), so local state would restart the review. See QuizPos.
+  const pos = useGraphStore((s) => s.quizPos.review)
+  const setPos = useGraphStore((s) => s.setQuizPos)
 
   const { loading, buildItems } = useNotePool(nodes)
   const pool = useMemo(() => buildItems(extractQuizItems), [buildItems])
@@ -34,22 +38,41 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
   const today = todayStr()
   const cap = quizSettings.newCardCap === 0 ? Infinity : quizSettings.newCardCap
   const deck = useMemo(() => {
+    // A deck saved earlier this session wins: rebuilding it after a remount would
+    // drop every card already graded today (they're no longer due) and shrink the
+    // counter mid-run. Keys are resolved against the fresh pool.
+    if (pos.deckKeys) {
+      const byKey = new Map(pool.map((c) => [c.key, c]))
+      const restored = pos.deckKeys.map((k) => byKey.get(k)).filter((c): c is typeof pool[number] => !!c)
+      if (restored.length) return restored
+    }
     const weakOrder = weakDomains(quizStats, { limit: 99 }).map((w) => w.domain)
     return buildReviewDeck(pool, srs, today, weakOrder, cap)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pool])
   const grades = GRADE_SETS[quizSettings.gradeButtons] ?? GRADE_SETS[3]
 
-  const [index, setIndex] = useState(0)
-  const [revealed, setRevealed] = useState(false)
+  // Freeze the freshly built deck for the session so a remount restores it verbatim.
+  useEffect(() => {
+    if (!pos.deckKeys && deck.length) setPos('review', { deckKeys: deck.map((c) => c.key) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deck])
 
   if (loading) return <div className="review"><p className="review-dim">복습 카드 불러오는 중…</p></div>
+
+  // `finished` is the past-the-end marker a card key can't express.
+  const found = pos.cardKey ? deck.findIndex((c) => c.key === pos.cardKey) : -1
+  const index = pos.finished ? deck.length : found === -1 ? 0 : found
+  const revealed = pos.revealed
+  const setRevealed = (v: boolean) => setPos('review', { revealed: v })
 
   const card = deck[index]
   const grade = (g: number) => {
     if (card) recordReview(card.srsKey, card, g, today)
-    setIndex((i) => i + 1)
-    setRevealed(false)
+    const next = deck[index + 1]
+    setPos('review', next
+      ? { cardKey: next.key, revealed: false }
+      : { finished: true, revealed: false })
   }
 
   if (!card) {
