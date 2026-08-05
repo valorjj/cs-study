@@ -7,15 +7,28 @@ import { deriveKey, randomSalt, toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 
+// requestExtract만 스텁한다 — 전송 본문의 안전성(마스크 딕셔너리 키가 body에 안 실리는지
+// 등)은 extract.wire.test.ts가 이미 검증한다. 여기서 다시 그 경계를 테스트하면 같은
+// 보장을 중복 확인하는 셈이라, 이 파일에서는 추출 결과 처리 로직만 본다.
+vi.mock('../lib/extract', () => ({ requestExtract: vi.fn(), prepareExtract: vi.fn() }))
+import { requestExtract } from '../lib/extract'
+const mockExtract = vi.mocked(requestExtract)
+
 // HashMap을 keyword로 가진 노드 하나 — never-mask 판정을 실제로 태운다. 'Redis'는
 // CODENAME_RE(카멜케이스 2세그먼트 또는 3자+ ALLCAPS)에 애초에 매치되지 않아 이
 // 서술문에서는 neverMask가 있든 없든 후보가 되지 않는다(직접 findCandidates로 확인함
 // — round 1 보고서 참조). 'HashMap'은 카멜케이스 2세그먼트("Hash"+"Map")라 실제로
 // CODENAME_RE에 걸리고, 서술문에 2회 이상 등장해 코드명 후보 규칙(count>=2)도
 // 만족한다 — neverMask가 실제로 이 후보를 걸러내는지를 검증할 수 있다.
+//
+// db-isolation은 AI 추출 테스트가 mergeLlm에 넘기는 nodeIds가 실재 개념 노드로
+// 살아남는지 보기 위해 추가했다(level!==0이어야 concept 집합에 들어간다 —
+// conceptMatch.ts의 mergeLlm 참조).
 const nodes: GraphNode[] = [
   { id: 'java-hashmap', label: 'HashMap', domain: 'java', level: 2, icon: '', summary: '',
     keywords: ['HashMap', '해시', 'treeify'], status: 'todo', position: { x: 0, y: 0 } },
+  { id: 'db-isolation', label: '격리 수준', domain: 'database', level: 2, icon: '', summary: '',
+    keywords: ['isolation', '격리'], status: 'todo', position: { x: 0, y: 0 } },
 ]
 
 const project: Project = {
@@ -248,5 +261,86 @@ describe('MaskPanel', () => {
     // 원문이 보여야 하므로(사용자가 무엇을 가렸는지 알아야 한다) 미리보기만 본다.
     expect(screen.getByTestId('mask-preview').textContent).not.toContain('정산')
     expect(container.textContent).toContain('정산')   // 결정 목록에는 있다
+  })
+})
+
+describe('AI 개념 추출', () => {
+  // 마스킹이 이미 확정된 프로젝트 — 게이트가 아니라 추출 결과 처리를 보는 테스트들이다.
+  const decided: Project = {
+    id: '7f3c2a91-0000-4000-8000-000000000001', name: 'p', period: '', role: '',
+    stack: [], lifecycle: [], narrative: '(주)정산 에서 중복 결제가 있었다',
+    maskDecisions: [{ text: '정산', kind: 'company', mask: true }],
+    matches: [{ nodeId: 'db-nosql', via: 'chip', evidence: 'Redis' }],
+    updatedAt: '2026-08-06T00:00:00.000Z',
+  }
+
+  beforeEach(async () => {
+    mockExtract.mockReset()
+    localStorage.clear()
+    const salt = randomSalt()
+    const key = await deriveKey('pw', salt)
+    useResumeStore.setState({
+      ...useResumeStore.getInitialState(),
+      status: 'unlocked', projects: [decided], error: null, key, salt: toB64(salt),
+    })
+  })
+
+  it('merges returned ids into the project matches as via=llm', async () => {
+    mockExtract.mockResolvedValue({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '중복 결제는 격리수준 문제로 이어진다' },
+    })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => {
+      const m = useResumeStore.getState().projects[0].matches
+      expect(m.find((x) => x.nodeId === 'db-isolation')?.via).toBe('llm')
+      // 기존 로컬 매칭이 사라지지 않는다.
+      expect(m.some((x) => x.nodeId === 'db-nosql')).toBe(true)
+    })
+  })
+
+  it('reports the rate limit without touching the project', async () => {
+    mockExtract.mockResolvedValue({ ok: false, reason: 'rate_limited' })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/한도/)).toBeTruthy())
+    expect(useResumeStore.getState().projects[0].matches).toEqual(decided.matches)
+  })
+
+  it('reports unauthenticated distinctly from a network failure', async () => {
+    mockExtract.mockResolvedValue({ ok: false, reason: 'unauthenticated' })
+    const { unmount } = render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/로그인/)).toBeTruthy())
+    unmount()
+
+    mockExtract.mockResolvedValue({ ok: false, reason: 'network' })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/네트워크/)).toBeTruthy())
+  })
+
+  // requestExtract는 마스킹 미확정에서 reject한다(Task 2) — Outcome이 아니라 예외다.
+  // try/catch를 빼먹으면 unhandled rejection이 되고 화면에는 아무 일도 안 일어난다.
+  it('catches the mask-gate rejection and shows its message', async () => {
+    mockExtract.mockRejectedValue(new Error('마스킹 여부가 결정되지 않은 후보가 1개 있어 전송을 중단했습니다: 물류'))
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/결정되지 않은 후보가 1개/)).toBeTruthy())
+  })
+
+  it('disables the button while a request is in flight', async () => {
+    let release: (v: { ok: false; reason: 'network' }) => void = () => {}
+    mockExtract.mockReturnValue(new Promise((r) => { release = r }))
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    const btn = screen.getByRole('button', { name: /AI 개념 추출/ })
+    fireEvent.click(btn)
+    await waitFor(() => expect(btn).toBeDisabled())
+    // 두 번 눌려도 요청은 한 번이어야 한다 — 일일 상한을 두 칸 먹는다.
+    fireEvent.click(btn)
+    expect(mockExtract).toHaveBeenCalledTimes(1)
+    release({ ok: false, reason: 'network' })
+    await waitFor(() => expect(btn).not.toBeDisabled())
   })
 })

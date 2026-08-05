@@ -16,6 +16,8 @@ import { useMemo, useState } from 'react'
 import { useResumeStore } from '../store/resumeStore'
 import { buildNeverMask, dictOf, maskGate } from '../lib/mask'
 import { buildExtractPayload } from '../lib/extractPayload'
+import { requestExtract } from '../lib/extract'
+import { mergeLlm } from '../lib/conceptMatch'
 import type { CandidateKind, MaskDecision, Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 import './MaskPanel.css'
@@ -36,6 +38,11 @@ interface WriteError {
 export function MaskPanel({ project, nodes }: MaskPanelProps) {
   const upsertProject = useResumeStore((s) => s.upsertProject)
   const [writeError, setWriteError] = useState<WriteError | null>(null)
+  // AI 추출 배너는 writeError와 다른 상태다 — writeError는 마스킹 결정 저장에 묶여
+  // 있고(text별), 이건 추출 요청 자체의 결과다. 섞으면 결정 저장 실패가 추출 배너를
+  // 지우거나 그 반대가 되는 혼선이 생긴다.
+  const [extractBusy, setExtractBusy] = useState(false)
+  const [extractBanner, setExtractBanner] = useState<string | null>(null)
 
   const neverMask = useMemo(() => buildNeverMask(nodes), [nodes])
   const gate = useMemo(
@@ -107,6 +114,43 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
     void persist(text, (base) => base.filter((d) => d.text !== text))
   }
 
+  // requestExtract는 Promise<ExtractOutcome>로 선언돼 있지만 실제로 reject할 수 있다 —
+  // 마스킹 게이트(buildExtractPayload)가 미확정 후보를 발견하면 그건 Outcome이 아니라
+  // 불변식 위반이라 throw로 온다(extract.ts 주석 참조). try/catch를 빼먹으면 이 reject가
+  // unhandled rejection이 되어 화면엔 아무 일도 안 일어난 것처럼 보인다.
+  const runExtract = async (): Promise<void> => {
+    setExtractBusy(true)
+    setExtractBanner(null)
+    try {
+      const out = await requestExtract(project, nodes)
+      if (!out.ok) {
+        setExtractBanner({
+          rate_limited: '오늘 AI 사용 한도를 다 썼습니다. 지도는 로컬 매칭으로 이미 그려져 있습니다.',
+          unauthenticated: 'AI 추출은 로그인이 필요합니다.',
+          extract_error: 'AI 추출에 실패했습니다.',
+          network: '네트워크에 연결할 수 없습니다.',
+        }[out.reason])
+        return
+      }
+      const merged = mergeLlm(project.matches, { nodeIds: out.nodeIds, reasons: out.reasons }, nodes)
+      // upsertProject는 Promise<void>가 아니다(Task 5b) — 메모리엔 반영돼도 디스크
+      // 쓰기가 실패할 수 있고, 그걸 void로 무시하면 사용자는 지도가 저장됐다고
+      // 오해한다.
+      const result = await upsertProject({ ...project, matches: merged.matches, updatedAt: new Date().toISOString() })
+      if (!result.ok) {
+        setExtractBanner(result.error)
+        return
+      }
+      if (merged.dropped > 0) {
+        setExtractBanner(`AI가 준 개념 ${merged.dropped}개는 그래프에 없어 버렸습니다.`)
+      }
+    } catch (e) {
+      setExtractBanner(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExtractBusy(false)
+    }
+  }
+
   return (
     <div className="mp">
       {gate.undecided.length > 0 && (
@@ -159,6 +203,17 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
               <li>담당 단계 {preview.payload.lifecycle.length}개</li>
               <li>개념 목록 {preview.payload.catalog.length}개</li>
             </ul>
+            {/* 이 버튼은 미리보기가 안전하다고 보여줄 때만 뜬다 — 미리보기가 곧 전송
+                본문이므로, 미리보기가 없다는 건 아직 보낼 수 없다는 뜻이다. */}
+            <button
+              type="button"
+              className="mp-extract-btn"
+              onClick={() => void runExtract()}
+              disabled={extractBusy}
+            >
+              {extractBusy ? 'AI 개념 추출 중…' : 'AI 개념 추출'}
+            </button>
+            {extractBanner && <p className="mp-extract-banner">{extractBanner}</p>}
           </details>
         ) : (
           <p className="mp-preview-blocked">{preview.message}</p>

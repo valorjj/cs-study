@@ -19,3 +19,7 @@
   font-size: 12px; color: var(--text-dim); }
 .mp-preview-blocked, .mp-write-error { color: var(--text-strong); font-size: 13px; font-weight: 700;
   border-left: 3px solid var(--border-strong); padding-left: 8px; margin: 0; }
+.mp-extract-btn { margin-top: 10px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); cursor: pointer; }
+.mp-extract-btn:disabled { cursor: default; opacity: 0.6; }
+.mp-extract-banner { margin: 8px 0 0; font-size: 13px; color: var(--text-dim); }
