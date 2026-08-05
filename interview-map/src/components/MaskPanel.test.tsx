@@ -12,6 +12,7 @@ import type { GraphNode } from '../graph/types'
 // 보장을 중복 확인하는 셈이라, 이 파일에서는 추출 결과 처리 로직만 본다.
 vi.mock('../lib/extract', () => ({ requestExtract: vi.fn(), prepareExtract: vi.fn() }))
 import { requestExtract } from '../lib/extract'
+import type { ExtractOutcome } from '../lib/extract'
 const mockExtract = vi.mocked(requestExtract)
 
 // HashMap을 keyword로 가진 노드 하나 — never-mask 판정을 실제로 태운다. 'Redis'는
@@ -342,5 +343,113 @@ describe('AI 개념 추출', () => {
     expect(mockExtract).toHaveBeenCalledTimes(1)
     release({ ok: false, reason: 'network' })
     await waitFor(() => expect(btn).not.toBeDisabled())
+  })
+
+  // review round 1 finding 1: requestExtract는 네트워크 왕복이라 수 초가 걸릴 수 있고,
+  // 그 사이 사용자는 목록으로 돌아가 이 프로젝트를 삭제할 수 있다. 캡처된 project prop을
+  // base로 계속 쓰면 응답이 온 뒤 upsertProject가 findIndex==-1로 append해 지운
+  // 프로젝트를 같은 id로 되살린다 — persist()가 이미 겪은 문제(round 2 finding 1)와
+  // 같은 클래스의 lost-update다.
+  it('does not resurrect a project deleted while extraction is in flight', async () => {
+    let release: (v: ExtractOutcome) => void = () => {}
+    mockExtract.mockReturnValue(new Promise((r) => { release = r }))
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(mockExtract).toHaveBeenCalledTimes(1))
+
+    // "목록으로 → 삭제"를 시뮬레이션한다 — store에서 프로젝트가 사라진다.
+    useResumeStore.setState({ projects: [] })
+
+    release({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '중복 결제는 격리수준 문제로 이어진다' },
+    })
+    await waitFor(() => expect(screen.getByText(/삭제되어/)).toBeTruthy())
+    // 삭제된 프로젝트가 llm 매치와 함께 되살아나면 안 된다.
+    expect(useResumeStore.getState().projects).toEqual([])
+  })
+
+  // review round 1 finding 1의 거울상: 삭제가 아니라 편집이다. 요청이 떠 있는 동안
+  // 사용자가 이름·서술문을 고치고 새 마스킹 결정을 추가로 저장했다면, 응답이 도착했을
+  // 때 그 편집 위에 병합해야 한다 — 캡처된(요청 시점의) project 위에 병합하면 방금
+  // 저장된 편집과 마스킹 결정이 조용히 되돌아간다.
+  it('merges onto the latest edited project, not the stale captured prop', async () => {
+    let release: (v: ExtractOutcome) => void = () => {}
+    mockExtract.mockReturnValue(new Promise((r) => { release = r }))
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(mockExtract).toHaveBeenCalledTimes(1))
+
+    // "목록으로 → 편집(저장됨)"을 시뮬레이션한다.
+    const edited: Project = {
+      ...decided,
+      name: '고친 이름',
+      narrative: '새로 고쳐 쓴 서술문',
+      maskDecisions: [...decided.maskDecisions, { text: '물류', kind: 'company', mask: true }],
+    }
+    useResumeStore.setState({ projects: [edited] })
+
+    release({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '중복 결제는 격리수준 문제로 이어진다' },
+    })
+    await waitFor(() => {
+      const p = useResumeStore.getState().projects[0]
+      expect(p.matches.some((m) => m.nodeId === 'db-isolation')).toBe(true)
+    })
+    const p = useResumeStore.getState().projects[0]
+    // 편집이 되돌아가지 않았어야 한다.
+    expect(p.name).toBe('고친 이름')
+    expect(p.narrative).toBe('새로 고쳐 쓴 서술문')
+    expect(p.maskDecisions).toHaveLength(2)
+  })
+
+  // review round 1 finding 3: LLM에 보내는 서술문은 마스킹된 버전이라 reason 문장이
+  // "[COMPANY_1]의 ..." 처럼 토큰을 그대로 인용할 수 있다(extract-prompt.ts가 실제로
+  // 그렇게 하라고 지시한다). 이 토큰은 그 뒤 다른 결정이 되돌려지면 다른 대상을
+  // 가리키게 되므로, 저장되는 evidence에 토큰 문자열이 살아 있으면 안 된다.
+  it('strips mask tokens out of LLM reasons before they are persisted as evidence', async () => {
+    mockExtract.mockResolvedValue({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '[COMPANY_1]의 정산 배치에서 격리 수준 문제가 있었다' },
+    })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => {
+      const m = useResumeStore.getState().projects[0].matches.find((x) => x.nodeId === 'db-isolation')
+      expect(m).toBeTruthy()
+      expect(m?.evidence).not.toMatch(/\[COMPANY_1\]/)
+    })
+  })
+
+  // review round 1 finding 4: upsertProject의 반환값을 읽고도 실패를 배너로 보여주지
+  // 않으면(반환값을 버리면) 디스크에 안 써졌는데 사용자는 성공한 줄 안다.
+  it('shows the upsertProject failure reason when the disk write fails', async () => {
+    mockExtract.mockResolvedValue({
+      ok: true, nodeIds: ['db-isolation'],
+      reasons: { 'db-isolation': '중복 결제는 격리수준 문제로 이어진다' },
+    })
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했|저장 공간/)).toBeTruthy())
+    spy.mockRestore()
+  })
+
+  // review round 1 finding 4: dropped 카운트를 읽고도 안내하지 않으면, 환각/도메인
+  // 노드가 조용히 버려졌다는 사실을 사용자가 알 길이 없다.
+  it('reports how many AI-suggested concepts were dropped as unknown to the graph', async () => {
+    mockExtract.mockResolvedValue({
+      ok: true, nodeIds: ['db-isolation', 'ghost-node-that-does-not-exist'],
+      reasons: {
+        'db-isolation': '중복 결제는 격리수준 문제로 이어진다',
+        'ghost-node-that-does-not-exist': '환각',
+      },
+    })
+    render(<MaskPanel project={decided} nodes={nodes} />)
+    fireEvent.click(screen.getByRole('button', { name: /AI 개념 추출/ }))
+    await waitFor(() => expect(screen.getByText(/1개/)).toBeTruthy())
   })
 })

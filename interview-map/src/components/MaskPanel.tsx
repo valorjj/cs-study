@@ -18,9 +18,26 @@ import { buildNeverMask, dictOf, maskGate } from '../lib/mask'
 import { buildExtractPayload } from '../lib/extractPayload'
 import { requestExtract } from '../lib/extract'
 import { mergeLlm } from '../lib/conceptMatch'
+import type { ExtractOutcome } from '../lib/extract'
 import type { CandidateKind, MaskDecision, Project } from '../lib/resumeTypes'
 import type { GraphNode } from '../graph/types'
 import './MaskPanel.css'
+
+// LLM에 보내는 서술문은 이미 마스킹된 버전이라, 모델이 돌려주는 reason 문장이
+// "[COMPANY_1]의 정산 배치에서…" 처럼 그 토큰을 그대로 인용할 수 있다
+// (extract-prompt.ts EXTRACT_SYSTEM이 토큰을 "그대로 둔다"고 명시적으로 지시한다 —
+// 엣지케이스가 아니라 기대된 출력 모양이다). dictOf가 만드는 토큰↔실제 용어 대응은
+// project.maskDecisions의 결정 순서에서 매번 새로 계산되는 값이다(위 dict 주석 참조) —
+// 한 번 되돌리기를 누르면 그 뒤 같은 kind의 번호가 당겨져 옛 토큰 문자열이 가리키던
+// 대상이 바뀐다. evidence로 영속화되는 텍스트에 이 토큰이 살아 있으면, 그 순간의
+// 배정을 문자열로 고정해버려서 나중에 다른 결정을 되돌렸을 때 의미가 어긋난 채로
+// 저장 데이터에 영구히 남는다(내보내기 JSON에 노출되고, ProjectForm이 편집마다
+// 그대로 재저장한다). 저장 전에 토큰을 중화한다.
+const MASK_TOKEN_RE = /\[[A-Z]+_\d+\]/g
+
+function stripMaskTokens(text: string): string {
+  return text.replace(MASK_TOKEN_RE, '(가려진 항목)')
+}
 
 interface MaskPanelProps {
   project: Project
@@ -37,6 +54,7 @@ interface WriteError {
 
 export function MaskPanel({ project, nodes }: MaskPanelProps) {
   const upsertProject = useResumeStore((s) => s.upsertProject)
+  const pendingWrites = useResumeStore((s) => s.pendingWrites)
   const [writeError, setWriteError] = useState<WriteError | null>(null)
   // AI 추출 배너는 writeError와 다른 상태다 — writeError는 마스킹 결정 저장에 묶여
   // 있고(text별), 이건 추출 요청 자체의 결과다. 섞으면 결정 저장 실패가 추출 배너를
@@ -116,13 +134,28 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
 
   // requestExtract는 Promise<ExtractOutcome>로 선언돼 있지만 실제로 reject할 수 있다 —
   // 마스킹 게이트(buildExtractPayload)가 미확정 후보를 발견하면 그건 Outcome이 아니라
-  // 불변식 위반이라 throw로 온다(extract.ts 주석 참조). try/catch를 빼먹으면 이 reject가
-  // unhandled rejection이 되어 화면엔 아무 일도 안 일어난 것처럼 보인다.
+  // 불변식 위반이라 throw로 온다(extract.ts 주석 참조). 이 try는 그 호출 하나만
+  // 감싼다 — UI 클릭 경로로는 사실 도달 불가능하다(버튼은 preview.ok일 때만 뜨고,
+  // requestExtract가 같은 project/nodes로 같은 게이트를 다시 돈다). 그래도 방어적으로
+  // 남겨둔다: 원본 예외 메시지를 그대로 보여준다 — 왜 못 보내는지가 곧 메시지라는 이
+  // 컴포넌트의 원칙(위 preview 주석 참조)을 따른다(review round 1 finding 2).
+  //
+  // 이 try를 mergeLlm/upsertProject까지 넓히면 안 된다 — 넓혔던 round 0 구현에서
+  // mergeLlm이 던진 TypeError(`llm.nodeIds is not iterable`)가 그대로 배너에 떠서
+  // "한도 초과" 안내를 지워버린 게 실제로 재현됐다. 그 아래는 별도 try로 감싸
+  // 예기치 못한 예외는 콘솔에만 원문을 남기고 화면에는 번역된 일반 문구를 보인다.
   const runExtract = async (): Promise<void> => {
     setExtractBusy(true)
     setExtractBanner(null)
+    let out: ExtractOutcome
     try {
-      const out = await requestExtract(project, nodes)
+      out = await requestExtract(project, nodes)
+    } catch (e) {
+      setExtractBanner(e instanceof Error ? e.message : String(e))
+      setExtractBusy(false)
+      return
+    }
+    try {
       if (!out.ok) {
         setExtractBanner({
           rate_limited: '오늘 AI 사용 한도를 다 썼습니다. 지도는 로컬 매칭으로 이미 그려져 있습니다.',
@@ -132,11 +165,28 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
         }[out.reason])
         return
       }
-      const merged = mergeLlm(project.matches, { nodeIds: out.nodeIds, reasons: out.reasons }, nodes)
+      // base는 요청을 보낸 렌더의 `project` prop이 아니라 응답이 온 시점에 store에서
+      // 다시 읽는다(review round 1 finding 1). requestExtract는 네트워크 왕복 — 수 초가
+      // 걸릴 수 있고, 그 사이 사용자는 목록으로 돌아가 이 프로젝트를 삭제하거나
+      // 편집(서술문 수정, 새 마스킹 결정)할 수 있다. 캡처된 prop을 base로 쓰면 그
+      // 편집이나 삭제가 이 쓰기에 덮여 조용히 되돌아간다 — persist()가 이미 같은
+      // 이유로 store에서 다시 읽는 것과 같은 문제, 같은 해법이다.
+      const base = useResumeStore.getState().projects.find((p) => p.id === project.id)
+      if (!base) {
+        setExtractBanner('이 프로젝트는 삭제되어 추출 결과를 저장할 수 없습니다.')
+        return
+      }
+      // reasons에 마스킹 토큰이 섞여 있을 수 있다(파일 상단 stripMaskTokens 주석 참조) —
+      // 저장하기 전에 중화한다. mergeLlm의 계약(반환 형태)은 그대로 두고, 이 함수가
+      // 이미 소유한 입력 객체만 손본다.
+      const reasons = Object.fromEntries(
+        Object.entries(out.reasons).map(([id, reason]) => [id, stripMaskTokens(reason)]),
+      )
+      const merged = mergeLlm(base.matches, { nodeIds: out.nodeIds, reasons }, nodes)
       // upsertProject는 Promise<void>가 아니다(Task 5b) — 메모리엔 반영돼도 디스크
       // 쓰기가 실패할 수 있고, 그걸 void로 무시하면 사용자는 지도가 저장됐다고
       // 오해한다.
-      const result = await upsertProject({ ...project, matches: merged.matches, updatedAt: new Date().toISOString() })
+      const result = await upsertProject({ ...base, matches: merged.matches, updatedAt: new Date().toISOString() })
       if (!result.ok) {
         setExtractBanner(result.error)
         return
@@ -145,7 +195,11 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
         setExtractBanner(`AI가 준 개념 ${merged.dropped}개는 그래프에 없어 버렸습니다.`)
       }
     } catch (e) {
-      setExtractBanner(e instanceof Error ? e.message : String(e))
+      // mergeLlm/upsertProject는 정상 동작 중엔 던지지 않는다 — 던지면 예기치 못한
+      // 버그다. 원본 예외를 사용자에게 그대로 보이면 내부 구현 세부사항이 새므로
+      // 콘솔에만 남기고 화면에는 번역된 일반 문구를 쓴다(review round 1 finding 2).
+      console.error('MaskPanel: AI 추출 결과 처리 중 예기치 않은 예외', e)
+      setExtractBanner('AI 추출 결과를 처리하는 중 오류가 발생했습니다.')
     } finally {
       setExtractBusy(false)
     }
@@ -205,11 +259,15 @@ export function MaskPanel({ project, nodes }: MaskPanelProps) {
             </ul>
             {/* 이 버튼은 미리보기가 안전하다고 보여줄 때만 뜬다 — 미리보기가 곧 전송
                 본문이므로, 미리보기가 없다는 건 아직 보낼 수 없다는 뜻이다. */}
+            {/* pendingWrites도 함께 본다(review round 1 minor) — 마스킹 결정 저장이
+                아직 큐에서 도는 중에 추출을 누르면, 위 base 재조회가 그 쓰기의 결과를
+                못 보고 낡은 base로 병합할 창이 그만큼 넓어진다. 완전히 없애는 건 아니지만
+                (base 재조회 자체가 그 창을 좁히는 실질적 방어다), 값싼 추가 방어다. */}
             <button
               type="button"
               className="mp-extract-btn"
               onClick={() => void runExtract()}
-              disabled={extractBusy}
+              disabled={extractBusy || pendingWrites > 0}
             >
               {extractBusy ? 'AI 개념 추출 중…' : 'AI 개념 추출'}
             </button>
