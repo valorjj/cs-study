@@ -48,9 +48,20 @@ describe('requestExtract without Supabase configured (test env)', () => {
 
   // 마스킹 실패가 "로그인 필요"로 둔갑하면 사용자는 로그인만 반복하고 진짜 원인을
   // 못 본다. 평문 검사가 supabase 유무 확인보다 앞에 있어야 한다.
+  //
+  // 이 테스트는 게이트(결정 누락)가 아니라 assertNoPlaintext(잔존 검사)가 실제로
+  // 배선되어 있는지를 본다 — 게이트를 통과하고도 payload에 원문이 남는 유일한 실제
+  // 경로다. 결정 텍스트가 자기 자신의 치환 토큰의 부분 문자열인 경우: 'COMPANY_1'은
+  // (주) 마커도 없고 CODENAME_RE(\b[A-Z]{3,}\b)도 밑줄 뒤라 경계가 안 생겨 후보로
+  // 탐지되지 않으므로 게이트는 통과한다. 하지만 치환 결과 '[COMPANY_1]'이 원래
+  // 텍스트 'COMPANY_1'을 그대로 포함해, 스캔이 없으면 이 상태가 그대로 나간다.
   it('surfaces a broken mask even when Supabase is not configured', async () => {
-    const broken: Project = { ...project, narrative: '(주)정산 에서 일했다', maskDecisions: [] }
-    await expect(requestExtract(broken, nodes)).rejects.toThrow(/전송을 중단/)
+    const broken: Project = {
+      ...project,
+      narrative: 'COMPANY_1 시스템을 썼다',
+      maskDecisions: [{ text: 'COMPANY_1', kind: 'company', mask: true }],
+    }
+    await expect(requestExtract(broken, nodes)).rejects.toThrow(/마스킹되지 않은 원문이 남아 있어/)
   })
 })
 

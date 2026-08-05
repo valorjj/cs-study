@@ -98,6 +98,14 @@ describe('applyMask', () => {
   it('leaves text untouched with an empty dict', () => {
     expect(applyMask('그대로', {})).toBe('그대로')
   })
+
+  // 같은 실체가 서술문에 다른 대소문자로 적혀 있어도(URL·호스트명·소문자 산문 등)
+  // 같은 결정이 적용돼야 한다 — neverMask 쪽도 이미 normalize()로 대소문자를 접는다.
+  it('replaces a case-variant occurrence, not only the exact case decided', () => {
+    const dict = { SettleHub: '[SYSTEM_1]' }
+    const text = 'SettleHub 배치. SettleHub 로그. settlehub 대시보드.'
+    expect(applyMask(text, dict)).toBe('[SYSTEM_1] 배치. [SYSTEM_1] 로그. [SYSTEM_1] 대시보드.')
+  })
 })
 
 describe('maskGate', () => {
@@ -149,6 +157,17 @@ describe('dictOf', () => {
       { text: 'C', kind: 'company', mask: true },
     ]
     expect(dictOf(d)).toEqual({ A: '[COMPANY_1]', B: '[SYSTEM_1]', C: '[COMPANY_2]' })
-    expect(dictOf(d)).toEqual(dictOf(d))
+  })
+
+  it('drops a decision whose text is empty or whitespace-only', () => {
+    // 빈 키가 사전에 들어가면 new RegExp('', 'gi')가 모든 위치에 매치되어 서술문을
+    // 통째로 토큰으로 채워버린다. assertNoPlaintext는 빈 키를 일부러 건너뛰므로
+    // 그 결과를 잡아내지도 못한다 — 그래서 사전을 만드는 시점(dictOf)에서 막는다.
+    const d: MaskDecision[] = [
+      { text: '정산', kind: 'company', mask: true },
+      { text: '', kind: 'company', mask: true },
+      { text: '   ', kind: 'company', mask: true },
+    ]
+    expect(dictOf(d)).toEqual({ 정산: '[COMPANY_1]' })
   })
 })
