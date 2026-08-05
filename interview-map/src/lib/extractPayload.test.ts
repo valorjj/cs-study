@@ -68,4 +68,30 @@ describe('assertNoPlaintext', () => {
     const p = buildExtractPayload({ ...project, maskDict: {} }, nodes)
     expect(() => assertNoPlaintext(p, {})).not.toThrow()
   })
+
+  it('catches a leaked key containing a backslash, which JSON escapes', () => {
+    const dict = { 'back\\slash': '[SYSTEM_9]' }
+    const p = buildExtractPayload({ ...project, narrative: 'x', maskDict: dict }, nodes)
+    const leaky = { ...p, maskedNarrative: 'prefix back\\slash suffix' }
+    expect(() => assertNoPlaintext(leaky, dict)).toThrow()
+  })
+
+  it('catches a leaked key containing a double quote', () => {
+    const dict = { 'he"llo': '[SYSTEM_9]' }
+    const p = buildExtractPayload({ ...project, narrative: 'x', maskDict: dict }, nodes)
+    const leaky = { ...p, maskedNarrative: 'said he"llo once' }
+    expect(() => assertNoPlaintext(leaky, dict)).toThrow()
+  })
+
+  it('catches a leaked key containing a newline', () => {
+    const dict = { 'two\nlines': '[SYSTEM_9]' }
+    const p = buildExtractPayload({ ...project, narrative: 'x', maskDict: dict }, nodes)
+    const leaky = { ...p, maskedNarrative: 'has two\nlines inside' }
+    expect(() => assertNoPlaintext(leaky, dict)).toThrow()
+  })
+
+  it('skips an empty-string key instead of throwing on everything', () => {
+    const p = buildExtractPayload({ ...project, maskDict: {} }, nodes)
+    expect(() => assertNoPlaintext(p, { '': '[X]' })).not.toThrow()
+  })
 })

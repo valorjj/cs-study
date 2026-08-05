@@ -31,11 +31,16 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
 }
 
 // 방어의 마지막 층. 조용한 유출을 시끄러운 예외로 바꾼다.
-// 호출자는 이 예외를 사용자에게 "전송을 중단했습니다"로 보여줘야 한다.
+// JSON.stringify는 백슬래시·따옴표·제어문자를 이스케이프하므로, 직렬화된 텍스트에서
+// 원문 그대로를 찾으면 그런 문자가 든 키는 payload에 남아 있어도 발견되지 않는다.
+// 그래서 원문과 이스케이프된 형태를 함께 본다. 필드를 하나하나 훑지 않는 이유는,
+// 나중에 payload에 필드가 추가되면 열거 목록이 조용히 낡기 때문이다.
 export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, string>): void {
   const json = JSON.stringify(payload)
   for (const plain of Object.keys(dict)) {
-    if (plain && json.includes(plain)) {
+    if (!plain) continue   // 빈 키는 모든 문자열에 걸리므로 검사 대상이 아니다
+    const escaped = JSON.stringify(plain).slice(1, -1)   // 양쪽 따옴표 제거
+    if (json.includes(plain) || json.includes(escaped)) {
       throw new Error(`payload에 마스킹되지 않은 원문이 남아 있어 전송을 중단했습니다: ${plain}`)
     }
   }
