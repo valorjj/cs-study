@@ -5,7 +5,7 @@ import type { Project } from '../lib/resumeTypes'
 
 const project = (id: string, name: string): Project => ({
   id, name, period: '2025', role: 'backend', stack: ['Redis'],
-  lifecycle: ['tx'], narrative: '서술문', maskDict: {}, matches: [],
+  lifecycle: ['tx'], narrative: '서술문', maskDecisions: [], matches: [],
   updatedAt: '2026-08-05T00:00:00.000Z',
 })
 

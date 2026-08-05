@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { buildNeverMask, findCandidates, buildMaskDict, applyMask } from './mask'
+import { buildNeverMask, findCandidates, buildMaskDict, applyMask, maskGate, dictOf } from './mask'
 import graphData from '../graph/graph.json'
 import type { GraphData } from '../graph/types'
+import type { MaskDecision } from './resumeTypes'
 
 const nodes = (graphData as GraphData).nodes
 
@@ -96,5 +97,58 @@ describe('applyMask', () => {
 
   it('leaves text untouched with an empty dict', () => {
     expect(applyMask('그대로', {})).toBe('그대로')
+  })
+})
+
+describe('maskGate', () => {
+  const neverMask = new Set<string>(['redis'])
+
+  it('is ready when there are no candidates at all', () => {
+    expect(maskGate('평범한 문장입니다', [], neverMask)).toEqual({ ready: true, undecided: [] })
+  })
+
+  it('is NOT ready when a candidate has no decision', () => {
+    const g = maskGate('(주)정산 에서 일했다', [], neverMask)
+    expect(g.ready).toBe(false)
+    expect(g.undecided.map((c) => c.text)).toEqual(['정산'])
+  })
+
+  // "가리지 않는다"도 결정이다. 결정을 내렸으면 통과해야 한다 — 아니면 사용자가
+  // 남기고 싶은 단어 하나 때문에 기능 전체가 영구히 막힌다.
+  it('is ready when every candidate is decided, including mask:false', () => {
+    const d: MaskDecision[] = [{ text: '정산', kind: 'company', mask: false }]
+    expect(maskGate('(주)정산 에서 일했다', d, neverMask).ready).toBe(true)
+  })
+
+  // 서술문을 고쳐 새 후보가 생기면 다시 막혀야 한다. 이게 사전을 저장하지 않는 이유다.
+  it('blocks again when an edit introduces a new candidate', () => {
+    const d: MaskDecision[] = [{ text: '정산', kind: 'company', mask: true }]
+    const g = maskGate('(주)정산 과 (주)물류 에서 일했다', d, neverMask)
+    expect(g.ready).toBe(false)
+    expect(g.undecided.map((c) => c.text)).toEqual(['물류'])
+  })
+
+  it('ignores stale decisions for text no longer in the narrative', () => {
+    const d: MaskDecision[] = [{ text: '옛회사', kind: 'company', mask: true }]
+    expect(maskGate('평범한 문장입니다', d, neverMask).ready).toBe(true)
+  })
+})
+
+describe('dictOf', () => {
+  it('includes only the decisions marked mask', () => {
+    expect(dictOf([
+      { text: 'SettleHub', kind: 'system', mask: true },
+      { text: 'Redis', kind: 'system', mask: false },
+    ])).toEqual({ SettleHub: '[SYSTEM_1]' })
+  })
+
+  it('numbers per kind in decision order, deterministically', () => {
+    const d: MaskDecision[] = [
+      { text: 'A', kind: 'company', mask: true },
+      { text: 'B', kind: 'system', mask: true },
+      { text: 'C', kind: 'company', mask: true },
+    ]
+    expect(dictOf(d)).toEqual({ A: '[COMPANY_1]', B: '[SYSTEM_1]', C: '[COMPANY_2]' })
+    expect(dictOf(d)).toEqual(dictOf(d))
   })
 })

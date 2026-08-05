@@ -1,5 +1,17 @@
 // 이력 기능의 타입 경계. store와 lib이 서로를 import하지 않도록 타입만 여기 모은다.
 
+// mask.ts가 아니라 여기 둔다 — Project가 이 타입을 쓰므로, 반대 방향이면
+// resumeTypes → mask 의존이 생겨 타입 경계 파일의 목적이 깨진다.
+export type CandidateKind = 'company' | 'system' | 'person' | 'contact'
+
+// 후보 하나에 대한 사용자의 결정. mask:false 도 결정이다 — "아직 안 봤다"와
+// "보고 남기기로 했다"를 구분해야 전송 게이트가 성립한다.
+export interface MaskDecision {
+  text: string
+  kind: CandidateKind
+  mask: boolean
+}
+
 // 단일 백엔드 개발자가 실제로 담당하는 생애주기 단계. spec B의 출제 범위가 된다.
 export type Stage =
   | 'architecture' | 'mvp' | 'feature' | 'cicd'
@@ -37,7 +49,7 @@ export interface Project {
   stack: string[]                    // 기술스택 칩. 마스킹 대상이 아니다
   lifecycle: Stage[]
   narrative: string                  // 자유 서술 원문 (평문, 금고 안에만 존재)
-  maskDict: Record<string, string>   // "우리회사" → "[COMPANY_1]"
+  maskDecisions: MaskDecision[]      // 마스킹 후보별 결정. 사전은 여기서 파생한다
   matches: Match[]
   updatedAt: string                  // ISO8601
 }

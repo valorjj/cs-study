@@ -5,7 +5,7 @@
 // 평문 잔존 검사는 이 함수 안에서 돈다. 규약(주석)으로만 두면 호출자가 건너뛸 수
 // 있고, 실제로 이 주석이 다음 UI 작업에 그 우회를 권하고 있었다. 안전 속성은
 // 문장이 아니라 코드가 강제해야 한다.
-import { applyMask } from './mask'
+import { applyMask, buildNeverMask, dictOf, maskGate } from './mask'
 import type { Project, Stage } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
 
@@ -78,14 +78,27 @@ export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, 
 
 // 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
 export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
+  // 게이트가 먼저다. 결정되지 않은 후보가 하나라도 있으면 payload를 만들지 않는다.
+  // UI의 disabled 속성이 아니라 이 검사가 규칙이다 — 버튼을 우회하는 다음 코드가
+  // 생겨도 여기서 막힌다.
+  const neverMask = buildNeverMask(nodes)
+  const gate = maskGate(project.narrative, project.maskDecisions, neverMask)
+  if (!gate.ready) {
+    throw new Error(
+      `마스킹 여부가 결정되지 않은 후보가 ${gate.undecided.length}개 있어 전송을 중단했습니다: ` +
+      gate.undecided.map((c) => c.text).join(', '),
+    )
+  }
+
+  const dict = dictOf(project.maskDecisions)
   const payload: ExtractPayload = {
-    maskedNarrative: applyMask(project.narrative, project.maskDict),
+    maskedNarrative: applyMask(project.narrative, dict),
     stack: project.stack,
     lifecycle: project.lifecycle,
     catalog: nodes
       .filter((n) => n.level !== 0)
       .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
   }
-  assertNoPlaintext(payload, project.maskDict)
+  assertNoPlaintext(payload, dict)
   return payload
 }

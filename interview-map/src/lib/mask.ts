@@ -2,8 +2,8 @@
 // 명시적 보내기 버튼이다(스펙 참조). 한국어 회사명·사내 코드명은 대문자 같은
 // 표기 신호가 없어 규칙으로 완전히 잡을 수 없다는 전제로 설계했다.
 import type { GraphNode } from '../graph/types'
-
-export type CandidateKind = 'company' | 'system' | 'person' | 'contact'
+import type { CandidateKind, MaskDecision } from './resumeTypes'
+export type { CandidateKind }
 
 export interface Candidate {
   text: string
@@ -92,4 +92,29 @@ export function applyMask(text: string, dict: Record<string, string>): string {
   let out = text
   for (const k of keys) out = out.replace(new RegExp(escapeRe(k), 'g'), dict[k])
   return out
+}
+
+// 결정 목록에서 사전을 파생한다. 저장된 사전은 없다 — 서술문이 바뀌면 후보가 바뀌고,
+// 저장된 사전은 그 순간 낡는다. 순서가 같으면 결과가 같으므로 렌더마다 안전하다.
+export function dictOf(decisions: MaskDecision[]): Record<string, string> {
+  return buildMaskDict(decisions.filter((d) => d.mask).map((d) => ({
+    text: d.text, kind: d.kind, count: 1,
+  })))
+}
+
+export interface MaskGateResult {
+  ready: boolean
+  undecided: Candidate[]
+}
+
+// 지금 서술문에서 발견되는 모든 후보에 결정이 있는지 본다. 서술문에 더 이상 없는
+// 결정(낡은 것)은 무시한다 — 사용자가 문장을 지웠으면 그 결정도 의미가 없다.
+export function maskGate(
+  narrative: string,
+  decisions: MaskDecision[],
+  neverMask: Set<string>,
+): MaskGateResult {
+  const decided = new Set(decisions.map((d) => d.text))
+  const undecided = findCandidates(narrative, neverMask).filter((c) => !decided.has(c.text))
+  return { ready: undecided.length === 0, undecided }
 }
