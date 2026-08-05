@@ -577,7 +577,9 @@
       "summary": "ACID와 격리수준",
       "keywords": [
         "ACID",
-        "격리수준"
+        "격리수준",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "position": {
@@ -613,6 +615,7 @@
       "icon": "⚖️",
       "summary": "부하 분산 전략",
       "keywords": [
+        "Nginx",
         "라운드로빈",
         "헬스체크"
       ],
@@ -748,7 +751,9 @@
       "keywords": [
         "B-Tree",
         "커버링",
-        "복합인덱스"
+        "복합인덱스",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "noteRef": "notes/04-database/database-core.md#d1-database-index",
@@ -767,7 +772,9 @@
       "keywords": [
         "MVCC",
         "낙관적락",
-        "비관적락"
+        "비관적락",
+        "PostgreSQL",
+        "MySQL"
       ],
       "status": "learning",
       "noteRef": "notes/04-database/database-core.md#d3-lock-and-mvcc",
@@ -803,6 +810,8 @@
       "icon": "🧱",
       "summary": "RDB vs NoSQL, Redis 캐시",
       "keywords": [
+        "MongoDB",
+        "Elasticsearch",
         "NoSQL",
         "Redis",
         "캐시"
@@ -1136,6 +1145,7 @@
       "icon": "archive",
       "summary": "캐시 계층, 무효화, TTL",
       "keywords": [
+        "캐시",
         "Look-Aside",
         "무효화"
       ],
@@ -1173,6 +1183,7 @@
       "summary": "비동기, decoupling, 버퍼링",
       "keywords": [
         "Kafka",
+        "RabbitMQ",
         "비동기"
       ],
       "status": "learning",
@@ -1226,6 +1237,7 @@
       "icon": "k8s",
       "summary": "오케스트레이션, 자가복구",
       "keywords": [
+        "k8s",
         "Pod",
         "오케스트레이션"
       ],
@@ -1244,6 +1256,8 @@
       "icon": "infinity",
       "summary": "빌드·테스트·배포 자동화",
       "keywords": [
+        "Jenkins",
+        "GitHub Actions",
         "파이프라인",
         "blue-green"
       ],
@@ -1262,6 +1276,8 @@
       "icon": "activity",
       "summary": "로그·메트릭·트레이싱, OpenTelemetry, 감사로그",
       "keywords": [
+        "Prometheus",
+        "Grafana",
         "모니터링",
         "트레이싱",
         "OpenTelemetry",
@@ -1454,6 +1470,7 @@
       "icon": "LuRadio",
       "summary": "HTTP/1.1→2→3 진화",
       "keywords": [
+        "gRPC",
         "HTTP/2",
         "멀티플렉싱",
         "QUIC"
@@ -2155,6 +2172,9 @@
       "icon": "LuTable2",
       "summary": "1차 캐시·dirty checking·flush, 생명주기, OSIV",
       "keywords": [
+        "JPA",
+        "Hibernate",
+        "QueryDSL",
         "영속성 컨텍스트",
         "dirty checking",
         "merge",
@@ -2196,6 +2216,7 @@
       "icon": "LuFileCog",
       "summary": "@Bean vs @Component, proxyBeanMethods(CGLIB)",
       "keywords": [
+        "Spring Boot",
         "@Bean",
         "@Configuration",
         "proxyBeanMethods",
@@ -2277,6 +2298,7 @@
       "icon": "LuUserCheck",
       "summary": "Auth Server, OAuth2/OIDC·PKCE, RBAC vs ABAC",
       "keywords": [
+        "OAuth",
         "OAuth2",
         "OIDC",
         "PKCE",
