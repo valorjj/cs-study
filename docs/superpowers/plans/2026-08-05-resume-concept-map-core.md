@@ -2082,15 +2082,31 @@ export function parseVaultRow(data: unknown): VaultRow | null {
   return { salt: r.salt, blob: { iv: blob.iv, ct: blob.ct }, updatedAt: r.updated_at }
 }
 
+// rpc()의 오류는 PostgrestError다 — functions.invoke와 달리 HTTP status가 없고
+// code는 PostgREST 코드나 Postgres SQLSTATE다. 그래서 상태코드(401)를 보면 안 된다.
+// generate.ts의 error.context.status 패턴을 그대로 베끼면 그 분기는 영원히 죽는다.
+//   42501 = insufficient_privilege — 로그아웃 사용자가 RLS에 막히는 가장 흔한 경우
+//   PGRST3xx = PostgREST 인증 계열 (만료된 JWT 등)
+// 타입 없는 오류 위의 추론이므로 메시지 패턴도 함께 본다. 판정을 틀려도 데이터가
+// 사라지진 않는다(둘 다 ok:false) — 사용자에게 잘못된 안내를 할 뿐이다.
+const AUTH_SQLSTATE = new Set(['42501'])
+const AUTH_MSG = /jwt|not authenticated|row-level security|permission denied|권한/i
+
+function isAuthError(code: string, msg: string): boolean {
+  return AUTH_SQLSTATE.has(code) || /^PGRST3/i.test(code) || AUTH_MSG.test(msg)
+}
+
 // RPC는 성공 시 새 updated_at을, 충돌 시 NULL을 돌려준다.
 export function interpretSave(data: unknown, error: unknown): SaveResult {
   if (error) {
     const code = String((error as { code?: unknown }).code ?? '')
     const msg = String((error as { message?: unknown }).message ?? '')
-    const unauth = code === '401' || /jwt|auth/i.test(msg)
-    return { ok: false, reason: unauth ? 'unauthenticated' : 'offline' }
+    return { ok: false, reason: isAuthError(code, msg) ? 'unauthenticated' : 'offline' }
   }
   if (typeof data === 'string' && data) return { ok: true, updatedAt: data }
+  // 문자열이 아닌 truthy 값은 충돌이 아니라 규약 위반이다. 값은 그대로 conflict를
+  // 돌려주되(호출자 계약 유지), 보이지 않게 넘어가지 않도록 로그를 남긴다.
+  if (data !== null && data !== undefined) logError('interpretSave: unexpected rpc payload', data)
   return { ok: false, reason: 'conflict' }
 }
 
