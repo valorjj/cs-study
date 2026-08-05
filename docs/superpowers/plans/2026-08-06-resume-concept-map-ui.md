@@ -1252,6 +1252,14 @@ git commit -m "feat(resume): 도메인 그룹 어댑터와 노드별 SRS 키 수
 바꾼다. `App` 이 뷰를 조건부 렌더하므로 `ResumeView` 전체가 unmount되고, 컴포넌트 로컬
 상태로 모달 열림을 들고 있으면 돌아왔을 때 닫혀 있다. 그래서 위치를 store에 둔다.
 
+> **선행 조건 (Task 3에서 발견·수정):** `resumeStore.hydrate()` 는 `status === 'unlocked'`
+> 일 때 아무것도 하지 않아야 한다. 원래 구현은 무조건 `status: 'locked', key: null` 로
+> 리셋했고, `ResumeView` 가 마운트마다 `hydrate()` 를 부르므로 **노트를 보고 돌아올 때마다
+> 금고가 다시 잠겼다** — 개념 하나 볼 때마다 패스프레이즈 재입력 + 200k PBKDF2.
+> 이 태스크의 "돌아오면 지도가 열려 있다"는 요구는 그 수정 위에서만 성립한다.
+> `mapOpen` 만 store에 옮겨도 금고가 잠기면 지도는 그릴 데이터가 없다.
+> 재마운트 통합 테스트가 `ResumeView.test.tsx` 에 있으니 함께 돌려 확인하라.
+
 - [ ] **Step 1: 실패하는 테스트 작성**
 
 ```tsx
