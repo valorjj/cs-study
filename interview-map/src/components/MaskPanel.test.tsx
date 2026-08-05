@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MaskPanel } from './MaskPanel'
 import { useResumeStore } from '../store/resumeStore'
 import { buildExtractPayload } from '../lib/extractPayload'
@@ -101,6 +101,52 @@ describe('MaskPanel', () => {
     expect(decisions.find((d) => d.text === '나나')).toEqual({ text: '나나', kind: 'company', mask: true })
     // 둘 다 실제로 반영됐으니 실패 메시지가 남아 있으면 안 된다.
     expect(screen.queryByText(/저장하지 못했|삭제되어/)).toBeNull()
+  })
+
+  // review round 3 finding 1의 세 번째 부분: writeError는 그 실패를 낳은 text에 묶여
+  // 있어야 한다. A가 실패해 메시지가 뜬 뒤 관계없는 B가 성공해도, A의 메시지가
+  // 지워지면 안 된다 — 사용자는 A가 반영되지 않았다는 사실을 계속 알아야 한다.
+  it('keeps candidate A\'s failure message visible after a different candidate B succeeds', async () => {
+    const twoCompanies: Project = {
+      ...project, narrative: '(주)가가 와 (주)나나 에서 일했다', maskDecisions: [],
+    }
+    useResumeStore.setState({ status: 'locked', projects: [twoCompanies], error: null })
+    render(<MaskPanel project={twoCompanies} nodes={nodes} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '가가 가리기' }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했|잠겨 있어/)).toBeTruthy())
+    expect(useResumeStore.getState().projects[0].maskDecisions
+      .find((d) => d.text === '가가')).toBeUndefined()
+
+    // 금고를 unlocked로 돌려 이번엔 실제로 저장되게 한다 — 나나는 가가와 무관한 결정이다.
+    act(() => { useResumeStore.setState({ status: 'unlocked' }) })
+    fireEvent.click(screen.getByRole('button', { name: '나나 가리기' }))
+    await waitFor(() =>
+      expect(useResumeStore.getState().projects[0].maskDecisions
+        .find((d) => d.text === '나나')).toEqual({ text: '나나', kind: 'company', mask: true }))
+
+    // 나나가 성공했다고 가가의 실패 메시지가 지워지면 안 된다 — 가가는 여전히 store에
+    // 반영되지 않은 채다.
+    expect(screen.getByText(/저장하지 못했|잠겨 있어/)).toBeTruthy()
+    expect(useResumeStore.getState().projects[0].maskDecisions
+      .find((d) => d.text === '가가')).toBeUndefined()
+  })
+
+  // 거울상 케이스: A가 실패한 뒤 같은 A를 다시 시도해 성공하면, 이번엔 그 메시지가
+  // 지워져야 한다(더 이상 유효하지 않은 실패 기록을 화면에 남겨두면 안 된다).
+  it('clears the failure message once the same candidate is retried and succeeds', async () => {
+    useResumeStore.setState({ status: 'locked', projects: [project], error: null })
+    render(<MaskPanel project={project} nodes={nodes} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '정산 가리기' }))
+    await waitFor(() => expect(screen.getByText(/저장하지 못했|잠겨 있어/)).toBeTruthy())
+
+    act(() => { useResumeStore.setState({ status: 'unlocked' }) })
+    fireEvent.click(screen.getByRole('button', { name: '정산 가리기' }))
+    await waitFor(() =>
+      expect(useResumeStore.getState().projects[0].maskDecisions)
+        .toEqual([{ text: '정산', kind: 'company', mask: true }]))
+    expect(screen.queryByText(/저장하지 못했|잠겨 있어/)).toBeNull()
   })
 
   // 저장 데이터에 같은 text의 결정이 이미 중복으로 들어 있을 수 있다(가져오기 등).
