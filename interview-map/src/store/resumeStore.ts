@@ -49,8 +49,6 @@ interface ResumeState {
   key: CryptoKey | null          // 메모리 전용. 절대 영속화하지 않는다
   projects: Project[]            // 평문. unlocked에서만 채워진다
   error: string | null
-  activeProjectId: string | null // #/resume/<id> 와 동기화되는 현재 열린 프로젝트 (Task 7에서 사용)
-  setActiveProject: (id: string | null) => void
 
   hydrate: () => void
   createVault: (passphrase: string) => Promise<void>
@@ -95,8 +93,6 @@ export const useResumeStore = create<ResumeState>((set, get) => {
     key: null,
     projects: [],
     error: null,
-    activeProjectId: null,
-    setActiveProject: (id) => set({ activeProjectId: id }),
 
     hydrate: () => {
       const stored = readStoredVault()

@@ -100,6 +100,8 @@ interface GraphState {
   setQuizSettings: (patch: Partial<QuizSettings>) => void
   trackId: string | null                    // 코스 탭에서 선택된 트랙 (null = 첫 트랙)
   setTrackId: (id: string | null) => void
+  activeProjectId: string | null            // 이력 탭에서 열려 있는 프로젝트 (#/resume/<id> 와 동기화)
+  setActiveProject: (id: string | null) => void
 }
 
 export const useGraphStore = create<GraphState>((set) => ({
@@ -165,4 +167,6 @@ export const useGraphStore = create<GraphState>((set) => ({
   }),
   trackId: null,
   setTrackId: (id) => set({ trackId: id }),
+  activeProjectId: null,
+  setActiveProject: (id) => set({ activeProjectId: id }),
 }))

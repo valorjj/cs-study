@@ -11,7 +11,9 @@ describe('useUrlSync', () => {
   beforeEach(() => {
     localStorage.clear()
     setHash('#/home')
-    useGraphStore.setState({ viewMode: 'home', selectedId: null, trackId: null, quizMode: 'flash' })
+    useGraphStore.setState({
+      viewMode: 'home', selectedId: null, trackId: null, quizMode: 'flash', activeProjectId: null,
+    })
   })
 
   it('applies the initial hash to the store', () => {
@@ -156,5 +158,48 @@ describe('useUrlSync', () => {
     const before = window.history.length
     useGraphStore.getState().setViewMode('guide')
     expect(window.history.length).toBe(before)
+  })
+
+  // Regression for the review round-1 finding: when activeProjectId lived in a
+  // second store (resumeStore) subscribed alongside graphStore, applyRoute's
+  // two separate setState calls fired the pushIfChanged subscriber twice, once
+  // per store, and the first firing read a stale activeProjectId — producing a
+  // spurious extra pushState on every resume-project navigation. Moving
+  // activeProjectId into graphStore's single setState call (this file) closes
+  // that window: one state transition, one notification.
+  const PROJECT_A = '7f3c2a91-0000-4000-8000-000000000001'
+  const PROJECT_B = '7f3c2a91-0000-4000-8000-000000000002'
+
+  it('navigating between two resume project ids via popstate pushes no extra history entries', () => {
+    renderHook(() => useUrlSync())
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    const before = window.history.length
+    setHash(`#/resume/${PROJECT_B}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe(`#/resume/${PROJECT_B}`)
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_B)
+  })
+
+  it('returns to the resume project via Back after visiting a note, with activeProjectId intact', () => {
+    renderHook(() => useUrlSync())
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    setHash('#/list/dsa-bigo')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().viewMode).toBe('list')
+
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    const s = useGraphStore.getState()
+    expect(s.viewMode).toBe('resume')
+    expect(s.activeProjectId).toBe(PROJECT_A)
   })
 })

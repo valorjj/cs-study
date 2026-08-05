@@ -4,7 +4,6 @@ import type { GraphData } from '../graph/types'
 import { ALL_TRACKS } from '../lib/tracks'
 import { parseHash, formatHash, type Route, type RouteVocab } from '../lib/route'
 import { useGraphStore } from '../store/graphStore'
-import { useResumeStore } from '../store/resumeStore'
 import { VIEW_KEY } from './useTheme'
 
 const data = graphData as GraphData
@@ -25,25 +24,29 @@ const VOCAB: RouteVocab = {
 function routeFromState(s: ReturnType<typeof useGraphStore.getState>): Route {
   return {
     view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode,
-    projectId: useResumeStore.getState().activeProjectId,
+    projectId: s.activeProjectId,
   }
 }
 
 // parseHash defaults quizMode to 'flash' for every non-quiz view (it's not part
 // of that view's URL), so only write it when the route actually names a quiz
 // mode — otherwise navigating away from and back to the quiz tab would reset
-// the user's chosen sub-mode.
+// the user's chosen sub-mode. activeProjectId follows the same rule: it's
+// route state that lives in graphStore (like trackId/quizMode), not vault
+// state, so it belongs in this one atomic setState — a second store writing
+// on a separate notification would let the subscriber below fire on a stale
+// snapshot mid-transition (see useUrlSync.test.ts's resume-navigation case).
 function applyRoute(r: Route): void {
   useGraphStore.setState({
     viewMode: r.view,
     selectedId: r.nodeId,
     trackId: r.trackId,
     ...(r.view === 'quiz' ? { quizMode: r.quizMode } : {}),
+    // resume 뷰가 아닐 때 activeProjectId를 지우지 않는다 — 노트를 보고 돌아왔을 때
+    // 열려 있던 프로젝트로 복귀해야 한다(Task 7). URL에 안 실릴 뿐이다.
+    ...(r.view === 'resume' ? { activeProjectId: r.projectId } : {}),
     focusRequestId: null,
   })
-  // resume 뷰가 아닐 때 activeProjectId를 지우지 않는다 — 노트를 보고 돌아왔을 때
-  // 열려 있던 프로젝트로 복귀해야 한다(Task 7). URL에 안 실릴 뿐이다.
-  if (r.view === 'resume') useResumeStore.setState({ activeProjectId: r.projectId })
 }
 
 // A bare visit ('' or '#') has no route to restore, so fall back to the tab the
@@ -91,18 +94,15 @@ export function useUrlSync(): void {
     window.addEventListener('popstate', applyFromUrl)
     window.addEventListener('hashchange', applyFromUrl)
 
-    const pushIfChanged = () => {
+    const unsubscribe = useGraphStore.subscribe(() => {
       const next = formatHash(routeFromState(useGraphStore.getState()))
       if (next !== window.location.hash) window.history.pushState(null, '', next)
-    }
-    const unsubscribe = useGraphStore.subscribe(pushIfChanged)
-    const unsubscribeResume = useResumeStore.subscribe(pushIfChanged)
+    })
 
     return () => {
       window.removeEventListener('popstate', applyFromUrl)
       window.removeEventListener('hashchange', applyFromUrl)
       unsubscribe()
-      unsubscribeResume()
     }
   }, [])
 }
