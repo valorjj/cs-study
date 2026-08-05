@@ -13,6 +13,8 @@ const nodes: GraphNode[] = [
   node('db-isolation', '격리수준·이상현상', ['격리수준', '팬텀리드']),
   node('sd-mq', 'Message Queue', ['Kafka', '비동기']),
   node('spring-ioc', 'IoC / DI', ['IoC', 'DI', '생성자주입']),
+  node('sd-cache', 'Caching', ['캐시', 'look-aside']),
+  node('spring-security', 'Spring Security', ['인증', '인가']),
 ]
 
 describe('normalizeTerm', () => {
@@ -57,6 +59,21 @@ describe('matchLocal', () => {
     const m = matchLocal({ stack: ['Redis'], narrative: 'Redis 캐시를 붙였다' }, nodes)
     expect(m.filter((x) => x.nodeId === 'db-nosql')).toHaveLength(1)
     expect(m.find((x) => x.nodeId === 'db-nosql')!.via).toBe('chip')
+  })
+
+  it('matches a 2-char Korean term when a particle is attached', () => {
+    const m = matchLocal({ stack: [], narrative: '집계 결과를 캐시에 올렸다' }, nodes)
+    expect(m.map((x) => x.nodeId)).toContain('sd-cache')
+  })
+
+  it('does not match a 2-char Korean term inside an unrelated longer word', () => {
+    const m = matchLocal({ stack: [], narrative: '캐시드 리스트만 썼다' }, nodes)
+    expect(m.map((x) => x.nodeId)).not.toContain('sd-cache')
+  })
+
+  it('does not match a 2-char Korean term that is not at a token start', () => {
+    const m = matchLocal({ stack: [], narrative: '확인가능한 상태였다' }, nodes)
+    expect(m.map((x) => x.nodeId)).not.toContain('spring-security')
   })
 
   it('records the matching term as evidence', () => {

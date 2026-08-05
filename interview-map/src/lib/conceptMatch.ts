@@ -28,6 +28,16 @@ function buildIndex(nodes: GraphNode[]): Map<string, string[]> {
 // 라틴 낱말과 한글 낱말을 각각 한 토큰으로. 2글자 용어의 오탐(부분문자열)을 막는 데 쓴다.
 const TOKEN_RE = /[a-z0-9]+|[가-힣]+/g
 
+// 한국어 조사·어미는 공백 없이 붙는다("캐시를"). 2글자 용어는 토큰의 접두사로
+// 인정하되, 남는 꼬리가 조사/어미일 때만 통과시킨다 — "링크드"의 "드"는 조사가
+// 아니므로 "링크"에 매칭되지 않는다. 접두사 고정이라 "확인가능한" 안의 "인가"도
+// 걸리지 않는다.
+const PARTICLES = new Set([
+  '', '을', '를', '이', '가', '은', '는', '의', '에', '도', '만', '로', '으로',
+  '와', '과', '나', '이나', '에서', '에게', '에도', '으로도', '로도', '부터', '까지',
+  '이라', '라', '이라는', '라는', '이란', '란', '처럼', '보다', '마다', '조차',
+])
+
 export function matchLocal(
   input: { stack: string[]; narrative: string }, nodes: GraphNode[],
 ): Match[] {
@@ -47,10 +57,30 @@ export function matchLocal(
   }
 
   const flat = normalizeTerm(input.narrative)
-  const tokens = new Set((input.narrative.toLowerCase().match(TOKEN_RE) ?? []))
+  const tokens = input.narrative.toLowerCase().match(TOKEN_RE) ?? []
+
+  // 2글자 용어 매칭을 위해 shortHits 미리 계산: 토큰이 2글자 접두사 + 유효한 조사/어미일 때 추가
+  const shortHits = new Set<string>()
+  for (const token of tokens) {
+    if (token.length >= 2) {
+      const prefix = token.slice(0, 2)
+      const suffix = token.slice(2)
+      if (PARTICLES.has(suffix)) {
+        shortHits.add(prefix)
+      }
+    }
+  }
+
   for (const [term, ids] of idx) {
-    // 3글자 이상은 정규화 본문 부분일치, 2글자는 토큰 완전일치만 인정한다.
-    const hit = term.length >= 3 ? flat.includes(term) : tokens.has(term)
+    // 3글자 이상은 정규화 본문 부분일치
+    // 2글자는 조사/어미가 붙은 토큰의 접두사 완전일치만 인정한다.
+    let hit = false
+    if (term.length >= 3) {
+      hit = flat.includes(term)
+    } else if (term.length === 2) {
+      hit = shortHits.has(term)
+    }
+
     if (!hit) continue
     for (const id of ids) push(id, 'keyword', term)
   }
