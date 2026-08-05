@@ -22,8 +22,18 @@ export function ResumeView() {
     const a = document.createElement('a')
     a.href = url
     a.download = 'resume-vault-export.json'
-    a.click()
-    URL.revokeObjectURL(url)
+    // Firefox/Safari는 문서에 붙어 있지 않은 <a>의 프로그래매틱 클릭을 다운로드로
+    // 이어가지 않을 수 있고, click()과 같은 태스크에서 revoke하면 다운로드가 blob URL을
+    // 읽기 전에 무효화될 수 있다. 그래서 문서에 붙였다가 다음 tick에 지우고 revoke한다.
+    document.body.appendChild(a)
+    try {
+      a.click()
+    } finally {
+      setTimeout(() => {
+        a.remove()
+        URL.revokeObjectURL(url)
+      }, 0)
+    }
   }
 
   return (
