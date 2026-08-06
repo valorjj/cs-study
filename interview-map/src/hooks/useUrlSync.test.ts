@@ -11,7 +11,9 @@ describe('useUrlSync', () => {
   beforeEach(() => {
     localStorage.clear()
     setHash('#/home')
-    useGraphStore.setState({ viewMode: 'home', selectedId: null, trackId: null, quizMode: 'flash' })
+    useGraphStore.setState({
+      viewMode: 'home', selectedId: null, trackId: null, quizMode: 'flash', activeProjectId: null,
+    })
   })
 
   it('applies the initial hash to the store', () => {
@@ -156,5 +158,75 @@ describe('useUrlSync', () => {
     const before = window.history.length
     useGraphStore.getState().setViewMode('guide')
     expect(window.history.length).toBe(before)
+  })
+
+  // Regression for the review round-1 finding: when activeProjectId lived in a
+  // second store (resumeStore) subscribed alongside graphStore, applyRoute's
+  // two separate setState calls fired the pushIfChanged subscriber twice, once
+  // per store, and the first firing read a stale activeProjectId — producing a
+  // spurious extra pushState on every resume-project navigation. Moving
+  // activeProjectId into graphStore's single setState call (this file) closes
+  // that window: one state transition, one notification.
+  const PROJECT_A = '7f3c2a91-0000-4000-8000-000000000001'
+  const PROJECT_B = '7f3c2a91-0000-4000-8000-000000000002'
+
+  it('navigating between two resume project ids via popstate pushes no extra history entries', () => {
+    renderHook(() => useUrlSync())
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    const before = window.history.length
+    setHash(`#/resume/${PROJECT_B}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    expect(window.history.length).toBe(before)
+    expect(window.location.hash).toBe(`#/resume/${PROJECT_B}`)
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_B)
+  })
+
+  // review round 4 finding 3b: applyRoute는 r.view==='resume'일 때만 activeProjectId를
+  // 쓴다(그 조건문의 주석이 존재하는 이유가 곧 이 요건이다). 무조건 쓰게 만들면 resume이
+  // 아닌 뷰로 가는 popstate 한 번에 열려 있던 프로젝트가 지워진다 — 이 계획 전체의 헤드라인
+  // 요건인 "노트 보고 돌아오면 지도가 그대로"가 깨진다. 아래 Back 테스트는 이 뮤테이션을
+  // 잡지 못한다: 그 시나리오는 마지막에 `#/resume/A`로 돌아오므로 URL이 id를 다시 실어와
+  // 복원해버린다. 진짜로 무너지는 경로는 "노트에서 탭으로 돌아오기"다 — 그때 URL에는 id가
+  // 없고, 오직 store에 살아남은 activeProjectId만이 지도를 다시 열 수 있다.
+  it('keeps activeProjectId through a popstate onto a non-resume view (returning via the tab, not Back)', () => {
+    renderHook(() => useUrlSync())
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    // 노트 화면으로 이동하는 popstate(뒤로/앞으로, 주소창 편집) — 이 URL에는 projectId가
+    // 실리지 않는다.
+    setHash('#/list/dsa-bigo')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().viewMode).toBe('list')
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    // 이력 탭을 다시 누르는 경로(store 이동). 열려 있던 프로젝트가 그대로 살아 있어야
+    // URL도 그 프로젝트로 복귀한다.
+    useGraphStore.getState().setViewMode('resume')
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+    expect(window.location.hash).toBe(`#/resume/${PROJECT_A}`)
+  })
+
+  it('returns to the resume project via Back after visiting a note, with activeProjectId intact', () => {
+    renderHook(() => useUrlSync())
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().activeProjectId).toBe(PROJECT_A)
+
+    setHash('#/list/dsa-bigo')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+    expect(useGraphStore.getState().viewMode).toBe('list')
+
+    setHash(`#/resume/${PROJECT_A}`)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    const s = useGraphStore.getState()
+    expect(s.viewMode).toBe('resume')
+    expect(s.activeProjectId).toBe(PROJECT_A)
   })
 })

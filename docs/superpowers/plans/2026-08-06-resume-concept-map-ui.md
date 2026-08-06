@@ -45,8 +45,18 @@
 | `src/lib/mask.ts` (수정) | `CandidateKind` 를 resumeTypes에서 import, `maskGate()` 추가 |
 | `src/lib/extractPayload.ts` (수정) | 마스킹 게이트를 전송 경로에서 강제, dict를 결정에서 파생 |
 | `src/lib/route.ts` (수정) | `#/resume`·`#/resume/<projectId>` 문법 |
-| `src/store/graphStore.ts` (수정) | `ViewMode` 에 `'resume'` 추가 |
-| `src/store/resumeStore.ts` (수정) | 세션 UI 위치 슬라이스(`activeProjectId`/`mapOpen`), `maskDecisions` 반영 |
+| `src/store/graphStore.ts` (수정) | `ViewMode` 에 `'resume'` 추가, `activeProjectId` 라우트 상태 |
+| `src/store/resumeStore.ts` (수정) | 세션 UI 위치(`mapOpen`), `maskDecisions` 반영 |
+
+> **`activeProjectId` 는 `graphStore` 에 둔다** — `selectedId`·`trackId`·`quizMode` 와 같은
+> 라우트 상태이고 URL에 실린다. 금고 데이터가 아니므로 `resumeStore` 분리 이유(복호화된
+> 평문과 키를 포화된 graphStore에서 떼어놓기)가 적용되지 않는다.
+>
+> 이걸 `resumeStore` 에 두면 `useUrlSync` 가 두 store를 같은 콜백으로 구독해야 하고,
+> 그 콜백이 양쪽의 합성값을 읽는 순간 파일 헤더가 문서화한 단일구독 loop guard가
+> 무효화된다 — `applyRoute` 가 두 store를 순차로 `setState` 하므로 첫 알림이 옛 값을
+> 읽어 가짜 `pushState` 를 낸다. Task 1 리뷰에서 `history.length` 1→3 으로 실증됐다.
+> `mapOpen` 은 URL에 실리지 않으므로 `resumeStore` 에 남는다.
 | `src/lib/conceptGroups.ts` (신규) | `Match[]` + 그래프 + 숙련도 증거 → `DomainGroup[]` 어댑터 |
 | `src/hooks/useSrsKeysByNode.ts` (신규) | 노트 풀에서 노드별 SRS 카드 키 맵 구성 |
 | `src/components/ResumeView.tsx` + `.css` (신규) | 탭 루트. 금고 상태 분기 + 프로젝트 목록 |
@@ -173,16 +183,29 @@ Expected: PASS. 기존 라우트 테스트도 전부 통과해야 한다 — `DE
 export type ViewMode = 'home' | 'graph' | 'list' | 'quiz' | 'path' | 'guide' | 'resume'
 ```
 
-`src/hooks/useUrlSync.ts` — `routeFromState` 와 `applyRoute` 에 `projectId` 를 넣는다.
-프로젝트 id는 `resumeStore` 에 있고 `graphStore` 에 없으므로, 두 store를 함께 읽는다:
+`src/store/graphStore.ts` — `trackId`/`setTrackId` **바로 옆에** 같은 형태로 넣는다.
+라우트 상태이므로 여기가 집이다(위 File Structure의 주의 참조):
 
 ```ts
-import { useResumeStore } from '../store/resumeStore'
+  activeProjectId: string | null            // 내 이력 탭에서 열린 프로젝트 (URL에 실린다)
+  setActiveProject: (id: string | null) => void
+```
 
+```ts
+  activeProjectId: null,
+  setActiveProject: (id) => set({ activeProjectId: id }),
+```
+
+`src/hooks/useUrlSync.ts` — `routeFromState` 와 `applyRoute` 에 `projectId` 를 넣는다.
+**두 번째 store를 구독하지 말 것.** 필드가 `graphStore` 에 있으므로 다른 라우트
+필드와 똑같이 인자에서 읽고, 하나의 `setState` 안에서 쓴다 — 알림 한 번, loop
+guard의 전제(한 알림 = 한 원자적 전이) 유지:
+
+```ts
 function routeFromState(s: ReturnType<typeof useGraphStore.getState>): Route {
   return {
     view: s.viewMode, nodeId: s.selectedId, trackId: s.trackId, quizMode: s.quizMode,
-    projectId: useResumeStore.getState().activeProjectId,
+    projectId: s.activeProjectId,
   }
 }
 
@@ -191,36 +214,30 @@ function applyRoute(r: Route): void {
     viewMode: r.view,
     selectedId: r.nodeId,
     trackId: r.trackId,
+    // quizMode와 같은 이유로 조건부다: resume 뷰가 아닐 때 activeProjectId를 지우면,
+    // 노트를 보고 돌아왔을 때 열려 있던 프로젝트를 잃는다.
     ...(r.view === 'quiz' ? { quizMode: r.quizMode } : {}),
+    ...(r.view === 'resume' ? { activeProjectId: r.projectId } : {}),
     focusRequestId: null,
   })
-  // resume 뷰가 아닐 때 activeProjectId를 지우지 않는다 — 노트를 보고 돌아왔을 때
-  // 열려 있던 프로젝트로 복귀해야 한다(Task 7). URL에 안 실릴 뿐이다.
-  if (r.view === 'resume') useResumeStore.setState({ activeProjectId: r.projectId })
 }
 ```
 
-`activeProjectId` 는 Task 7에서 store에 추가한다. **이 태스크에서는 `resumeStore` 에
-`activeProjectId: string | null` 과 `setActiveProject(id)` 만 먼저 넣어라**(빈 슬라이스):
+기존 `useGraphStore.subscribe(...)` 는 **그대로 둔다.** 구독을 추가하지 않는다.
 
-```ts
-  activeProjectId: null,
-  setActiveProject: (id: string | null) => set({ activeProjectId: id }),
-```
+- [ ] **Step 5b: 두 상태가 함께 움직이는 경로에 테스트를 붙인다**
 
-`useUrlSync` 의 `useGraphStore.subscribe(...)` 는 graphStore만 구독한다. resumeStore의
-`activeProjectId` 변경도 URL에 반영되어야 하므로, 같은 콜백을 resumeStore에도 구독시킨다:
+`src/hooks/useUrlSync.test.ts` 또는 `useUrlSync.integration.test.ts` — 이미 `popstate` 를
+구동하는 쪽을 읽고 그 하네스에 맞춰 넣는다. 이 두 건은 회귀 방지다:
 
-```ts
-    const pushIfChanged = () => {
-      const next = formatHash(routeFromState(useGraphStore.getState()))
-      if (next !== window.location.hash) window.history.pushState(null, '', next)
-    }
-    const unsubscribe = useGraphStore.subscribe(pushIfChanged)
-    const unsubscribeResume = useResumeStore.subscribe(pushIfChanged)
-```
+1. `#/resume/<idA>` → `#/resume/<idB>` 를 `popstate` 로 이동할 때 히스토리 항목이
+   **늘지 않는다.** `window.history.length` 를 전후로 단정하고 최종 `location.hash` 도 본다.
+2. `#/resume/<id>` → `#/list/<nodeId>` → 뒤로가기 → `#/resume/<id>` 로 돌아오고
+   `activeProjectId` 가 유지된다.
 
-정리(cleanup)에서 둘 다 해제한다.
+1번은 `activeProjectId` 가 `resumeStore` 에 있고 `useUrlSync` 가 두 store를 구독하던
+구조에서 실패한다(가짜 `pushState` 2건, `history.length` 1→3). 그 구조로 돌아가려는
+어떤 변경도 이 테스트가 잡는다.
 
 - [ ] **Step 6: 탭 버튼**
 
@@ -359,7 +376,16 @@ describe('dictOf', () => {
       { text: 'C', kind: 'company', mask: true },
     ]
     expect(dictOf(d)).toEqual({ A: '[COMPANY_1]', B: '[SYSTEM_1]', C: '[COMPANY_2]' })
-    expect(dictOf(d)).toEqual(dictOf(d))
+  })
+
+  // 빈 text는 new RegExp('', 'g')가 되어 모든 위치에 매칭된다 — payload 전체가
+  // 토큰으로 도배되고, assertNoPlaintext는 빈 키를 건너뛰므로 침묵한다.
+  it('drops an empty or whitespace-only text', () => {
+    expect(dictOf([
+      { text: '정산', kind: 'company', mask: true },
+      { text: '', kind: 'company', mask: true },
+      { text: '   ', kind: 'system', mask: true },
+    ])).toEqual({ 정산: '[COMPANY_1]' })
   })
 })
 ```
@@ -517,6 +543,50 @@ export function buildExtractPayload(project: Project, nodes: GraphNode[]): Extra
 `assertNoPlaintext` 의 두 번째 인자를 `project.maskDict` 에서 파생 사전으로 바꾼 것이
 핵심이다. 나머지 함수 시그니처는 건드리지 않는다.
 
+**게이트를 넣으면 평문 스캔의 배선 테스트가 사라진다 — 반드시 복구하라.** 기존
+"마스킹이 깨진" 테스트들은 항등 사전(`{X: 'X'}`)으로 잔존 평문을 만들었는데, 사전이
+`dictOf` 파생이 되면 그런 사전을 만들 수 없다. 그 테스트들을 게이트 실패로 바꾸면
+`assertNoPlaintext` 호출을 지워도 전 스위트가 초록이 된다 — 두 예외 메시지가 모두
+`전송을 중단했습니다` 로 끝나서 느슨한 정규식이 구분하지 못한다.
+
+치환 토큰의 부분문자열인 결정 텍스트로 진짜 잔존 케이스를 만든다:
+
+```ts
+it('still catches residual plaintext after the gate passes', () => {
+  // 게이트는 통과한다 — findCandidates의 \b[A-Z]{3,}\b 는 밑줄을 넘지 못해
+  // 'COMPANY_1' 을 후보로 제안하지 않는다. 그런데 치환 결과에 키가 그대로 남는다.
+  const p: Project = {
+    ...project,
+    narrative: 'COMPANY_1 시스템을 썼다',
+    maskDecisions: [{ text: 'COMPANY_1', kind: 'company', mask: true }],
+  }
+  // 게이트가 아니라 스캔이 잡았다는 것까지 단정한다. `전송을 중단` 만 보면 둘이 구분되지 않는다.
+  expect(() => buildExtractPayload(p, nodes)).toThrow(/마스킹되지 않은 원문이 남아 있어/)
+})
+```
+
+이 테스트는 `assertNoPlaintext(payload, dict)` 줄을 주석 처리하면 **실패해야 한다.**
+직접 주석 처리해 실패를 확인하고 되돌린 출력을 보고서에 남긴다.
+
+- [ ] **Step 8b: 마스킹의 대소문자 구멍을 닫는다**
+
+`mask: true` 인 용어가 표기만 다르면 그대로 전송된다:
+
+```
+narrative: 'SettleHub 배치. settlehub 대시보드.'
+decisions: [{ text: 'SettleHub', kind: 'system', mask: true }]
+→ '[SYSTEM_1] 배치. settlehub 대시보드.'
+```
+
+`findCandidates` 는 CamelCase/ALLCAPS만 제안하므로 `settlehub` 는 후보로도 안 뜨고,
+`applyMask` 의 정규식은 대소문자를 구분하며, `assertNoPlaintext` 는 정확한 키를 찾는다.
+URL·호스트명·소문자 산문에서 실제로 일어난다.
+
+- `applyMask`: 치환을 `'gi'` 로. 긴 키 우선 정렬은 유지한다(`Settle` 이 `SettleHub` 를
+  반쪽만 갈아먹는 것을 막는 가드).
+- `assertNoPlaintext`: 원문형과 이스케이프형 **둘 다** 대소문자를 접어 비교한다.
+  건초와 바늘을 함께 접어야 한다 — 한쪽만 접으면 아무것도 안 잡힌다.
+
 - [ ] **Step 9: 픽스처 갱신**
 
 `src/lib/__fixtures__/settlementProject.ts` 와 `src/lib/extract*.test.ts`,
@@ -587,12 +657,28 @@ describe('VaultGate — status none', () => {
   })
 
   // 짧은 패스프레이즈는 PBKDF2 200k로도 무력하다. 막지 않으면 사용자는 '1234'를 쓴다.
+  //
+  // **렌더된 메시지를 단정해야 한다.** `status`만 보면 어떤 구현에서도 통과한다 —
+  // createVault는 deriveKey를 await하기 전에 상태를 건드리지 않으므로, 완벽히 유효한
+  // 패스프레이즈로 클릭한 직후에도 status는 동기적으로 'none'이다.
   it('requires a minimum length', () => {
     render(<VaultGate />)
     fireEvent.change(screen.getByLabelText('패스프레이즈'), { target: { value: 'abc' } })
     fireEvent.change(screen.getByLabelText('패스프레이즈 확인'), { target: { value: 'abc' } })
     fireEvent.click(screen.getByRole('button', { name: /금고 만들기/ }))
+    expect(screen.getByText(/최소 12자/)).toBeTruthy()
     expect(useResumeStore.getState().status).toBe('none')
+  })
+
+  // 키 파생이 200k 반복이라 눈에 보이게 느리다. 두 번 눌리면 두 번 돈다.
+  it('does not derive a second key on a double submit', async () => { /* 스파이로 호출 1회 확인, 버튼과 Enter 둘 다 */ })
+
+  // finally 블록을 지워도 스위트가 통과하면 안 된다 — 이 파일에서 가장 보안 민감한 줄이다.
+  it('clears both fields after submit, success or failure', async () => { /* 양쪽 경로 '' 확인 */ })
+
+  it('shows a message when createVault throws', async () => {
+    // crypto.subtle을 쓸 수 없는 환경(비-secure context)에서 deriveKey가 throw한다.
+    // 메시지가 없으면 입력만 비워지고 사용자는 성공과 실패를 구분할 수 없다.
   })
 
   it('creates the vault on a matching entry', async () => {
@@ -626,8 +712,11 @@ describe('VaultGate — status locked', () => {
     })
     useResumeStore.getState().lock()
     const { container } = render(<VaultGate />)
-    expect(container.textContent).not.toContain('비밀프로젝트명')
-    expect(container.textContent).not.toContain('비밀서술문')
+    // innerHTML이다. textContent는 title·aria-label·value·placeholder·data-* 를 보지
+    // 않는다 — 이 단정이 플랜의 하드 제약("잠긴 상태에서 평문이 DOM에 들어가지
+    // 않는다")을 지키는 유일한 장치이므로 속성까지 봐야 한다.
+    expect(container.innerHTML).not.toContain('비밀프로젝트명')
+    expect(container.innerHTML).not.toContain('비밀서술문')
   })
 })
 ```
@@ -818,10 +907,20 @@ const submit = async (e: React.FormEvent) => {
   const local = matchLocal({ stack, narrative }, nodes)
   // llm 매칭은 서술문에 이름이 없는 개념이라 로컬 재실행으로 복원되지 않는다.
   // 로컬 결과로 덮어쓰면 AI 추출 결과가 편집 한 번에 영구히 사라진다.
-  const keptLlm = (project?.matches ?? []).filter((m) => m.via === 'llm')
+  //
+  // 살릴 때 **현재 노드 목록과 대조해야 한다** — mergeLlm이 하는 것과 같은 가드다.
+  // 이 repo는 노드를 자주 쪼개므로, 대조하지 않으면 없어진 노드를 가리키는 유령
+  // 매칭이 영구히 쌓여 '매칭 N개'를 부풀리고 개념 지도가 찾을 수 없는 id를 만난다.
+  // level 0(도메인 헤더)도 개념이 아니므로 함께 떨어낸다.
+  const concept = new Set(nodes.filter((n) => n.level !== 0).map((n) => n.id))
+  const keptLlm = (project?.matches ?? [])
+    .filter((m) => m.via === 'llm' && concept.has(m.nodeId))
   const seen = new Set(local.map((m) => m.nodeId))
   const matches = [...local, ...keptLlm.filter((m) => !seen.has(m.nodeId))]
 
+  // upsertProject는 throw하지 않는다 — 금고가 잠겨 있으면 store의 error만 세팅하고
+  // 조용히 돌아온다. 확인 없이 onDone()을 부르면 폼이 닫히면서 사용자가 방금 쓴
+  // 서술문이 아무 메시지도 없이 사라진다. 저장 성공을 확인한 뒤에만 닫는다.
   await upsertProject({
     id: project?.id ?? crypto.randomUUID(),
     name: name.trim(), period: period.trim(), role: role.trim(),
@@ -970,6 +1069,74 @@ const preview = useMemo(() => {
 git add src/components/MaskPanel.tsx src/components/MaskPanel.test.tsx src/components/ResumeView.tsx
 git commit -m "feat(resume): 마스킹 확정 패널과 전송 전문 미리보기"
 ```
+
+---
+
+### Task 5b: 저장 성공을 store가 정직하게 보고하게 한다
+
+Task 4·5 리뷰가 같은 구멍을 두 번 잡았고, 원인은 내가 두 태스크에 처방한 판정 방식이다.
+
+**문제.** `upsertProject` 는 `set({ projects: next })` 를 내부 `persist()` 를 `await` 하기
+**전에** 실행하고, `writeStoredVault` 가 실패하면 `error` 만 세팅하고 `projects` 는 그대로
+둔다(`resumeStore.ts:69-87`, `:142-151`). 그래서 호출자가 "방금 쓴 값이 `store.projects` 에
+있는가"로 성공을 판정하면 **디스크 쓰기 실패를 절대 볼 수 없다.** 잡히는 것은 상태 가드
+거부(잠긴 금고)뿐이다. 용량 초과·직렬화 실패 시 사용자는 아무 안내도 못 받고, 새로고침하면
+결정이나 프로젝트가 사라져 있다. 리뷰어가 `await` 를 지워도 테스트가 전부 통과하는 것으로
+확인했다 — `await` 가 판정에 아무 일도 하지 않고 있었다.
+
+같은 판정이 `ProjectForm.tsx` 와 `MaskPanel.tsx` 두 곳에 복사돼 있고, Task 8이 세 번째를
+추가하게 된다. 그래서 호출 지점을 늘리기 전에 store에서 한 번에 고친다.
+
+**Files:**
+- Modify: `src/store/resumeStore.ts`
+- Modify: `src/components/ProjectForm.tsx`, `src/components/MaskPanel.tsx`
+- Test: `src/store/resumeStore.test.ts`, 두 컴포넌트 테스트
+
+**Interfaces:**
+- Produces: `upsertProject`·`removeProject` 가 저장 결과를 반환한다. 정확한 모양은 구현자가
+  정하되 **호출자가 "메모리에는 들어갔지만 디스크에는 못 썼다"를 구별할 수 있어야 한다.**
+  `Promise<void>` 로 남겨두면 안 된다.
+
+- [ ] **Step 1: 실패하는 store 테스트**
+
+`localStorage.setItem` 이 throw하도록 만들고(용량 초과 재현) `upsertProject` 를 부른다.
+반환값이 실패를 알려야 하고, `store.error` 도 세팅돼야 한다. 메모리 상태를 어떻게 할지는
+설계 판단이다 — 아래 Step 3에서 정한다.
+
+- [ ] **Step 2: 실패 확인** → 현재는 `undefined` 를 돌려주므로 실패한다.
+
+- [ ] **Step 3: 설계 판단 하나를 내리고 근거를 주석에 남긴다**
+
+디스크 쓰기가 실패했을 때 메모리의 `projects` 를 어떻게 할지 두 갈래다.
+
+| 선택 | 결과 |
+|---|---|
+| 롤백한다 | 화면이 진실(저장 안 됨)을 보여준다. 대신 사용자가 방금 타이핑한 것이 사라진다 |
+| 유지하고 실패를 반환한다 | 사용자의 입력이 화면에 남아 복사해 갈 수 있다. 대신 화면과 디스크가 다르다 |
+
+**후자를 택한다.** 이 데이터는 손으로 쓴 이력서다 — 사라지는 것이 어긋나 있는 것보다 나쁘고,
+어긋남은 반환값과 배너로 사용자에게 알릴 수 있다. 다만 그러면 "화면에 있는 것이 저장됐다"는
+가정이 깨지므로, **저장 실패 배너는 사용자가 지우거나 다음 저장이 성공할 때까지 남아야 한다.**
+이 판단과 그 대가를 `resumeStore.ts` 주석에 적는다.
+
+- [ ] **Step 4: 세 호출 지점을 새 반환값으로 옮긴다**
+
+`ProjectForm` 과 `MaskPanel` 의 `(id, updatedAt)`·결정-상태 확인을 지우고 반환값을 쓴다.
+두 곳의 주석에 적힌 "이 검사는 디스크 실패를 못 본다"는 한계 설명도 함께 지운다 — 더 이상
+사실이 아니게 되므로.
+
+- [ ] **Step 5: 각 테스트가 실패할 수 있음을 확인**
+
+반환값 확인을 지우고 세 테스트가 죽는지 본다. 출력을 보고서에 남긴다.
+
+- [ ] **Step 6: 전체 검증 + 커밋**
+
+`npx vitest run && npm run build && npm run lint`
+
+**함께 볼 것:** 재리뷰가 지적한 취약점 — 두 `persist` 호출이 직렬화되는 이유는
+`upsertProject` 의 모든 동기 작업이 유일한 `await` 앞에 있기 때문이다(JS run-to-first-await).
+`set()` 앞에 `await` 가 하나라도 들어가면 read-modify-write 창이 다시 열린다. 그 순서에
+의존한다는 사실을 주석에 적어, 나중에 비동기 검사를 추가하려는 사람이 알 수 있게 한다.
 
 ---
 
@@ -1156,12 +1323,20 @@ git commit -m "feat(resume): 도메인 그룹 어댑터와 노드별 SRS 키 수
 - Test: `src/components/ConceptMapModal.test.tsx`
 
 **Interfaces:**
-- Consumes: `layoutRadial`·`Placed` (radial), `toDomainGroups`, `useSrsKeysByNode`, `useGraphStore.openNote`, `useResumeStore` 의 `activeProjectId`·`mapOpen`
+- Consumes: `layoutRadial`·`Placed` (radial), `toDomainGroups`, `useSrsKeysByNode`, `useGraphStore` 의 `openNote`·`activeProjectId`, `useResumeStore.mapOpen`
 - Produces: `ConceptMapModal({ project, nodes })`; store에 `mapOpen: boolean`·`setMapOpen`
 
 **직전 세션에서 고친 버그와 같은 부류다:** `openNote(nodeId)` 는 `viewMode` 를 `'list'` 로
 바꾼다. `App` 이 뷰를 조건부 렌더하므로 `ResumeView` 전체가 unmount되고, 컴포넌트 로컬
 상태로 모달 열림을 들고 있으면 돌아왔을 때 닫혀 있다. 그래서 위치를 store에 둔다.
+
+> **선행 조건 (Task 3에서 발견·수정):** `resumeStore.hydrate()` 는 `status === 'unlocked'`
+> 일 때 아무것도 하지 않아야 한다. 원래 구현은 무조건 `status: 'locked', key: null` 로
+> 리셋했고, `ResumeView` 가 마운트마다 `hydrate()` 를 부르므로 **노트를 보고 돌아올 때마다
+> 금고가 다시 잠겼다** — 개념 하나 볼 때마다 패스프레이즈 재입력 + 200k PBKDF2.
+> 이 태스크의 "돌아오면 지도가 열려 있다"는 요구는 그 수정 위에서만 성립한다.
+> `mapOpen` 만 store에 옮겨도 금고가 잠기면 지도는 그릴 데이터가 없다.
+> 재마운트 통합 테스트가 `ResumeView.test.tsx` 에 있으니 함께 돌려 확인하라.
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -1261,7 +1436,8 @@ describe('ConceptMapModal', () => {
 
 - [ ] **Step 3: store 슬라이스 추가**
 
-`src/store/resumeStore.ts` — Task 1에서 넣은 `activeProjectId` 옆에:
+`src/store/resumeStore.ts` — `error` 옆에 (`activeProjectId` 는 graphStore에 있다. 라우트
+상태와 UI 위치는 다른 것이다 — `mapOpen` 은 URL에 실리지 않으므로 여기가 맞다):
 
 ```ts
   // 세션 전용 UI 위치. 영속화하지 않는다 — 새로고침하면 금고가 잠기므로 복원할 지도가
@@ -1271,7 +1447,8 @@ describe('ConceptMapModal', () => {
   setMapOpen: (open: boolean) => void
 ```
 
-`lock()` 과 `destroyVault()` 에서 `mapOpen: false`, `activeProjectId: null` 로 함께 초기화한다 —
+`lock()` 과 `destroyVault()` 에서 `mapOpen: false` 로 초기화한다. `activeProjectId` 는
+`graphStore` 에 있으므로 `useGraphStore.getState().setActiveProject(null)` 로 함께 지운다 —
 잠긴 뒤 지도가 열려 있으면 안 된다.
 
 - [ ] **Step 4: 구현**

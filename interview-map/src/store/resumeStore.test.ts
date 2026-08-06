@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useResumeStore, readStoredVault, RESUME_KEY } from './resumeStore'
+import { useGraphStore } from './graphStore'
 import { toB64 } from '../lib/vault'
 import type { Project } from '../lib/resumeTypes'
 
 const project = (id: string, name: string): Project => ({
   id, name, period: '2025', role: 'backend', stack: ['Redis'],
-  lifecycle: ['tx'], narrative: '서술문', maskDict: {}, matches: [],
+  lifecycle: ['tx'], narrative: '서술문', maskDecisions: [], matches: [],
   updatedAt: '2026-08-05T00:00:00.000Z',
 })
 
@@ -69,12 +70,42 @@ describe('resumeStore', () => {
     expect(s.sealed).not.toBeNull()
   })
 
+  // Task 7 fix round 1, finding 1: 잠긴 뒤에는 그릴 데이터(projects)가 없으므로 지도가
+  // 열려 있으면 안 된다. activeProjectId는 graphStore에 있지만(라우트 상태), 그게 잠긴
+  // 채로 남아 있으면 다음에 언락했을 때 지도가 이전에 보던 프로젝트로 자동으로 다시
+  // 열리는 것처럼 보일 수 있다 — 둘 다 lock()이 지워야 한다.
+  it('lock() closes the concept map and clears the active project', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.setState({ mapOpen: true })
+    useGraphStore.setState({ activeProjectId: 'p1' })
+
+    useResumeStore.getState().lock()
+
+    expect(useResumeStore.getState().mapOpen).toBe(false)
+    expect(useGraphStore.getState().activeProjectId).toBeNull()
+  })
+
   it('hydrate finds a stored vault and reports locked', async () => {
     await useResumeStore.getState().createVault('pw')
     await useResumeStore.getState().upsertProject(project('p1', '정산'))
     useResumeStore.setState(useResumeStore.getInitialState())
     useResumeStore.getState().hydrate()
     expect(useResumeStore.getState().status).toBe('locked')
+  })
+
+  // 파생 키는 메모리 전용이라, 이미 unlocked인 상태에서 hydrate가 무조건 재실행되면
+  // (컴포넌트 재마운트, StrictMode의 이펙트 이중 호출 등) 키를 잃고 강제로 재잠금된다.
+  // 사용자는 아무것도 안 했는데 200k PBKDF2를 다시 치르게 된다.
+  it('hydrate is a no-op while already unlocked — it must not re-lock or drop the key', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const before = useResumeStore.getState()
+    useResumeStore.getState().hydrate()
+    const after = useResumeStore.getState()
+    expect(after.status).toBe('unlocked')
+    expect(after.key).toBe(before.key)
+    expect(after.projects).toEqual(before.projects)
   })
 
   it('unlock with the right passphrase restores the projects', async () => {
@@ -162,6 +193,21 @@ describe('resumeStore', () => {
     expect(useResumeStore.getState().projects).toEqual([])
   })
 
+  // Task 7 fix round 1, finding 1: destroyVault도 lock()과 같은 이유로 mapOpen과
+  // activeProjectId를 지운다 — 금고 자체가 없어졌는데 이전 프로젝트를 가리키는 지도가
+  // 열려 있으면 안 된다.
+  it('destroyVault() closes the concept map and clears the active project', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    useResumeStore.setState({ mapOpen: true })
+    useGraphStore.setState({ activeProjectId: 'p1' })
+
+    useResumeStore.getState().destroyVault()
+
+    expect(useResumeStore.getState().mapOpen).toBe(false)
+    expect(useGraphStore.getState().activeProjectId).toBeNull()
+  })
+
   it('destroyVault clears localStorage', async () => {
     await useResumeStore.getState().createVault('pw')
     await useResumeStore.getState().upsertProject(project('p1', '정산'))
@@ -178,10 +224,199 @@ describe('resumeStore', () => {
     const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')
     })
-    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
     spy.mockRestore()
+    // 이 단정이 핵심이다 — 반환값을 무시하고 memory만 보면(store.projects에 p1이
+    // 있는지) 이 실패를 절대 볼 수 없다. 실제로 있음도 확인한다(설계 판단: 롤백하지
+    // 않고 메모리는 유지한다).
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('disk')
+      expect(result.error).toMatch(/저장하지 못했습니다|저장 공간/)
+    }
     expect(useResumeStore.getState().error).toMatch(/저장하지 못했습니다|저장 공간/)
     expect(useResumeStore.getState().sealed).toBe(sealedBefore)
+    expect(useResumeStore.getState().projects.map((p) => p.id)).toEqual(['p1'])
+    // 디스크와 어긋난 채로 남았다는 신호 — lock()이 이걸 확인 없이 지우면 안 된다
+    // (review round 1 finding 4).
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(true)
+  })
+
+  it('a subsequent successful write clears hasUnsavedFailure', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    spy.mockRestore()
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(true)
+    await useResumeStore.getState().upsertProject(project('p1', '정산 v2'))
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(false)
+  })
+
+  it('upsertProject returns ok:true when the disk write succeeds', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('upsertProject returns ok:false with reason "locked" when the vault is locked', async () => {
+    await useResumeStore.getState().createVault('pw')
+    useResumeStore.getState().lock()
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('locked')
+      expect(result.error).toMatch(/잠겨/)
+    }
+  })
+
+  // review round 1 finding 1: upsertProject의 동기 구간(가드 → set())이 끝난 뒤, persist()가
+  // 큐에서 실제로 돌기 전에 다른 동기 호출로 lock()이 끼어들면 key/salt가 사라진다. round 0
+  // 구현은 이 분기에서 `{ ok: true }`를 돌려줬다 — 아무것도 안 쓰고 성공을 자처하는 거짓
+  // 보고였다. 이 테스트는 upsertProject()를 호출한 그 다음 줄(아직 어떤 await도 지나지 않은
+  // 동기 시점)에서 lock()을 불러 정확히 그 경합을 재현한다.
+  it('reports failure (not false success) when the vault is locked before the queued write runs', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const diskBefore = localStorage.getItem(RESUME_KEY)
+    const promise = useResumeStore.getState().upsertProject(project('p1', '정산'))
+    // upsertProject의 동기 구간(가드 체크 → set() → persist() 호출)은 이미 다 끝났고,
+    // persist()가 큐에 올린 실제 작업은 아직 microtask로도 시작 전이다 — 지금 lock()을
+    // 동기로 부르면 그 작업이 실행될 때 key가 이미 null이다.
+    useResumeStore.getState().lock()
+    const result = await promise
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('locked')
+      expect(result.error).toMatch(/잠겨/)
+    }
+    // 디스크는 손대지 않았어야 한다 — 쓰기를 시도조차 못했다.
+    expect(localStorage.getItem(RESUME_KEY)).toBe(diskBefore)
+  })
+
+  it('removeProject has the same mid-flight-lock protection as upsertProject', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const diskBefore = localStorage.getItem(RESUME_KEY)
+    const promise = useResumeStore.getState().removeProject('p1')
+    useResumeStore.getState().lock()
+    const result = await promise
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('locked')
+    expect(localStorage.getItem(RESUME_KEY)).toBe(diskBefore)
+  })
+
+  it('removeProject sets an error but still reports the disk-write failure via the return value', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    const sealedBefore = useResumeStore.getState().sealed
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    const result = await useResumeStore.getState().removeProject('p1')
+    spy.mockRestore()
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('disk')
+    // 설계 판단(brief Step 3)은 "메모리는 그 호출이 만든 결과를 그대로 유지하고 실패를
+    // 반환한다"이다 — removeProject의 경우 그 결과는 "제거됨"이므로 메모리에서도
+    // 제거된 채로 둔다. 롤백하지 않는다는 건 sealed(디스크 스냅샷)가 그대로라는
+    // 뜻이지, 방금 한 메모리 연산을 되돌린다는 뜻이 아니다.
+    expect(useResumeStore.getState().projects).toEqual([])
+    expect(useResumeStore.getState().sealed).toBe(sealedBefore)
+  })
+
+  // review round 1 finding 7: 예기치 않은 예외(sealJson 등)가 나도 브라우저의 원본 예외
+  // 문구를 사용자에게 그대로 보여주면 안 된다. crypto.subtle.encrypt 자체가 던지도록
+  // 만들어 그 예외가 화면까지 새지 않는지 확인한다.
+  it('shows a generic Korean message, not the raw exception text, when sealJson throws unexpectedly', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const encryptSpy = vi.spyOn(crypto.subtle, 'encrypt').mockRejectedValueOnce(
+      new Error("Failed to execute 'encrypt' on 'SubtleCrypto': raw browser text"),
+    )
+    const result = await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    encryptSpy.mockRestore()
+    consoleSpy.mockRestore()
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.reason).toBe('disk')
+      expect(result.error).not.toContain('SubtleCrypto')
+      expect(result.error).toMatch(/저장 공간|저장하지 못했습니다/)
+    }
+    expect(useResumeStore.getState().error).not.toContain('SubtleCrypto')
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(true)
+  })
+
+  // review round 1 finding 4: lock()이 error를 지우면 안 된다 — 잠그는 행위 자체가 저장
+  // 실패를 해결한 게 아니다.
+  it('lock() does not clear a pending save-failure error', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    spy.mockRestore()
+    const errorBefore = useResumeStore.getState().error
+    expect(errorBefore).not.toBeNull()
+    useResumeStore.getState().lock()
+    expect(useResumeStore.getState().error).toBe(errorBefore)
+    // hasUnsavedFailure는 잠그는 순간 사라진다 — projects가 []로 비워져 그 어긋남 자체가
+    // 없어지기 때문이다(사용자의 동의를 받는 건 store가 아니라 UI의 책임).
+    expect(useResumeStore.getState().hasUnsavedFailure).toBe(false)
+  })
+
+  it('clearError lets the user dismiss a save-failure message explicitly', async () => {
+    await useResumeStore.getState().createVault('pw')
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    spy.mockRestore()
+    expect(useResumeStore.getState().error).not.toBeNull()
+    useResumeStore.getState().clearError()
+    expect(useResumeStore.getState().error).toBeNull()
+  })
+
+  it('createVault rolls back to status "none" and reports an error when the first disk write fails', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError')
+    })
+    await useResumeStore.getState().createVault('pw')
+    spy.mockRestore()
+    // 지킬 사용자 입력이 없는 케이스(빈 금고)라 롤백을 택했다 — status는 'none'에
+    // 머물러야 하고, 디스크에도 아무것도 남지 않아야 한다(반쪽 상태 방지).
+    expect(useResumeStore.getState().status).toBe('none')
+    expect(useResumeStore.getState().error).toMatch(/저장 공간|금고를 만들지 못했습니다/)
+    expect(localStorage.getItem(RESUME_KEY)).toBeNull()
+    // "반쪽 상태 없음"이라는 주장 자체를 직접 확인한다(review round 1 finding 9) —
+    // status만 보고 넘어가면 key/salt/sealed가 남아 있어도 이 테스트는 몰랐을 것이다.
+    expect(useResumeStore.getState().key).toBeNull()
+    expect(useResumeStore.getState().salt).toBeNull()
+    expect(useResumeStore.getState().sealed).toBeNull()
+  })
+
+  // review round 4 finding 3a: 기존 왕복 테스트("unlock with the right passphrase restores
+  // the projects")는 getInitialState() + hydrate()를 거친다 — 즉 *디스크*를 다시 읽는다.
+  // 하지만 실제 사용자의 잠그기→열기는 한 세션 안에서 일어나고, unlock()은 localStorage가
+  // 아니라 메모리의 get().sealed를 복호화한다. 그래서 persist()의 성공 분기에서
+  // `sealed: blob`을 빼먹으면(세션 중에 추가한 프로젝트가 in-memory 암호문에 반영되지
+  // 않으면) 잠그기→열기에서 그 프로젝트들이 전부 사라지고 새로고침해야 돌아온다 —
+  // 복구 경로가 없는 금고에서 가장 나쁘게 보이는 버그인데, 디스크를 경유하는 기존
+  // 테스트는 이 필드를 전혀 건드리지 않아 그대로 초록이었다. 여기서는 잠근 뒤
+  // localStorage를 지워버려서, 복원이 오직 메모리의 sealed로만 이루어지게 만든다.
+  it('unlock() restores projects added during the session from the in-memory sealed blob', async () => {
+    await useResumeStore.getState().createVault('pw')
+    await useResumeStore.getState().upsertProject(project('p1', '정산'))
+    await useResumeStore.getState().upsertProject(project('p2', '배치'))
+
+    useResumeStore.getState().lock()
+    expect(useResumeStore.getState().projects).toEqual([])
+    // 디스크를 지운다 — 이 시점 이후의 복원은 메모리의 sealed(=persist가 갱신했어야 하는
+    // 값)로만 가능하다. hydrate()를 부르지 않으므로 salt/sealed도 메모리 그대로다.
+    localStorage.clear()
+
+    expect(await useResumeStore.getState().unlock('pw')).toBe(true)
+    expect(useResumeStore.getState().projects.map((p) => p.name)).toEqual(['정산', '배치'])
   })
 
   it('persists both of two concurrent upserts', async () => {

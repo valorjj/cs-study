@@ -1,0 +1,44 @@
+.cmm-overlay { position: fixed; inset: 0; background: color-mix(in srgb, black 55%, transparent);
+  display: flex; align-items: center; justify-content: center; z-index: 50; }
+.cmm-dialog { width: min(960px, 94vw); max-height: 90vh; overflow: auto; background: var(--bg-panel);
+  border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: flex;
+  flex-direction: column; gap: 12px; }
+.cmm-head { display: flex; align-items: center; justify-content: space-between; }
+.cmm-title { margin: 0; font-size: 16px; color: var(--text-strong); }
+.cmm-close { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg-elev); color: var(--text); cursor: pointer; }
+.cmm-empty { color: var(--text-dim); font-size: 13px; border-left: 3px solid var(--border-strong);
+  padding-left: 8px; margin: 0; }
+
+/* 900x900 고정, 스케일하지 않는다(의도적) — 이 지도는 반응형 범위 밖이다(플랜 제약).
+   svg는 width/height 속성을 900으로 못박아 뒀다(viewBox와 1:1) — CSS로 %를 주면 컨테이너
+   폭이 좁아질 때(다이얼로그가 min(960px, 94vw)라 좁은 화면에서 줄어든다) svg만 비율대로
+   줄어들고, 노드는 calc(50% + Npx)로 그 컨테이너의 50%를 기준으로 움직여 서로 다른
+   좌표계로 갈라진다 — 연결선이 중심으로 쪼그라드는데 버튼은 그대로 있는 시각적 깨짐이
+   됐었다. max-width:100%를 빼서 캔버스 자체를 항상 900px로 고정하면 두 좌표계가 항상
+   일치한다 — 좁은 화면에서는 다이얼로그가 스크롤(overflow:auto, 위에서 이미 설정)된다. */
+.cmm-canvas { position: relative; width: 900px; height: 900px; margin: 0 auto; }
+.cmm-lines { position: absolute; top: 0; left: 0; pointer-events: none; }
+.cmm-lines line { stroke: var(--edge); stroke-width: 1; }
+
+.cmm-project, .cmm-domain, .cmm-concept { position: absolute; white-space: nowrap; }
+
+.cmm-project { padding: 10px 16px; border-radius: 999px; background: var(--accent);
+  color: var(--node-studied-text); font-weight: 700; }
+
+.cmm-domain { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+  border-radius: 10px; border: 2px solid var(--c, var(--border)); background: var(--bg-elev);
+  color: var(--text); font-weight: 600; font-size: 13px; }
+.cmm-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 18px;
+  padding: 0 5px; border-radius: 999px; background: var(--border-strong); color: var(--text-strong);
+  font-size: 11px; font-weight: 800; }
+
+.cmm-concept { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px;
+  border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text-dim);
+  font-size: 12px; cursor: pointer; }
+.cmm-concept-icon { font-size: 11px; }
+.cmm-concept[data-tier="solid"] { border-color: var(--accent); color: var(--text-strong); }
+.cmm-concept[data-tier="shaky"] { border-color: var(--border-strong); color: var(--text); }
+.cmm-concept[data-tier="unverified"] { border-color: var(--border); color: var(--text-dim); }
+.cmm-concept[data-tier="loading"] { border-color: var(--border); color: var(--text-dim); opacity: .7; }
+.cmm-concept:hover { background: var(--bg-elev); }

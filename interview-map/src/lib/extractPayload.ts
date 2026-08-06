@@ -5,7 +5,7 @@
 // 평문 잔존 검사는 이 함수 안에서 돈다. 규약(주석)으로만 두면 호출자가 건너뛸 수
 // 있고, 실제로 이 주석이 다음 UI 작업에 그 우회를 권하고 있었다. 안전 속성은
 // 문장이 아니라 코드가 강제해야 한다.
-import { applyMask } from './mask'
+import { applyMask, buildNeverMask, dictOf, maskGate } from './mask'
 import type { Project, Stage } from './resumeTypes'
 import type { GraphNode } from '../graph/types'
 
@@ -43,12 +43,20 @@ export interface ExtractPayload {
 // 빼거나 사전에서 지워라" 식으로 대응할 수 있다. 이 판별은 메시지 문구를 위한
 // 것일 뿐 검사의 권위가 아니다 — 전체 payload 스캔이 계속 최종 권위로 남아야,
 // 나중에 필드가 추가돼도 빠짐없이 걸린다.
+// 대소문자를 접어 비교한다 — applyMask가 대소문자 무시로 치환하므로(위 주석 참조),
+// 검사도 같은 전제를 따라야 "치환됐다"와 "검사에서 발견되지 않는다"가 어긋나지 않는다.
+function fold(s: string): string {
+  return s.toLowerCase()
+}
+
 function locatePlaintext(
   payload: ExtractPayload,
   plain: string,
   escaped: string,
 ): string {
-  const hit = (s: string): boolean => s.includes(plain) || s.includes(escaped)
+  const foldedPlain = fold(plain)
+  const foldedEscaped = fold(escaped)
+  const hit = (s: string): boolean => fold(s).includes(foldedPlain) || fold(s).includes(foldedEscaped)
   if (payload.stack.some(hit)) return '기술스택 칩'
   if (payload.catalog.some((c) => hit(c.id) || hit(c.label) || c.keywords.some(hit))) return '개념 목록'
   if (hit(payload.maskedNarrative)) return '서술문'
@@ -62,12 +70,18 @@ function locatePlaintext(
 // 나중에 payload에 필드가 추가되면 필드별 열거 목록이 조용히 낡기 때문이다 —
 // locatePlaintext는 그 전체 스캔이 이미 걸린 뒤에만, 메시지에 위치를 덧붙이려고
 // 개별 필드를 들여다본다.
+//
+// 대소문자를 접어 비교한다(haystack과 needle 둘 다) — applyMask가 대소문자 무시로
+// 치환하므로 원문이 "SettleHub"든 "settlehub"든 이미 같은 실체로 취급된다. 한쪽만
+// 접으면(예: json은 그대로 두고 plain만 소문자로) 대소문자가 다른 잔존을 놓친다.
 export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, string>): void {
-  const json = JSON.stringify(payload)
+  const json = fold(JSON.stringify(payload))
   for (const plain of Object.keys(dict)) {
     if (!plain) continue   // 빈 키는 모든 문자열에 걸리므로 검사 대상이 아니다
     const escaped = JSON.stringify(plain).slice(1, -1)   // 양쪽 따옴표 제거
-    if (json.includes(plain) || json.includes(escaped)) {
+    const foldedPlain = fold(plain)
+    const foldedEscaped = fold(escaped)
+    if (json.includes(foldedPlain) || json.includes(foldedEscaped)) {
       const location = locatePlaintext(payload, plain, escaped)
       throw new Error(
         `payload에 마스킹되지 않은 원문이 남아 있어 전송을 중단했습니다: ${plain} (위치: ${location})`,
@@ -78,14 +92,27 @@ export function assertNoPlaintext(payload: ExtractPayload, dict: Record<string, 
 
 // 프로젝트명·기간·역할은 추출에 필요 없으므로 애초에 담지 않는다 (최소 전송).
 export function buildExtractPayload(project: Project, nodes: GraphNode[]): ExtractPayload {
+  // 게이트가 먼저다. 결정되지 않은 후보가 하나라도 있으면 payload를 만들지 않는다.
+  // UI의 disabled 속성이 아니라 이 검사가 규칙이다 — 버튼을 우회하는 다음 코드가
+  // 생겨도 여기서 막힌다.
+  const neverMask = buildNeverMask(nodes)
+  const gate = maskGate(project.narrative, project.maskDecisions, neverMask)
+  if (!gate.ready) {
+    throw new Error(
+      `마스킹 여부가 결정되지 않은 후보가 ${gate.undecided.length}개 있어 전송을 중단했습니다: ` +
+      gate.undecided.map((c) => c.text).join(', '),
+    )
+  }
+
+  const dict = dictOf(project.maskDecisions)
   const payload: ExtractPayload = {
-    maskedNarrative: applyMask(project.narrative, project.maskDict),
+    maskedNarrative: applyMask(project.narrative, dict),
     stack: project.stack,
     lifecycle: project.lifecycle,
     catalog: nodes
       .filter((n) => n.level !== 0)
       .map((n) => ({ id: n.id, label: n.label, keywords: n.keywords })),
   }
-  assertNoPlaintext(payload, project.maskDict)
+  assertNoPlaintext(payload, dict)
   return payload
 }

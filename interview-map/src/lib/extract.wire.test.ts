@@ -19,16 +19,20 @@ const nodes: GraphNode[] = [
 ]
 
 // 서술문이 마스킹 대상 용어를 실제로 여러 개, 여러 형태(원문 그대로)로 담고 있는
-// 프로젝트. maskDict가 이들을 전부 가려야 payload가 나간다.
+// 프로젝트. maskDecisions가 이들을 전부 가리기로 결정해야 payload가 나간다.
 const project: Project = {
   id: 'p1', name: '정산', period: '2025', role: 'backend',
   stack: ['Redis'], lifecycle: ['tx'],
   narrative: 'SettleHub 배치가 두 번 돌았다. 담당자 kim@internal-corp.example 에게 보고했다.',
-  maskDict: {
-    SettleHub: '[SYSTEM_1]',
-    'kim@internal-corp.example': '[CONTACT_1]',
-  },
+  maskDecisions: [
+    { text: 'SettleHub', kind: 'system', mask: true },
+    { text: 'kim@internal-corp.example', kind: 'contact', mask: true },
+  ],
   matches: [], updatedAt: '2026-08-05T00:00:00.000Z',
+}
+const maskDict = {
+  SettleHub: '[SYSTEM_1]',
+  'kim@internal-corp.example': '[CONTACT_1]',
 }
 
 describe('requestExtract wire body — no confirmed mask key ever reaches the network', () => {
@@ -40,7 +44,7 @@ describe('requestExtract wire body — no confirmed mask key ever reaches the ne
     const [, opts] = invoke.mock.calls[0] as [string, { body: unknown }]
     const wireBody = JSON.stringify(opts.body)
 
-    for (const plain of Object.keys(project.maskDict)) {
+    for (const plain of Object.keys(maskDict)) {
       expect(wireBody).not.toContain(plain)
       const escaped = JSON.stringify(plain).slice(1, -1)
       expect(wireBody).not.toContain(escaped)
@@ -52,8 +56,8 @@ describe('requestExtract wire body — no confirmed mask key ever reaches the ne
   // 전송 직전에 검사가 돈다. 이 테스트는 그 이음새가 다시 생기면 깨진다.
   it('never reaches the network when the mask leaves plaintext behind', async () => {
     invoke.mockResolvedValue({ data: { nodeIds: [], reasons: {} }, error: null })
-    // 사전 키가 자기 자신으로 치환되어 원문이 그대로 남는 상태
-    const broken = { ...project, maskDict: { SettleHub: 'SettleHub' } }
+    // 결정이 하나도 없는 상태 — 이메일 후보가 undecided로 남아 게이트가 막는다.
+    const broken = { ...project, maskDecisions: [] }
     await expect(requestExtract(broken, nodes)).rejects.toThrow(/전송을 중단/)
     expect(invoke).not.toHaveBeenCalled()
   })
