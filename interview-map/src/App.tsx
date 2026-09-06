@@ -5,6 +5,7 @@ import type { GraphData } from './graph/types'
 import { toFlowNodes, toFlowEdges, buildAdjacency } from './lib/graphUtils'
 import { layoutNodes } from './lib/layout'
 import { buildTree } from './lib/tree'
+import { AppShell } from './components/AppShell'
 import { GraphCanvas } from './components/GraphCanvas'
 import { NotePanel } from './components/NotePanel'
 import { DocsView } from './components/DocsView'
@@ -14,15 +15,19 @@ import { PathView } from './components/PathView'
 import { GuideView } from './components/GuideView'
 import { ResumeView } from './components/ResumeView'
 import { SearchBar } from './components/SearchBar'
-import { ThemeSwitcher } from './components/ThemeSwitcher'
-import { AuthButton } from './components/AuthButton'
-import { ViewToggle } from './components/ViewToggle'
-import { useGraphStore } from './store/graphStore'
+import { useGraphStore, type ViewMode } from './store/graphStore'
 import { useThemeEffect, useViewModeEffect } from './hooks/useTheme'
 import { useCloudSync } from './hooks/useCloudSync'
 import { useUrlSync } from './hooks/useUrlSync'
 
 const data = graphData as GraphData
+
+// Search only means something where there is a graph or a list to search.
+// Elsewhere the top bar shows the destination's name so it is never empty.
+const TITLES: Record<ViewMode, string> = {
+  home: '홈', graph: '개념 지도', list: '개념 목록', quiz: '퀴즈',
+  path: '학습 코스', resume: '내 이력', guide: '가이드',
+}
 
 export default function App() {
   useThemeEffect()
@@ -39,8 +44,13 @@ export default function App() {
   const neighbors = useMemo(() => buildAdjacency(data.edges), [])
   const tree = useMemo(() => buildTree(data.nodes, data.edges), [])
 
+  const searchable = viewMode === 'graph' || viewMode === 'list'
+  const lead = searchable
+    ? <SearchBar nodes={data.nodes} />
+    : <span className="shell-title">{TITLES[viewMode]}</span>
+
   return (
-    <>
+    <AppShell lead={lead}>
       {viewMode === 'graph' && (
         <>
           <GraphCanvas nodes={nodes} edges={edges} />
@@ -55,10 +65,6 @@ export default function App() {
       {viewMode === 'path' && <PathView nodes={data.nodes} nodesById={nodesById} />}
       {viewMode === 'guide' && <GuideView />}
       {viewMode === 'resume' && <ResumeView />}
-      {(viewMode === 'graph' || viewMode === 'list') && <SearchBar nodes={data.nodes} />}
-      <AuthButton />
-      <ThemeSwitcher />
-      <ViewToggle />
-    </>
+    </AppShell>
   )
 }

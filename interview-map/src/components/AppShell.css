@@ -1,0 +1,71 @@
+:root {
+  --rail-w: 60px;
+  --top-h: 54px;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-rows: var(--top-h) minmax(0, 1fr);
+  grid-template-areas:
+    'rail top'
+    'rail main';
+  height: 100dvh;
+  background: var(--bg);
+  font-family: var(--sans);
+}
+
+/* Full-height rail so the top bar keeps the whole remaining width — with seven
+   destinations plus search, auth and theme, a single top row crowds at 1280px. */
+.rail { grid-area: rail; }
+.shell-top { grid-area: top; }
+.shell-main { grid-area: main; }
+
+.shell-top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  min-width: 0;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  /* the search dropdown and the auth/theme popovers hang out of this row */
+  overflow: visible;
+  position: relative;
+  z-index: 20;
+}
+.shell-lead { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; }
+.shell-trail { flex: none; display: flex; align-items: center; gap: 8px; }
+
+/* The view's cell. min-height:0 lets inner scroll containers actually scroll
+   instead of growing the grid row. */
+.shell-main {
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Plain view title for the modes that have no search box, so the top bar is
+   never empty and the user always knows where they are. */
+.shell-title {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-strong);
+  letter-spacing: -0.01em;
+}
+
+@media (max-width: 768px) {
+  :root { --top-h: calc(52px + env(safe-area-inset-top)); }
+  /* Rail becomes a bottom tab bar — still a grid row, so it never covers text. */
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--top-h) minmax(0, 1fr) auto;
+    grid-template-areas:
+      'top'
+      'main'
+      'rail';
+  }
+  .shell-top { padding: env(safe-area-inset-top) 12px 0; gap: 10px; }
+}

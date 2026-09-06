@@ -1,27 +1,66 @@
-.docs { position: fixed; inset: 0; display: flex; background: var(--bg);
-  padding-top: 60px; box-sizing: border-box; }
-.docs-tree { width: 320px; flex: none; height: 100%; min-height: 0; }
-.docs-content { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column;
-  background: var(--bg-panel); }
+/* Three reading columns. Not `position: fixed; inset: 0` any more — the view
+   sits inside the app shell's main cell, so it no longer has to guess the top
+   bar's height with a hardcoded padding-top. */
+.docs {
+  height: 100%;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 248px;
+  background: var(--bg);
+}
+
+.docs-tree { min-width: 0; min-height: 0; }
+.docs-doc { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.docs-rail { min-width: 0; min-height: 0; }
+
 .docs-back { display: none; }
 
-.docs-empty { flex: 1; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 14px; color: var(--text-dim); font-family: system-ui, sans-serif; }
+.docs-empty {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--text-dim);
+  font-family: var(--sans);
+}
 .docs-empty p { margin: 0; font-size: 14px; }
 
+/* Drop the rail; its content reappears as a card above the body. */
+@media (max-width: 1200px) {
+  .docs { grid-template-columns: 260px minmax(0, 1fr); }
+  .docs-rail { display: none; }
+  .docs-empty { grid-column: 2; }
+}
+
+@media (max-width: 900px) {
+  .docs { grid-template-columns: 224px minmax(0, 1fr); }
+}
+
+/* One column: the tree is the screen until a topic is picked, then the note is.
+   The back bar pins to the top of the document's own scroll port. */
 @media (max-width: 768px) {
-  .docs { padding-top: calc(72px + env(safe-area-inset-top)); }
-  .docs-tree { width: 100vw; }
-  .docs-content { display: none; }
-  /* When a topic is selected: swap tree for the note, full-screen; the note
-     scrolls as one, with the back bar and section tabs pinned. */
-  .docs[data-selected="true"] .docs-tree { display: none; }
-  .docs[data-selected="true"] .docs-content { display: flex; overflow-y: auto; }
-  .docs-back { display: flex; width: 100%; align-items: center; gap: 4px; flex: none;
-    position: sticky; top: 0; z-index: 6;
-    background: var(--bg-elev); border: none; border-bottom: 1px solid var(--border);
-    color: var(--text); font-size: 14px; font-weight: 600; padding: 12px 16px;
-    cursor: pointer; font-family: system-ui, sans-serif; }
-  /* Tabs pin just below the sticky back bar (≈ its height). */
-  .docs .np-tabs { top: 45px; }
+  .docs { grid-template-columns: minmax(0, 1fr); }
+  .docs[data-selected='true'] .docs-tree { display: none; }
+  .docs[data-selected='false'] .docs-doc,
+  .docs[data-selected='false'] .docs-rail { display: none; }
+  .docs-empty { grid-column: 1; display: none; }
+
+  .docs-back {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: none;
+    width: 100%;
+    padding: 11px 16px;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-panel);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 650;
+    cursor: pointer;
+  }
 }

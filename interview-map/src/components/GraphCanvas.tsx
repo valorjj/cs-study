@@ -135,7 +135,7 @@ export function GraphCanvas({ nodes, edges }: { nodes: Node[]; edges: Edge[] }) 
     return buildAdjacency(edges.map((e) => ({ source: e.source, target: e.target, type: 'hierarchy' as const })))
   }, [edges])
   return (
-    <div style={{ width: '100vw', height: '100vh', background: 'var(--bg)' }}>
+    <div style={{ width: '100%', height: '100%', background: 'var(--bg)' }}>
       <ReactFlowProvider>
         <Inner nodes={nodes} edges={edges} adjacency={adjacency} />
       </ReactFlowProvider>

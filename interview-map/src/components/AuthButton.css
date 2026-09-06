@@ -1,4 +1,4 @@
-.auth { position: fixed; top: 14px; right: 62px; z-index: 30; font-family: system-ui, sans-serif; }
+.auth { position: relative; flex: none; font-family: var(--sans); }
 .auth-login, .auth-user { display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
   background: var(--bg-panel); border: 1px solid var(--border); color: var(--text);
   border-radius: 999px; padding: 7px 13px; font-size: 13px; font-weight: 600; }
@@ -17,6 +17,6 @@
 .auth-g { width: 15px; text-align: center; font-weight: 800; color: #4285f4; }
 
 @media (max-width: 768px) {
-  .auth { top: 10px; right: 58px; }
   .auth-name { display: none; }
+  .auth-login, .auth-user { padding: 6px 11px; }
 }

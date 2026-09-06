@@ -1,98 +1,59 @@
-.np-panel { position: fixed; top: 0; right: 0; width: min(560px, 94vw); height: 100vh;
-  background: var(--bg-panel); border-left: 1px solid var(--border); color: var(--text);
-  display: flex; flex-direction: column; overflow: hidden; z-index: 10;
-  font-family: system-ui, sans-serif; box-shadow: -12px 0 32px rgba(0,0,0,0.4); }
-
-/* Fixed top block: header, summary, keywords, related */
-.np-top { flex: none; position: relative; padding: 22px 26px 12px; }
-.np-close { position: absolute; top: 12px; right: 16px; background: none; border: none;
-  color: var(--text-dim); font-size: 26px; cursor: pointer; line-height: 1; z-index: 2; }
-.np-close:hover { color: var(--text); }
-.np-head { display: flex; align-items: center; gap: 10px; border-left: 4px solid; padding-left: 12px; }
-.np-head h2 { margin: 0; font-size: 20px; }
-.np-icon { display: flex; align-items: center; justify-content: center; }
-.np-done {
-  margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 12.5px; font-weight: 600; padding: 5px 11px; border-radius: 999px; cursor: pointer;
-  border: 1.5px solid color-mix(in srgb, var(--c) 45%, var(--border)); background: transparent; color: var(--text-dim);
-  transition: background .15s, color .15s, border-color .15s;
+/* Absolute inside .shell-main, not fixed to the viewport: the panel starts
+   below the top bar, so the auth and theme controls stay reachable while a note
+   is open and the panel's own header is never hidden behind them. */
+.np-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(660px, 96%);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--sans);
+  box-shadow: -16px 0 40px rgba(0, 0, 0, 0.4);
+  z-index: 10;
 }
-.np-done:hover { border-color: var(--c); color: var(--text); }
-.np-done[data-done='true'] { background: var(--c); border-color: var(--c); color: #fff; }
-.np-summary { color: var(--text); margin: 12px 0; font-size: 14px; line-height: 1.6; }
-.np-keywords { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.np-keywords span { font-size: 12px; background: var(--bg-elev); padding: 3px 9px; border-radius: 6px; color: var(--text); }
-.np-related h3 { font-size: 13px; color: var(--text-dim); margin: 12px 0 8px; }
-.np-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
-.np-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid; border-radius: 10px; padding: 6px 10px;
-  color: var(--text); cursor: pointer; font-size: 13px; transition: background 0.12s ease; }
-.np-chip:hover { background: var(--bg-elev); }
 
-/* Section outline (TOC) — horizontal strip of the current section's sub-headings.
-   Sibling of the note body so it can stay sticky over the scroll on mobile. */
-.np-outline { flex: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 26px;
-  background: var(--bg-panel); border-bottom: 1px solid var(--border); }
-.np-outline-item { background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
-  color: var(--text-dim); padding: 4px 11px; cursor: pointer; font-size: 12px; white-space: nowrap;
-  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease; }
-.np-outline-item:hover { color: var(--text-strong); border-color: var(--c);
-  background: color-mix(in srgb, var(--c) 12%, var(--bg)); }
-.np-outline-item[data-sub="true"] { font-size: 11px; opacity: 0.75; padding-left: 16px; }
-
-/* Scrolling section body */
-.np-note { flex: 1 1 auto; overflow-y: auto; padding: 18px 26px 60px; line-height: 1.7; color: var(--text); }
-.np-section-title { font-size: 19px; margin: 0 0 14px; color: var(--text-strong); }
-.np-note h1, .np-note h2 { font-size: 17px; margin: 18px 0 8px; scroll-margin-top: 16px; color: var(--text-strong); }
-.np-note h3 { color: var(--text-strong); font-size: 15px; margin: 14px 0 6px; }
-.np-note p, .np-note li { color: var(--text); }
-.np-note table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; display: block; overflow-x: auto; }
-.np-note th, .np-note td { border: 1px solid var(--border); padding: 6px 10px; }
-.np-dim { color: var(--text-dim); }
-
-/* Folded quiz answers (<details>) */
-.np-note details { border: 1px solid var(--border); border-radius: 10px; margin: 10px 0;
-  background: color-mix(in srgb, var(--bg-elev) 60%, transparent); overflow: hidden; }
-.np-note details[open] { background: var(--bg-elev); }
-.np-note summary { cursor: pointer; padding: 12px 14px; font-weight: 600; color: var(--text-strong);
-  list-style: none; position: relative; padding-right: 34px; user-select: none; }
-.np-note summary::-webkit-details-marker { display: none; }
-.np-note summary::after { content: '▸'; position: absolute; right: 14px; top: 12px;
-  color: var(--text-dim); transition: transform 0.15s ease; }
-.np-note details[open] summary::after { transform: rotate(90deg); }
-.np-note summary:hover { color: var(--accent); }
-.np-note details > :not(summary) { margin-left: 14px; margin-right: 14px; }
-.np-note details > :last-child { margin-bottom: 12px; }
-/* Answer blockquotes (used by inline Q&A folds) */
-.np-note blockquote { margin: 10px 0; padding: 2px 0 2px 12px;
-  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, var(--border)); color: var(--text); }
-.np-note details blockquote { margin-top: 10px; border-left-color: var(--border-strong); }
-
-/* 저자 표시 심화 블록: 기본 접힘, "심화" 뱃지로 구분 */
-.np-note details.deep { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
-.np-note details.deep > summary::before {
-  content: '심화'; display: inline-block; margin-right: 8px; padding: 1px 7px;
-  border-radius: 999px; font-size: 11px; font-weight: 700; line-height: 1.5;
-  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+.np-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
 }
-.np-note details.deep[open] { background: color-mix(in srgb, var(--bg-elev) 85%, var(--accent)); }
+.np-close:hover { background: var(--bg-elev); color: var(--text-strong); }
 
-/* Mobile: full-screen sheet. The header (title/summary/keywords/related)
-   scrolls away with the content so the body gets the full screen; only the
-   section outline stays pinned. */
+/* Tighter than the standalone reading view — 660px of panel can't spare 48px
+   gutters — and the document keeps the panel's own background. */
+.np-panel .doc-scroll { background: var(--bg-panel); }
+.np-panel .doc { max-width: none; padding: 30px 30px 100px; }
+.np-panel .doc-title { font-size: 27px; }
+.np-panel .doc-lede { font-size: 16.5px; }
+.np-panel .doc-head { margin-bottom: 24px; padding-right: 34px; }
+/* The panel has no room for a rail column at any width, so its meta card is
+   always the inline one. */
+.np-panel .orail[data-variant='inline'] { display: block; }
+
 @media (max-width: 768px) {
-  .np-panel { width: 100vw; height: 100dvh; border-left: none; z-index: 40;
-    box-shadow: none; overflow-y: auto; }
-  .np-top { padding: 16px 16px 10px; }
-  .np-head { padding-right: 44px; }
-  .np-head h2 { font-size: 18px; }
-  .np-summary { font-size: 13px; }
-  /* Close floats in the graph-mode overlay so it survives scrolling. */
-  .np-close { position: fixed; top: calc(10px + env(safe-area-inset-top)); right: 10px;
-    z-index: 60; width: 38px; height: 38px; display: flex; align-items: center;
-    justify-content: center; font-size: 24px; padding: 0; border-radius: 50%;
-    background: var(--bg-elev); box-shadow: 0 2px 10px rgba(0,0,0,0.35); }
-  .np-outline { position: sticky; top: 0; z-index: 5; padding: 8px 16px; flex-wrap: nowrap; overflow-x: auto; }
-  .np-panel .np-outline { padding-right: 54px; } /* clear the floating close button */
-  .np-note { flex: none; overflow: visible; padding: 16px 16px 90px; }
+  .np-panel {
+    width: 100%;
+    border-left: none;
+    box-shadow: none;
+    z-index: 30;
+  }
+  .np-panel .doc { padding: 24px 18px 110px; }
 }

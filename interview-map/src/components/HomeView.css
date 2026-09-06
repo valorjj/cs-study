@@ -1,7 +1,7 @@
 .home {
-  position: fixed; inset: 0;
+  height: 100%; min-height: 0; box-sizing: border-box;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 36px; padding: 72px 20px 110px;
+  gap: 36px; padding: 40px 20px;
   background: var(--bg); color: var(--text);
   font-family: system-ui, sans-serif; overflow-y: auto;
 }

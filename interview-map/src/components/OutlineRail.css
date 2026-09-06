@@ -1,0 +1,152 @@
+.orail { font-family: var(--sans); }
+
+/* Standing column, wide screens only. */
+.orail[data-variant='rail'] {
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 26px 20px 60px;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  scrollbar-width: thin;
+}
+
+/* Card above the body, used once the third column is dropped. */
+.orail[data-variant='inline'] {
+  display: none;
+  margin: 0 0 32px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elev) 35%, var(--bg));
+}
+
+@media (max-width: 1200px) {
+  .orail[data-variant='rail'] { display: none; }
+  .orail[data-variant='inline'] { display: block; }
+}
+
+.orail-h {
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.orail-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 28px;
+  padding: 7px 13px;
+  border-radius: 999px;
+  border: 1.5px solid color-mix(in srgb, var(--c) 45%, var(--border));
+  background: transparent;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.orail-done:hover { border-color: var(--c); color: var(--text-strong); }
+.orail-done[data-done='true'] { background: var(--c); border-color: var(--c); color: #fff; }
+.orail[data-variant='inline'] .orail-done { margin-bottom: 14px; }
+
+/* ---- table of contents ------------------------------------------------- */
+.orail-toc { display: flex; flex-direction: column; margin-bottom: 30px; }
+.orail[data-variant='inline'] .orail-toc { margin: 8px 0 0; }
+
+.orail-item {
+  position: relative;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 6px 4px 6px 14px;
+  cursor: pointer;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  transition: color 0.12s ease;
+}
+/* One continuous spine with a travelling marker, rather than 20 separate pill
+   outlines competing for attention. */
+.orail-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border);
+  transition: background 0.12s ease;
+}
+.orail-item:hover { color: var(--text); }
+.orail-item:hover::before { background: var(--border-strong); }
+.orail-item[data-active='true'] { color: var(--text-strong); font-weight: 650; }
+.orail-item[data-active='true']::before { background: var(--c); }
+.orail-item[data-sub='true'] { padding-left: 26px; font-size: 12.5px; }
+.orail-item[data-sub='true']::before { left: 12px; }
+
+.orail-fold > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-dim);
+}
+.orail-fold > summary::-webkit-details-marker { display: none; }
+.orail-fold > summary::before { content: '▸ '; }
+.orail-fold[open] > summary::before { content: '▾ '; }
+.orail-fold > summary:hover { color: var(--text-strong); }
+
+/* ---- keywords + crosslinks --------------------------------------------- */
+.orail-sec { margin-bottom: 26px; }
+.orail[data-variant='inline'] .orail-sec { margin: 14px 0 0; }
+.orail-sec:last-child { margin-bottom: 0; }
+
+.orail-keywords { display: flex; flex-wrap: wrap; gap: 5px; }
+.orail-keywords span {
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--bg-elev);
+  color: var(--text-dim);
+}
+
+.orail-links { display: flex; flex-direction: column; gap: 4px; }
+.orail[data-variant='inline'] .orail-links { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+.orail-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.orail[data-variant='inline'] .orail-link {
+  width: auto;
+  border: 1px solid color-mix(in srgb, var(--rc) 40%, var(--border));
+  border-radius: 999px;
+  padding: 5px 11px;
+}
+.orail-link > :first-child { color: var(--rc); flex: none; }
+.orail-link span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orail-link:hover { background: var(--bg-elev); color: var(--text-strong); }
