@@ -28,24 +28,25 @@
 > **수직 확장(Scale-up)** = 서버 1대의 스펙(CPU/RAM) 증강. **수평 확장(Scale-out)** = 서버 대수를 늘려 분산. **로드밸런서(LB)** = 여러 서버로 요청을 분배하는 트래픽 교통정리 계층.
 
 ## 3. 다이어그램 — 수평 확장 + LB
+```mermaid
+flowchart TB
+  C(["Client"])
+  LB["<b>Load Balancer</b><br/>L4: TCP/IP 레벨 · L7: HTTP 헤더/URL 레벨"]
+  A["Server A"]
+  B["Server B"]
+  D["Server C"]
+  ST[("공유 세션 저장소 (Redis 등)<br/>공유 DB")]
+  C --> LB
+  LB --> A
+  LB --> B
+  LB --> D
+  A --> ST
+  B --> ST
+  D --> ST
 ```
-                    Client
-                      │
-              ┌───────▼────────┐
-              │  Load Balancer  │  (L4: TCP/IP 레벨, L7: HTTP 헤더/URL 레벨)
-              └───┬───┬───┬────┘
-        ┌─────────┘   │   └─────────┐
-        ▼             ▼             ▼
-   ┌─────────┐   ┌─────────┐   ┌─────────┐
-   │ Server A│   │ Server B│   │ Server C│   ← stateless (세션 로컬 저장 X)
-   └────┬────┘   └────┬────┘   └────┬────┘
-        └──────────────┼──────────────┘
-                        ▼
-              ┌───────────────────┐
-              │ 공유 세션 저장소     │  (Redis 등) — HTTP stateless 참고
-              │ 공유 DB             │
-              └───────────────────┘
-```
+
+서버는 **stateless**여야 한다 — 세션을 로컬에 저장하면 LB가 다른 서버로 보내는
+순간 로그인이 풀린다. 상태는 전부 공유 저장소로 밀어낸다. (HTTP stateless 참고)
 - 클라이언트의 각 HTTP 요청은 LB를 거쳐 A/B/C 아무 서버든 갈 수 있음(HTTP 요청 분산). 서버가 세션을 로컬 메모리에 들고 있으면 "다음 요청이 다른 서버로 가면 로그인 풀림" 문제 발생 → **HTTP 자체가 stateless 프로토콜**이란 특성과 맞물려, 서버도 stateless로 설계해야 아무 서버에 붙여도 동작.
 
 ## 4. 로드밸런싱 알고리즘
@@ -107,15 +108,31 @@
 
 > **Rate Limiting** = 정해진 시간 동안 허용하는 요청 수를 제한해, 서버 과부하와 어뷰징(무차별 요청·크롤링·브루트포스)을 막는 트래픽 제어 기법.
 
+**Token Bucket** — 버스트를 허용한다.
+
+```mermaid
+flowchart LR
+  FILL["초당 N개 토큰 채움"] --> BK["버킷<br/>● ● ● ○ ○<br/><i>토큰 재고 = 허용 버스트</i>"]
+  REQ(["요청 1건"]) --> Q{"토큰 있나?"}
+  BK --> Q
+  Q -- YES --> OK["통과 — 토큰 1개 소모"]
+  Q -- NO --> NO["거부 (429)"]
 ```
-[Token Bucket]                          [Leaky Bucket]
-버킷에 초당 N개 토큰 채워짐              요청이 큐에 쌓이고
-  ┌───────────┐                          일정 속도로만 빠져나감
-  │● ● ● ○ ○ │ ← 토큰 재고(버스트 허용)   ┌──────────┐
-  └───────────┘                          │req req req│→ 일정 속도 처리
-요청 1건 = 토큰 1개 소모                 └──────────┘
-토큰 없으면 거부(429)                    큐가 다 차면 넘치는 요청 거부
+
+**Leaky Bucket** — 처리 속도를 평탄하게 만든다.
+
+```mermaid
+flowchart LR
+  REQ(["요청"]) --> QU["큐<br/>req req req"]
+  QU -- "일정 속도로만 유출" --> PROC["처리"]
+  QU -- "큐가 다 차면" --> DROP["넘치는 요청 거부"]
 ```
+
+| | Token Bucket | Leaky Bucket |
+|---|---|---|
+| 버스트 | **허용**(토큰 재고만큼) | 억제(항상 일정 속도) |
+| 초과 요청 | 즉시 거부 | 큐에 대기, 넘치면 거부 |
+| 쓰는 곳 | API rate limit 대부분 | 트래픽 셰이핑 |
 
 | | Token Bucket | Leaky Bucket |
 |--|---------------|---------------|
@@ -167,36 +184,52 @@
 > **캐싱** = 자주 조회되는 데이터를 원본(DB)보다 빠른 저장소에 사본으로 두어 응답 속도를 높이고 원본의 부하를 줄이는 기법.
 
 ## 3. 다이어그램 — 캐시 계층 (요청이 지나가는 순서)
+```mermaid
+flowchart TB
+  C(["Client"])
+  L1["① 브라우저 캐시<br/><i>Cache-Control, ETag — 요청 자체를 안 보냄</i>"]
+  L2["② CDN<br/><i>정적 리소스 · 이미지/JS/CSS · 지리적으로 가까운 엣지</i>"]
+  L3["③ 애플리케이션 캐시<br/><i>Redis/Memcached — 세션 · API 응답 · 조회 결과</i>"]
+  L4["④ DB 캐시<br/><i>DB 자체 버퍼 풀 / 쿼리 캐시</i>"]
+  DB[("Database<br/><b>원본 · 가장 느림</b>")]
+  C --> L1
+  L1 -- miss --> L2
+  L2 -- miss --> L3
+  L3 -- miss --> L4
+  L4 -- miss --> DB
 ```
-Client
-  │
-  ▼
-① 브라우저 캐시        (Cache-Control, ETag) — 요청 자체를 안 보냄
-  │ (miss)
-  ▼
-② CDN                  (정적 리소스, 이미지/JS/CSS, 지리적으로 가까운 엣지)
-  │ (miss)
-  ▼
-③ 애플리케이션 캐시      (Redis/Memcached — 세션, API 응답, 조회 결과)
-  │ (miss)
-  ▼
-④ DB 캐시               (DB 자체 버퍼 풀/쿼리 캐시)
-  │ (miss)
-  ▼
-Database (원본, 가장 느림)
-```
+
+**앞에서 맞을수록 싸다.** 브라우저 캐시 히트는 네트워크 0회, CDN 히트는
+origin까지 안 간다. 캐시 계층을 설계할 때는 "어디서 끊을 수 있는가"를 본다.
 - 계층이 앞쪽(브라우저)일수록 빠르지만 신선도(freshness)가 떨어지고, 뒤쪽(DB)일수록 느리지만 정확함. → 트레이드오프.
 
 ## 4. 캐싱 전략 — Look-Aside vs Write-Through
+**Look-Aside (Lazy Loading)** — 가장 흔한 방식.
+
+```mermaid
+flowchart TB
+  R(["읽기"]) --> CQ{"Cache 조회"}
+  CQ -- hit --> RET["바로 반환"]
+  CQ -- miss --> DBR["DB 조회"] --> FILL["Cache에 채움"] --> RET
+  W(["쓰기"]) --> DBW["DB만 직접 씀"]
+  DBW --> INV["캐시는 안 건드림<br/><i>다음 읽기 때 채워짐, 또는 무효화</i>"]
 ```
-[Look-Aside (Lazy Loading)]           [Write-Through]
- 읽기:                                 쓰기:
-  App → Cache 조회                     App → Cache에 먼저 씀
-   miss → DB 조회 → Cache에 채움          Cache → DB에도 즉시 씀 (동기)
-  hit → 바로 반환                       (그 다음 App에 응답)
- 쓰기:
-  App → DB만 직접 씀 (캐시는 안 건드림, 다음 읽기 때 채워짐 또는 무효화)
+
+**Write-Through** — 쓰기 시점에 캐시와 DB를 함께 채운다.
+
+```mermaid
+flowchart LR
+  W(["쓰기"]) --> CA["Cache에 먼저 씀"]
+  CA -- "동기" --> DB[("DB에도 즉시 씀")]
+  DB --> RESP["그 다음 App에 응답"]
 ```
+
+| | Look-Aside | Write-Through |
+|---|---|---|
+| 쓰기 지연 | 낮음(DB만) | 높음(캐시+DB 동기) |
+| 첫 읽기 | miss 1회 발생 | 이미 캐시에 있음 |
+| 캐시-DB 불일치 | 무효화 실패 시 발생 | 구조적으로 적음 |
+| 안 쓰는 데이터 | 캐시에 안 올라감 | **다 올라감**(메모리 낭비) |
 | | Look-Aside (Cache-Aside) | Write-Through |
 |--|--------------------------|----------------|
 | 읽기 흐름 | 캐시 먼저 확인, miss시 DB 조회 후 캐시에 채움 | 캐시 자체가 최신 유지되어 있음 |
@@ -211,12 +244,14 @@ Database (원본, 가장 느림)
 - 원칙: "Cache invalidation is one of the two hard things in CS" — 정답은 없고 **정합성 vs 성능**의 트레이드오프를 상황에 맞게 선택.
 
 ## 6. Cache Stampede (Thundering Herd)
-```
-캐시 만료 순간 ──► 동시에 수천 요청 도착
-                        │
-              전부 "miss" 판정
-                        │
-              전부 DB로 동시에 쿼리 ──► DB 순간 과부하/다운
+```mermaid
+flowchart TB
+  EXP["인기 키의 캐시 만료 순간"]
+  MANY["동시에 수천 요청 도착"]
+  MISS["전부 miss 판정"]
+  DB["전부 DB로 동시에 쿼리"]
+  DOWN["<b>DB 순간 과부하 / 다운</b>"]
+  EXP --> MANY --> MISS --> DB --> DOWN
 ```
 - **원인**: 인기 있는 키 하나가 만료되는 순간 대량 요청이 동시에 캐시 miss를 겪고 전부 DB를 때림.
 - **해결책**:
@@ -261,16 +296,25 @@ Database (원본, 가장 느림)
 
 > **CDN(Content Delivery Network)** = 지리적으로 분산된 엣지(edge) 서버에 정적 콘텐츠(이미지, JS, CSS, 동영상)의 사본을 캐싱해두고, 사용자와 가장 가까운 엣지가 응답하게 해 **지연(latency)을 줄이고 origin 서버의 부하를 줄이는** 기술.
 
+```mermaid
+flowchart TB
+  O[("Origin Server<br/>서울, 1곳")]
+  E1["Edge (부산)"]
+  E2["Edge (도쿄)"]
+  E3["Edge (LA)"]
+  U1(["사용자 A"])
+  U2(["사용자 B"])
+  U3(["사용자 C"])
+  O --> E1
+  O --> E2
+  O --> E3
+  E1 --> U1
+  E2 --> U2
+  E3 --> U3
 ```
-              Origin Server (서울, 1곳)
-                     │
-      ┌──────────────┼──────────────┐
-      ▼              ▼              ▼
-  Edge(부산)      Edge(도쿄)      Edge(LA)   ← 지리적으로 사용자와 가까움
-      │              │              │
-   사용자A         사용자B         사용자C
-   (가까운 엣지에서 즉시 응답, miss시에만 origin까지)
-```
+
+엣지는 **지리적으로 사용자와 가깝다.** 가까운 엣지에서 즉시 응답하고,
+miss일 때만 origin까지 올라간다 — 지연과 origin 부하를 동시에 줄인다.
 
 - **캐시 계층과의 연결**: SD2의 3번 다이어그램에서 CDN은 브라우저 캐시 다음, 애플리케이션 캐시(Redis) 이전 단계 — 즉 "가장 바깥쪽의 공유 캐시"로 볼 수 있다. Look-Aside와 동일한 원리(miss시 origin 조회 후 채움)가 CDN 내부에도 그대로 적용된다.
 - **Push CDN vs Pull CDN**:
@@ -296,38 +340,39 @@ Database (원본, 가장 느림)
 > **Replication** = 같은 데이터를 여러 DB 인스턴스에 복제해 **읽기**를 분산. **Sharding** = 데이터를 여러 DB 인스턴스에 나눠 담아 **쓰기(+저장용량)** 를 분산.
 
 ## 3. 다이어그램 — Replication (Master-Slave)
+```mermaid
+flowchart TB
+  W(["Write"]) --> M["<b>Master</b><br/>쓰기 전담"]
+  M -- "복제 (비동기 / 동기)" --> S1["Slave 1"]
+  M --> S2["Slave 2"]
+  M --> S3["Slave 3"]
+  R(["Read 요청 분산"]) --> S1
+  R --> S2
+  R --> S3
 ```
-                Write
-                  │
-                  ▼
-             ┌─────────┐
-             │  Master  │  (쓰기 전담)
-             └────┬────┘
-        복제(비동기/동기)
-        ┌─────────┼─────────┐
-        ▼         ▼         ▼
-   ┌────────┐┌────────┐┌────────┐
-   │ Slave 1││ Slave 2││ Slave 3│   (읽기 전담, Read Replica)
-   └────────┘└────────┘└────────┘
-        ▲         ▲         ▲
-        └────── Read 요청 분산 ──┘
-```
+
+읽기는 늘리기 쉽지만 **쓰기는 여전히 Master 한 대**다. 쓰기가 병목이면
+복제로는 안 되고 샤딩이 필요하다. 비동기 복제면 **복제 지연**(방금 쓴 걸
+Slave에서 못 읽는) 문제가 생긴다.
 - 읽기(SELECT)가 압도적으로 많은 서비스(조회 위주 커머스 등)에 적합. Master가 죽으면 Slave 승격(failover)으로 대응.
 - **복제 지연(Replication Lag)**: Master에 쓰고 바로 Slave에서 읽으면 반영 전일 수 있음 → "내가 방금 쓴 글이 안 보이는" 문제.
 
 ## 4. 다이어그램 — Sharding (수평 분할)
+```mermaid
+flowchart TB
+  C(["Client"])
+  RT["<b>Shard Router</b><br/>user_id mod N 또는 해시 기반으로<br/>어느 shard인지 결정"]
+  SA[("Shard A<br/>user 1~1000")]
+  SB[("Shard B<br/>user 1001~2000")]
+  SC[("Shard C<br/>user 2001~3000")]
+  C --> RT
+  RT --> SA
+  RT --> SB
+  RT --> SC
 ```
-        Client
-          │
-   ┌──────▼──────┐
-   │ Shard Router │  (user_id % N 또는 해시 기반으로 어느 shard인지 결정)
-   └──┬───┬───┬──┘
-      ▼   ▼   ▼
-  ┌─────┐┌─────┐┌─────┐
-  │Shard│Shard│Shard│
-  │  A  ││  B  ││  C  │   각자 다른 데이터(user 1~1000, 1001~2000, ...)
-  └─────┘└─────┘└─────┘
-```
+
+각 샤드가 **다른 데이터**를 가진다(복제와의 결정적 차이). 그래서 쓰기와 용량이
+같이 늘어나지만, **샤드를 넘는 조인·트랜잭션이 어려워진다.**
 - 각 shard는 전체 데이터의 일부만 가짐 → 쓰기·저장 용량이 shard 수만큼 분산.
 - Shard Key 선택이 핵심(예: user_id). 잘못 고르면 특정 shard에만 쏠리는 **hot shard** 문제.
 
@@ -375,23 +420,21 @@ Database (원본, 가장 느림)
 
 > **Consistent Hashing(일관성 해싱)** = 서버(노드)와 데이터를 모두 하나의 해시 링(원형 공간)에 매핑해, 노드가 추가/삭제돼도 **전체 재분배가 아닌 인접 구간만 재배치**되도록 하는 해싱 기법.
 
+```mermaid
+flowchart LR
+  A["Node A<br/><i>0° ~ 120°</i>"] --> B["Node B<br/><i>120° ~ 240°</i>"]
+  B --> C["Node C<br/><i>240° ~ 360°</i>"]
+  C --> A
 ```
-              0
-        ┌───────────┐
-   315° │           │ 45°
-        │  Node C   │
-        │           │
-  270°  │    해시링   │ 90°
-        │ (0~359°)  │
-        │  Node A   │
-   225° │           │ 135°
-        └───────────┘
-             180°  ← 여기 Node B
-   각 데이터 key도 해시 → 링 위 위치 결정
-   → "시계방향으로 처음 만나는 노드"가 담당
-   → Node B 제거 시, Node B가 담당하던 구간만
-      다음 노드(시계방향)로 이동. 나머지 A/C는 영향 없음
-```
+
+- 노드와 데이터 key를 **같은 해시 링**(0~360°) 위에 올린다.
+- 각 key는 **시계방향으로 처음 만나는 노드**가 담당한다.
+- `Node B` 제거 → **B가 담당하던 구간만** 다음 노드(C)로 넘어간다.
+  A와 C의 기존 담당 구간은 **영향 없음**.
+
+단순 `hash mod N`은 노드 수 N이 바뀌면 **거의 모든 key가 재배치**된다.
+일관성 해싱은 재배치를 평균 `1/N`로 묶는다. 실무에서는 노드마다 **가상 노드**를
+수백 개 만들어 링에 흩뿌려 편중을 줄인다.
 
 - **일반 mod 해싱의 문제**: `hash(key) % N`은 N이 바뀌는 순간 대부분의 key가 다른 서버로 재매핑됨 → 캐시라면 대량 cache miss 폭증, 샤딩이라면 대규모 데이터 이동 발생.
 - **가상 노드(Virtual Node)**: 물리 서버 1대를 해시 링 위에 여러 지점(가상 노드)으로 흩뿌려 배치 → 데이터가 특정 서버 하나에 쏠리지 않고 고르게 분산됨(hot shard 완화).
@@ -414,21 +457,27 @@ Database (원본, 가장 느림)
 > **메시지 큐(MQ)** = 송신자(Producer)와 수신자(Consumer) 사이에 메시지를 중간 저장해, 시스템을 **비동기**로 연결하고 **decoupling**하며 트래픽 급증 시 **버퍼** 역할을 하는 미들웨어.
 
 ## 3. 다이어그램
-```
-[동기 직접 호출 — 문제]                  [메시지 큐 — 해결]
- Client → ServiceA → ServiceB           Client → ServiceA → [Queue] → ServiceB
-   (B 느리면 A도 느려짐,                        (A는 큐에 넣고 즉시 응답,
-    B 다운되면 A도 실패)                          B는 자기 속도로 소비,
-                                                B 다운돼도 메시지는 큐에 남아있음)
+**동기 직접 호출 — 문제**
 
-           Producer                     Queue                    Consumer
-              │                    ┌─────────┐                      │
-              └── publish ────────►│ msg msg │◄──── poll/consume ───┘
-                                    │ msg ... │
-                                    └─────────┘
-                    급증한 요청도 큐에 쌓이며 Consumer는
-                    자기 처리 속도만큼만 꺼내감 → 부하 완충(버퍼링)
+```mermaid
+flowchart LR
+  C(["Client"]) --> A["Service A"] --> B["Service B"]
+  A -. "B 느리면 A도 느려짐<br/>B 다운되면 A도 실패" .-> B
 ```
+
+**메시지 큐 — 해결**
+
+```mermaid
+flowchart LR
+  C(["Client"]) --> A["Service A<br/><i>큐에 넣고 즉시 응답</i>"]
+  A -- publish --> Q["<b>Queue</b><br/>msg msg msg ..."]
+  Q -- "poll / consume" --> B["Service B<br/><i>자기 속도로 소비</i>"]
+```
+
+- A는 큐에 넣고 **즉시 응답**한다 → B의 지연이 A로 전파되지 않는다.
+- B가 다운돼도 **메시지는 큐에 남는다** → 복구 후 이어서 처리.
+- 급증한 요청도 큐에 쌓이고 Consumer는 자기 처리 속도만큼만 꺼내간다
+  → **부하 완충(버퍼링)**.
 
 ## 4. Kafka vs RabbitMQ (간단 비교)
 | | Kafka | RabbitMQ |
@@ -476,16 +525,27 @@ Database (원본, 가장 느림)
 
 > **Idempotency Key** = 클라이언트가 요청마다 고유한 키(주로 UUID)를 헤더에 담아 보내고, 서버는 같은 키로 이미 처리한 요청이면 **다시 실행하지 않고 이전 결과를 그대로 반환**해 중복 처리를 막는 기법.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant S as Server
+  participant R as Redis
+  C->>S: POST /pay<br/>Idempotency-Key: abc-123
+  S->>R: "abc-123" 있나?
+  R->>S: 없음
+  S->>S: 결제 처리
+  S->>R: key → response 저장
+  S->>C: 응답
+  Note over C: 타임아웃 — 재시도
+  C->>S: POST /pay (같은 Idempotency-Key)
+  S->>R: "abc-123" 있나?
+  R->>S: 있음 (저장된 응답)
+  S->>C: 재처리 없이 <b>동일한 응답</b>
 ```
-Client                         Server
-  │  POST /pay                   │
-  │  Idempotency-Key: abc-123    │
-  ├──────────────────────────────►│ Redis에 "abc-123" 있나 확인
-  │                               │  ├─ 없음 → 결제 처리 + 결과 저장(key→response) → 응답
-  │  (타임아웃, 재시도)             │  └─ 있음 → 재처리 없이 저장된 응답 그대로 반환
-  ├──────────────────────────────►│
-  │  ◄── 동일한 응답 ──────────────│
-```
+
+키가 없을 때만 실제 처리하고, 결과를 키에 묶어 저장한다. 재시도는 저장된
+응답을 그대로 돌려받으므로 **이중 결제가 구조적으로 불가능**해진다.
 
 - **SD4의 at-least-once와의 연결**: 메시지 큐뿐 아니라 **HTTP API 재시도**(네트워크 타임아웃 후 클라이언트가 재요청)에서도 똑같이 "중복 도착"이 발생 → 멱등성 문제는 MQ Consumer 설계(6번)와 API 설계 양쪽에서 동일한 원리로 해결한다.
 - **구현**: `(idempotency_key) → (처리 상태, 응답 결과)`를 Redis 등에 저장. 키에 TTL을 둬서 무한정 쌓이지 않게 관리.
@@ -507,22 +567,24 @@ Client                         Server
 > **CAP 이론** = 분산 시스템은 **Consistency**(모든 노드가 항상 같은 데이터를 봄), **Availability**(모든 요청이 항상 응답을 받음), **Partition Tolerance**(노드 간 통신 장애가 있어도 시스템이 계속 동작)를 **동시에 세 가지 다 만족할 수 없고, 그 중 2개만 선택 가능**하다는 이론.
 
 ## 3. 다이어그램
+```mermaid
+flowchart TB
+  C["<b>Consistency</b><br/>일관성"]
+  A["<b>Availability</b><br/>가용성"]
+  P["<b>Partition Tolerance</b><br/>분할 내성"]
+  C -- "CA — 이론상만<br/>(파티션은 언젠가 발생)" --- A
+  C -- "<b>CP</b> — 정합성 우선<br/>(파티션 시 응답 거부)" --- P
+  A -- "<b>AP</b> — 가용성 우선<br/>(파티션 시 낡은 값 허용)" --- P
 ```
-                Consistency
-                    ▲
-                   ╱ ╲
-                  ╱   ╲
-                 ╱ CA  ╲     ← 현실 분산 시스템에서 사실상 선택 불가
-                ╱ (이론상)╲      (네트워크 파티션은 언젠가 발생하므로)
-               ╱───────────╲
-              ╱             ╲
-             ╱  CP     AP    ╲
-            ╱ (정합성)  (가용성) ╲
-           ▼───────────────────▼
-     Partition                Availability
-     Tolerance
-     (분산 시스템은 이게 전제 조건 → 결국 C vs A 트레이드오프)
-```
+
+분산 시스템에서 **P는 선택이 아니라 전제**다 — 네트워크는 언젠가 끊긴다.
+그래서 실제 선택지는 **CP냐 AP냐**, 즉 파티션이 일어난 순간에
+"틀린 답을 주지 않겠다(CP)" vs "그래도 답은 주겠다(AP)"의 트레이드오프다.
+
+| 선택 | 파티션 중 행동 | 예 |
+|------|----------------|-----|
+| **CP** | 응답 거부 / 에러 | ZooKeeper, etcd, HBase |
+| **AP** | 낡은 값이라도 응답 | Cassandra, DynamoDB, Riak |
 - 분산 시스템은 네트워크 장애(Partition)가 **언젠가는 반드시 발생**하므로, **P는 선택이 아니라 전제**. 실제 설계 고민은 "Partition 상황에서 C를 지킬지 A를 지킬지"의 **CP vs AP** 선택이다.
 
 ## 4. CP vs AP 예시
@@ -533,11 +595,20 @@ Client                         Server
 | 대표 시스템 | ZooKeeper, HBase, RDBMS(강한 일관성 모드) | Cassandra, DynamoDB, 대부분의 NoSQL 기본 설정 |
 
 ## 5. 결과적 일관성 (Eventual Consistency)
+```mermaid
+sequenceDiagram
+  participant A as Node A
+  participant B as Node B
+  Note over A,B: t0
+  A->>A: write(x=5)
+  Note over B: t1 — 아직 x=3 (전파 지연)
+  A-->>B: 복제 전파
+  Note over B: t2 — x=5로 수렴
 ```
-t0: Node A에 write(x=5)
-t1: Node B는 아직 x=3 (전파 지연)
-t2: 복제 전파 완료 → Node B도 x=5로 수렴
-```
+
+"언젠가는 같아진다"는 보장이다. **언제**는 보장하지 않는다. 그 사이에 읽으면
+낡은 값이 나올 수 있고, 그걸 허용할 수 있는 도메인에서만 쓴다
+(좋아요 수 O, 계좌 잔액 X).
 > **즉시 일관성을 포기하는 대신 가용성을 얻고, 시간이 지나면(전파가 끝나면) 결국 모든 노드가 같은 값으로 수렴**한다는 보장. AP 시스템(대부분 NoSQL)의 기본 동작 방식이며, **BASE(Basically Available, Soft state, Eventually consistent)** 모델이 CAP의 AP 선택을 구체화한 실무 원칙.
 
 ## 6. 핵심 포인트 (🔴 자주 하는 실수)
@@ -577,15 +648,29 @@ t2: 복제 전파 완료 → Node B도 x=5로 수렴
 - 비기능 요구: 짧은 코드는 유일해야 함, 리다이렉트는 최대한 빨라야 함(수십 ms 이내).
 
 ### 2) 개략 아키텍처
+```mermaid
+flowchart TB
+  C(["Client"])
+  LB["LB — SD1"]
+  API["API 서버 (stateless)"]
+  CACHE["캐시 (Redis, Look-Aside) — SD2"]
+  DB[("DB — Read Replica, SD3")]
+  RD["302 리다이렉트"]
+  C --> LB --> API
+  API --> CACHE
+  CACHE -- hit --> RD
+  CACHE -- miss --> DB
+  DB -- "캐시에 채움" --> CACHE
 ```
-Client → LB(SD1) → API 서버(stateless) ─┬─ 캐시(Redis, Look-Aside, SD2)
-                                          │     hit → 바로 302 리다이렉트
-                                          └─ miss → DB 조회(SD3, Read Replica)
-                                                └─ 캐시에 채움
 
-쓰기(단축 URL 생성) → API 서버 → 코드 생성(base62 + 카운터/해시)
-                                → DB Write (Master, SD3)
-                                → Rate Limiting(SD1-9)으로 악성 대량 생성 방지
+**쓰기(단축 URL 생성)**
+
+```mermaid
+flowchart LR
+  C(["Client"]) --> RL["Rate Limiting — SD1-9<br/><i>악성 대량 생성 방지</i>"]
+  RL --> API["API 서버"]
+  API --> GEN["코드 생성<br/>base62 + 카운터/해시"]
+  GEN --> M[("DB Write — Master, SD3")]
 ```
 - **코드 생성**: 자동증가 ID를 base62(0-9a-zA-Z)로 인코딩하거나, 원본 URL 해시 앞자리를 사용(충돌 시 재시도).
 - **읽기 경로**: 리다이렉트가 압도적으로 많으므로 Redis Look-Aside 캐시(SD2-4)를 필수로 두고, 캐시 hit 시 DB까지 가지 않게 한다.
@@ -629,10 +714,11 @@ Client → LB(SD1) → API 서버(stateless) ─┬─ 캐시(Redis, Look-Aside,
 
 ## 3. Cache Stampede (스탬피드/thundering herd) — 3대 방어
 
-```
-인기 키의 TTL 만료 순간 → 동시 요청 수천 개가 전부 miss
-→ 전부 동시에 DB로 몰림 → DB 과부하로 다운 (연쇄 장애)
-```
+인기 키의 TTL이 만료되는 **순간** 동시 요청 수천 개가 전부 miss가 되고,
+전부 동시에 DB로 몰린다 → DB 과부하로 다운 → **연쇄 장애**.
+
+문제의 핵심은 "캐시가 없다"가 아니라 **"없어지는 시점이 모두에게 같다"**는
+것이다. 아래 세 방어는 모두 그 동시성을 깨는 방법이다.
 | 방어법 | 원리 |
 |--------|------|
 | **뮤텍스/락(single-flight)** | miss 시 **한 요청만** DB를 조회해 캐시를 채우고, 나머지는 대기 후 캐시 값 사용 |
@@ -687,14 +773,32 @@ Client → LB(SD1) → API 서버(stateless) ─┬─ 캐시(Redis, Look-Aside,
 
 ## 3. 다이어그램
 
+**복제 — 읽기 확장**
+
+```mermaid
+flowchart LR
+  W(["쓰기"]) --> P["Primary"]
+  P -- 복제 --> R1[("Replica 1")]
+  P -- 복제 --> R2[("Replica 2")]
+  RD(["읽기"]) --> R1
+  RD --> R2
 ```
-[복제 — 읽기 확장]                    [샤딩 — 쓰기/용량 확장]
-        쓰기                           쓰기(user_id % 3)
-         │                          ┌────┼────┐
-      Primary ──복제──► Replica1     Shard0 Shard1 Shard2
-         │      └─────► Replica2    (0,3,6) (1,4,7) (2,5,8)
-      읽기는 Replica들로 분산          각 샤드가 자기 키 범위만 담당
+
+**샤딩 — 쓰기 / 용량 확장**
+
+```mermaid
+flowchart TB
+  W(["쓰기 — user_id mod 3"]) --> RT{"라우팅"}
+  RT --> S0[("Shard 0<br/>0, 3, 6 ...")]
+  RT --> S1[("Shard 1<br/>1, 4, 7 ...")]
+  RT --> S2[("Shard 2<br/>2, 5, 8 ...")]
 ```
+
+| | 복제 | 샤딩 |
+|---|---|---|
+| 각 노드의 데이터 | **전부 같음** | **서로 다름** |
+| 늘어나는 것 | 읽기 처리량 | 쓰기 처리량 + 용량 |
+| 대가 | 복제 지연, 쓰기는 그대로 | 크로스 샤드 조인·트랜잭션 곤란 |
 
 ## 4. 복제 — 동기 vs 비동기, 복제 지연
 
@@ -752,22 +856,51 @@ Client → LB(SD1) → API 서버(stateless) ─┬─ 캐시(Redis, Look-Aside,
 ## 3. 2PC (2-Phase Commit) — 그리고 왜 잘 안 쓰나 ⭐
 > **2PC** = 코디네이터가 ① **Prepare**(모든 참여자에게 "커밋 가능?" 투표) → ② 전원 yes면 **Commit**, 하나라도 no면 전원 **Rollback**을 지시하는 원자적 커밋 프로토콜.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  participant CO as Coordinator
+  participant A as 참여자 A
+  participant B as 참여자 B
+  participant C as 참여자 C
+  CO->>A: Prepare
+  CO->>B: Prepare
+  CO->>C: Prepare
+  A->>CO: vote-yes (락 유지)
+  B->>CO: vote-yes (락 유지)
+  C->>CO: vote-yes (락 유지)
+  Note over CO: 한 명이라도 no면 전원 Rollback
+  CO->>A: Commit
+  CO->>B: Commit
+  CO->>C: Commit
 ```
-Coordinator ──Prepare──► 참여자 A,B,C   (각자 "준비완료(vote-yes)" 응답, 이때 락 유지)
-Coordinator ──Commit───► 전원 커밋       (한 명이라도 no면 전원 Rollback)
-```
+
+**Prepare~Commit 사이에 참여자들이 락을 잡고 있다.** Coordinator가 그 사이에
+죽으면 참여자들은 커밋인지 롤백인지 모른 채 락을 쥐고 멈춘다(blocking).
+그래서 마이크로서비스에서는 잘 쓰지 않는다.
 - **문제점**: ① **Blocking** — Prepare 후 코디네이터가 죽으면 참여자들은 락을 쥔 채 무한 대기(coordinator = SPOF). ② **락 유지 기간이 길어** 처리량 급락. ③ 참여자·네트워크가 늘수록 취약. → 그래서 **MSA에서는 거의 안 쓰고**, 대신 Saga를 택한다. (2PC는 강한 일관성이 필수인 좁은 범위에서만.)
 
 ## 4. Saga 패턴 — 로컬 트랜잭션 + 보상 ⭐
 > **Saga** = 분산 트랜잭션을 **여러 개의 로컬 트랜잭션**으로 쪼개고, 각 단계가 성공하면 다음 단계를 진행하되 **중간에 실패하면 앞서 성공한 단계들을 역순으로 보상(compensating transaction)** 해 되돌리는 패턴.
 
+```mermaid
+flowchart TB
+  subgraph OK["정상"]
+    direction LR
+    O1["주문생성"] --> P1["결제"] --> S1["재고차감"] --> D1["배송"]
+  end
+  subgraph FAIL["실패 — 재고 부족"]
+    direction LR
+    O2["주문생성"] --> P2["결제"] --> S2["재고차감 <b>실패</b>"]
+    S2 -. "보상" .-> CP["결제 취소 (환불)"]
+    CP -. "보상" .-> CO["주문 취소"]
+  end
+  OK --> FAIL
 ```
-정상:  주문생성 ─► 결제 ─► 재고차감 ─► 배송
-실패(재고 부족):  주문생성 ─► 결제 ─► [재고차감 실패]
-                     │         └── 보상: 결제 취소(환불)
-                     └── 보상: 주문 취소
-       → 각 단계는 자기 DB의 로컬 트랜잭션(ACID). 전체는 결과적 일관성.
-```
+
+각 단계는 **자기 DB의 로컬 트랜잭션(ACID)**이다. 전체는 결과적 일관성이고,
+되돌리기는 롤백이 아니라 **보상 트랜잭션**(반대 작업)으로 한다.
+그래서 "환불"처럼 **의미상 되돌릴 수 있는 연산**으로 설계해야 한다.
 - **보상 트랜잭션**: "실행의 반대"(결제→환불, 재고차감→복원). 완벽한 롤백이 아니라 **의미적 되돌림**(이미 보낸 알림은 못 지움 → 취소 알림 추가 등).
 
 ### 4-1. Choreography vs Orchestration ⭐
@@ -784,13 +917,28 @@ Coordinator ──Commit───► 전원 커밋       (한 명이라도 no면
 ## 5. Outbox 패턴 — "DB 커밋 + 이벤트 발행"의 원자성 ⭐
 Saga·이벤트 기반에서 치명적 함정: **"DB에 주문 저장 + 카프카에 이벤트 발행"을 어떻게 원자적으로?** DB 커밋 후 이벤트 발행 직전에 죽으면 → 주문은 있는데 이벤트는 없음(정합성 깨짐). 반대 순서도 위험.
 
+1. 비즈니스 데이터 + **outbox 테이블의 이벤트 레코드**를 **같은 로컬
+   트랜잭션**으로 커밋한다 (원자적!).
+2. 별도 릴레이(CDC / 폴러)가 outbox 테이블을 읽어 메시지 브로커로 발행한다.
+3. 발행에 성공하면 outbox 레코드를 삭제/표시한다.
+
+```mermaid
+flowchart LR
+  APP["서비스"]
+  subgraph TX["하나의 로컬 트랜잭션"]
+    direction TB
+    BIZ[("비즈니스 테이블")]
+    OB[("outbox 테이블")]
+  end
+  REL["릴레이 (CDC / 폴러)"]
+  BR["메시지 브로커"]
+  APP --> TX
+  OB --> REL --> BR
+  REL -. "발행 성공 → 삭제/표시" .-> OB
 ```
-[Outbox 패턴]
-① 비즈니스 데이터 + "outbox 테이블에 이벤트 레코드"를 같은 로컬 트랜잭션으로 커밋 (원자적!)
-② 별도 릴레이(CDC/폴러)가 outbox 테이블을 읽어 메시지 브로커로 발행
-③ 발행 성공하면 outbox 레코드 삭제/표시
-   → DB 커밋과 이벤트가 하나의 로컬 트랜잭션으로 묶여 유실 없음
-```
+
+DB 커밋과 이벤트 기록이 **하나의 트랜잭션**에 묶이므로, "DB는 커밋됐는데
+이벤트는 안 나갔다"는 유실이 구조적으로 사라진다.
 - 이벤트를 브로커에 직접 쏘지 않고 **같은 DB의 테이블에 함께 커밋**한 뒤, 릴레이(예: Debezium CDC)가 그 테이블을 읽어 발행 → "DB에는 저장됐는데 이벤트는 유실"을 원천 차단.
 - 릴레이가 재시도하므로 **at-least-once** → Consumer는 멱등해야 함(→ SD4 Idempotency Key).
 
@@ -834,11 +982,18 @@ Saga·이벤트 기반에서 치명적 함정: **"DB에 주문 저장 + 카프�
 집 안 한 방에서 누전이 나면, 두꺼비집(circuit breaker)이 **그 회로만 딱 끊어** 집 전체로 불이 번지는 걸 막는다. 문제가 해결될 때까지 그 회로는 차단 상태로 두고, 잠시 후 조심스레 한 번 넣어봐서(반개방) 괜찮으면 복구한다. 서비스 장애 격리도 똑같다 — 죽은 서비스로의 호출을 끊어 **내 스레드·자원이 그 대기에 묶여 함께 죽는 것**을 막는다.
 
 ## 2. 왜 필요한가 — 연쇄 장애(Cascading Failure)
+```mermaid
+flowchart TB
+  B["서비스 B 느려짐 / 무응답"]
+  A1["A의 스레드들이 B 응답을 기다리며 전부 blocked"]
+  A2["A의 스레드 풀 고갈 → A도 무응답"]
+  C["A를 부르던 C도 고갈"]
+  X["<b>전체 붕괴</b>"]
+  B --> A1 --> A2 --> C --> X
 ```
-서비스 A → 서비스 B(느려짐/무응답)
-  A의 스레드들이 B 응답을 기다리며 전부 blocked
-  → A의 스레드 풀 고갈 → A도 무응답 → A를 부르던 C도 고갈 → 전체 붕괴
-```
+
+한 서비스의 **지연**이 호출자의 **스레드 고갈**로 번지고, 그게 다시 위로
+전파된다. 그래서 타임아웃 없는 호출은 장애를 증폭시키는 배선이다.
 - 한 서비스의 느려짐이 **호출자의 자원(스레드·커넥션)을 잠식**하며 도미노처럼 번지는 것이 MSA의 대표 장애 패턴. 이를 끊는 게 resilience 패턴의 목적.
 
 ## 3. 핵심 패턴 5종 ⭐
@@ -851,16 +1006,20 @@ Saga·이벤트 기반에서 치명적 함정: **"DB에 주문 저장 + 카프�
 | **Fallback** | 우아한 degradation | 실패 시 대체 응답(기본값·캐시·빈 결과) |
 
 ## 4. Circuit Breaker 상태 머신 ⭐
+```mermaid
+stateDiagram-v2
+  [*] --> CLOSED
+  CLOSED: CLOSED\n정상 통과
+  OPEN: OPEN\n즉시 차단 = 빠른 실패\n일정 시간 대기
+  HALF_OPEN: HALF-OPEN\n시험 호출 몇 개만 통과
+  CLOSED --> OPEN: 실패율 임계 초과
+  OPEN --> HALF_OPEN: 타임아웃 경과
+  HALF_OPEN --> CLOSED: 시험 성공
+  HALF_OPEN --> OPEN: 시험 실패
 ```
-        실패율 임계 초과
- [CLOSED] ───────────────► [OPEN]
-  (정상 통과)                (즉시 차단=빠른 실패,
-     ▲                        일정 시간 대기)
-     │ 성공                        │ 타임아웃 경과
-     │                            ▼
-     └────────────── [HALF-OPEN] (시험 호출 몇 개만 통과)
-        시험 성공          실패 시 다시 OPEN
-```
+
+`OPEN`에서 **즉시 실패**시키는 것이 요점이다. 죽은 서비스를 계속 기다리며
+스레드를 태우는 대신, 빠르게 포기하고 폴백을 준다.
 - **CLOSED**: 정상. 호출 통과하며 실패율 집계.
 - **OPEN**: 실패율이 임계(예: 50%)를 넘으면 전환. 이후 호출은 **즉시 실패**(fast fail) — 죽은 서비스를 계속 두드려 자원 낭비/전파하는 걸 막음. Fallback으로 연결.
 - **HALF-OPEN**: 일정 시간 후 시험 호출 몇 개만 허용 → 성공하면 CLOSED로 복구, 실패하면 다시 OPEN. (Resilience4j·과거 Hystrix가 구현체)
@@ -917,13 +1076,23 @@ Saga·이벤트 기반에서 치명적 함정: **"DB에 주문 저장 + 카프�
 
 ## 4. 서비스 디스커버리 — 동적 주소 찾기 ⭐
 MSA에서 서비스 인스턴스는 오토스케일·재배포로 **IP가 계속 바뀐다**. 하드코딩 불가.
+1. 각 서비스 인스턴스가 뜰 때 레지스트리에 **자기 주소를 등록**한다 (+헬스체크).
+2. 호출자는 레지스트리에 "결제 서비스 어디?"를 질의해 **살아있는 인스턴스 목록**을 받는다.
+3. 그중 하나로 요청한다(클라이언트 사이드 LB), 또는 **게이트웨이가 대신 라우팅**한다.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant I as 결제 서비스 인스턴스
+  participant R as 레지스트리
+  participant C as 호출자
+  I->>R: 등록 (주소 + 헬스체크)
+  C->>R: "결제 서비스 어디?"
+  R->>C: 살아있는 인스턴스 목록
+  C->>I: 요청 (클라이언트 사이드 LB)
 ```
-[서비스 레지스트리 방식]
-① 각 서비스 인스턴스가 뜰 때 레지스트리에 자기 주소 등록(+헬스체크)
-② 호출자는 레지스트리에 "결제 서비스 어디?" 질의 → 살아있는 인스턴스 목록 획득
-③ 그중 하나로 요청(클라이언트 사이드 LB) 또는 게이트웨이가 대신 라우팅
-   (예: Consul, Eureka, k8s의 Service/DNS)
-```
+
+예: Consul, Eureka, 그리고 쿠버네티스의 `Service` / 클러스터 DNS.
 - **클라이언트 사이드 디스커버리**(호출자가 레지스트리 조회 후 직접 LB) vs **서버 사이드**(LB/게이트웨이가 대신). 쿠버네티스는 Service 추상화 + 내부 DNS로 이걸 기본 제공(→ devops-k8s).
 
 ## 5. 핵심 포인트 (자주 하는 실수)

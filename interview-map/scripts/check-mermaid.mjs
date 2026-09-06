@@ -45,6 +45,12 @@ mermaid.initialize({
     primaryBorderColor: '#475569', secondaryColor: '#0f172a', tertiaryColor: '#0f172a',
     lineColor: '#7c8aa5', textColor: '#e6edf6', mainBkg: '#1e293b', nodeBorder: '#475569',
     clusterBkg: '#0f172a', clusterBorder: '#2b3a4f', edgeLabelBackground: '#0b1220',
+    // without these, sequence-diagram notes fall back to mermaid's yellow
+    noteBkgColor: '#151d33', noteTextColor: '#f8fafc', noteBorderColor: '#3b82f6',
+    actorBkg: '#1e293b', actorBorder: '#475569', actorTextColor: '#e6edf6',
+    actorLineColor: '#3a4a63', signalColor: '#e6edf6', signalTextColor: '#e6edf6',
+    labelBoxBkgColor: '#1e293b', labelBoxBorderColor: '#2b3a4f', labelTextColor: '#e6edf6',
+    sequenceNumberColor: '#0b1220',
     fontFamily: "system-ui, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif", fontSize: '15px',
   },
   flowchart: { curve: 'basis', htmlLabels: true, padding: 12, useMaxWidth: true,

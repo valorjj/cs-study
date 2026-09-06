@@ -29,35 +29,69 @@
 > **이미지** = 컨테이너를 만들기 위한 **읽기 전용 템플릿**(레이어의 스택). **컨테이너** = 이미지 위에 **쓰기 가능 레이어**를 얹어 실행한 인스턴스.
 
 ## 3. 다이어그램 — VM vs 컨테이너 아키텍처
-```
-        VM 방식                        컨테이너 방식
-┌───────────────────────┐     ┌───────────────────────┐
-│  App A  │  App B       │     │  App A  │  App B       │
-│  Bins/Libs │ Bins/Libs  │     │  Bins/Libs │ Bins/Libs  │
-│  Guest OS  │ Guest OS   │     │ ──── Docker Engine ──── │
-│──────  Hypervisor ─────│     │ ────  Host OS Kernel ──│
-│───────  Host OS  ──────│     │───────  Host OS  ──────│
-│───────  Hardware  ─────│     │───────  Hardware  ─────│
-└───────────────────────┘     └───────────────────────┘
-  Guest OS마다 부팅 필요(GB, 분)     커널 공유, 프로세스만 격리(MB, 초)
+```mermaid
+flowchart TB
+  subgraph VM["VM 방식 — Guest OS마다 부팅 필요 (GB, 분)"]
+    direction TB
+    VA["App A + Bins/Libs"]
+    VB["App B + Bins/Libs"]
+    VG1["Guest OS"]
+    VG2["Guest OS"]
+    VH["Hypervisor"]
+    VO["Host OS"]
+    VW["Hardware"]
+    VA --> VG1
+    VB --> VG2
+    VG1 --> VH
+    VG2 --> VH
+    VH --> VO --> VW
+  end
+  subgraph CT["컨테이너 방식 — 커널 공유, 프로세스만 격리 (MB, 초)"]
+    direction TB
+    CA["App A + Bins/Libs"]
+    CB["App B + Bins/Libs"]
+    CD["Docker Engine"]
+    CK["<b>Host OS Kernel (공유)</b>"]
+    CW["Hardware"]
+    CA --> CD
+    CB --> CD
+    CD --> CK --> CW
+  end
 ```
 
+컨테이너에 **Guest OS가 없다**는 것이 전부다. 커널을 호스트와 공유하고
+namespace/cgroup으로 격리만 하므로 이미지가 MB 단위이고 기동이 초 단위다.
+
 ## 4. 이미지 · 레이어 · 컨테이너 관계
+```mermaid
+flowchart TB
+  subgraph DF["Dockerfile"]
+    direction TB
+    D1["FROM openjdk:11"]
+    D2["RUN apt-get install ..."]
+    D3["COPY app.jar /app"]
+    D1 --> D2 --> D3
+  end
+  subgraph IMG["Image — 읽기 전용 레이어 스택"]
+    direction TB
+    L3["Layer: app.jar"]
+    L2["Layer: apt 패키지"]
+    L1["Layer: openjdk <i>(base)</i>"]
+    L3 --- L2 --- L1
+  end
+  subgraph CON["Container = Image + 쓰기 가능 레이어"]
+    direction TB
+    RW["Container Layer (RW)<br/><i>실행 중 변경사항</i>"]
+    RO["Image Layers (RO)<br/><i>여러 컨테이너가 공유</i>"]
+    RW --- RO
+  end
+  DF -- "docker build" --> IMG
+  IMG -- "docker run" --> CON
 ```
-Dockerfile                     Image (읽기 전용 레이어 스택)
-FROM openjdk:11        ──►     ┌─────────────────┐
-COPY app.jar /app       ──►    │ Layer: app.jar   │
-RUN apt-get install ... ──►    │ Layer: apt 패키지 │
-FROM openjdk:11         ──►    │ Layer: openjdk   │  (base)
-                                └─────────────────┘
-                                        │ docker run
-                                        ▼
-                          Container = Image + 쓰기 가능 레이어
-                          ┌─────────────────────────┐
-                          │ Container Layer (RW)     │ ← 실행 중 변경사항
-                          │ Image Layers (RO, 공유)   │ ← 여러 컨테이너가 공유
-                          └─────────────────────────┘
-```
+
+이미지 레이어는 **읽기 전용이고 컨테이너들 사이에서 공유**된다. 컨테이너가
+쓰는 내용만 자기 RW 레이어에 쌓인다(CoW) — 그래서 같은 이미지로 컨테이너
+100개를 띄워도 디스크는 거의 안 늘어난다.
 - 레이어는 **캐싱**됨 → 동일 레이어는 재빌드 안 함(빌드 속도↑). `Dockerfile` 상단에 잘 안 바뀌는 것(FROM, 의존성 설치)을 배치하는 이유.
 - 컨테이너를 지우면 쓰기 레이어만 사라짐. 이미지(읽기 전용)는 그대로 → 같은 이미지로 컨테이너 여러 개 재생성 가능.
 
@@ -154,7 +188,7 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 → 1단계 이미지(빌드 도구 포함, 수백 MB\~GB)는 버려지고, 2단계 이미지(JRE + jar만)만 최종 결과물로 남아 **수백 MB → 수십 MB**로 줄어드는 경우가 흔함.
 
 **.dockerignore**: `.git`, `node_modules`, `target`, `*.log` 등을 제외해야 빌드 컨텍스트(Docker 데몬에 전송되는 파일 묶음) 크기가 줄고, 불필요한 파일 변경으로 인한 캐시 무효화도 막을 수 있음.
-```
+```gitignore
 .git
 node_modules
 target
@@ -180,17 +214,23 @@ target
 
 **비유**: 컨테이너는 기본적으로 "일회용 원룸"이라 방을 빼면(컨테이너 삭제) 안에 있던 짐(데이터)도 같이 사라진다. **볼륨**은 원룸 밖 별도 창고에 짐을 보관하는 것 — 방을 빼도 창고의 짐은 그대로 남아 다음 세입자(새 컨테이너)가 다시 꺼내 쓸 수 있음. **네트워킹**은 건물의 내선 전화망(브리지 네트워크) — 같은 건물(호스트) 안의 방(컨테이너)끼리는 내선으로 통신하고, 외부에서 걸려온 전화(포트 매핑)는 대표번호(호스트 포트)를 거쳐 특정 방 내선(컨테이너 포트)으로 연결된다.
 
-```
-호스트                                컨테이너
-┌──────────────────────────┐
-│  포트 매핑: -p 8080:80     │   호스트:8080 ──► 컨테이너:80 (Nginx)
-│  ┌──────────────────────┐ │
-│  │  bridge network        │ │   컨테이너 A ──내부 IP로── 컨테이너 B 통신 가능
-│  │  (기본 네트워크 드라이버) │ │
-│  └──────────────────────┘ │
-│  Volume (호스트 디렉터리 or  │ ◄── 컨테이너 삭제돼도 여기 데이터는 유지
-│  Docker 관리 영역)          │
-└──────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph HOST["호스트"]
+    direction TB
+    PM["포트 매핑: -p 8080:80"]
+    subgraph BR["bridge network (기본 드라이버)"]
+      direction LR
+      CA["컨테이너 A"]
+      CB["컨테이너 B"]
+      CA <-- "내부 IP로 통신" --> CB
+    end
+    VOL[("Volume<br/>호스트 디렉터리 또는 Docker 관리 영역")]
+  end
+  EXT(["외부 요청 :8080"]) --> PM
+  PM -- "→ 컨테이너 :80 (Nginx)" --> CA
+  CA --> VOL
+  VOL -. "컨테이너를 삭제해도 데이터는 유지" .-> VOL
 ```
 
 - **네트워크 드라이버**: `bridge`(기본, 격리된 가상 네트워크 안에서 컨테이너끼리 통신) / `host`(호스트 네트워크 그대로 사용, 격리 없음, 포트 충돌 위험) / `none`(네트워크 없음).
@@ -299,12 +339,17 @@ CPU·메모리·디스크 I/O·PID 개수 등 **자원 사용량을 제한·측�
 - cgroup v2가 현재 표준(통합 계층 구조). k8s의 requests/limits도 결국 cgroup으로 내려간다.
 
 ### ③ overlayfs — "어떤 파일을 보나" (레이어 파일시스템)
+```mermaid
+flowchart BT
+  LOWER["<b>lowerdir</b> — 이미지 레이어들<br/>읽기 전용 · 여러 컨테이너 공유"]
+  UPPER["<b>upperdir</b> — 쓰기 가능 레이어<br/>컨테이너 변경분 · <i>쓸 때만 여기 생김</i>"]
+  MERGED["<b>merged</b> — 컨테이너가 보는 최종 뷰"]
+  LOWER --> MERGED
+  UPPER --> MERGED
 ```
-merged (컨테이너가 보는 최종 뷰)
-  ▲
-  │  upperdir  = 쓰기 가능 레이어 (컨테이너 변경분)   ← 쓸 때만 여기 생김
-  │  lowerdir  = 이미지 레이어들 (읽기 전용, 여러 컨테이너 공유)
-```
+
+읽을 때는 upper → lower 순으로 찾고, 쓸 때 lower의 파일을 upper로 복사한
+뒤 수정한다(copy-up). 그래서 큰 파일을 처음 수정할 때 한 번 느리다.
 - **Copy-on-Write**: 읽기는 아래 레이어에서 그대로. **수정하려는 순간** 그 파일만 upperdir로 복사해 거기서 수정(원본 이미지는 불변).
 - 그래서 컨테이너 시작이 즉각적(레이어 복사 없이 뷰만 합침)이고, 같은 이미지 컨테이너들이 디스크를 공유.
 
@@ -331,7 +376,7 @@ nsenter --target <PID> --net       # 특정 컨테이너의 네트워크 namespa
 ## 12. 이미지 레지스트리 · 태그 · 다이제스트
 
 **레지스트리** = 이미지를 저장·배포하는 저장소(Docker Hub, GHCR, AWS ECR, 사내 Harbor 등). `push`로 올리고 `pull`로 내려받는다.
-```
+```bash
 docker build -t myapp:1.2.0 .
 docker tag  myapp:1.2.0 registry.example.com/team/myapp:1.2.0
 docker push registry.example.com/team/myapp:1.2.0     # 없는 레이어만 업로드
@@ -371,26 +416,27 @@ docker pull registry.example.com/team/myapp:1.2.0     # 없는 레이어만 다�
 > **Kubernetes** = 여러 노드에 걸쳐 컨테이너를 **배포·확장·복구·네트워킹**을 자동화하는 **컨테이너 오케스트레이션** 플랫폼. 사용자는 "원하는 상태(desired state)"를 선언하면, K8s가 현재 상태를 그 상태로 계속 수렴시킴(**선언적 구성**).
 
 ## 3. 다이어그램 — 핵심 오브젝트 계층
+```mermaid
+flowchart TB
+  DEP["<b>Deployment</b><br/>원하는 개수·버전 선언<br/><i>'Pod 3개, image v2 유지해줘'</i>"]
+  RS["<b>ReplicaSet</b><br/>실제 Pod 개수를 감시 → 부족하면 채움"]
+  P1["Pod<br/>App Container"]
+  P2["Pod<br/>App Container"]
+  P3["Pod<br/>App Container"]
+  SVC["<b>Service</b><br/>안정적인 단일 진입점 · 로드밸런싱<br/>ClusterIP 10.0.0.5 <i>(Pod IP 바뀌어도 고정)</i>"]
+  EXT(["외부 / 다른 서비스의 요청"])
+  DEP -- "생성 · 관리" --> RS
+  RS --> P1
+  RS --> P2
+  RS --> P3
+  EXT --> SVC
+  SVC --> P1
+  SVC --> P2
+  SVC --> P3
 ```
-Deployment (원하는 개수·버전 선언, "Pod 3개, image v2 유지해줘")
-     │  생성/관리
-     ▼
-ReplicaSet (실제 Pod 개수를 감시 → 부족하면 채움)
-     │
-     ▼
-  Pod        Pod        Pod         ← 가장 작은 배포 단위
- ┌─────┐    ┌─────┐    ┌─────┐
- │ App  │    │ App  │    │ App  │     (컨테이너 1개 이상 + 공유 네트워크/볼륨)
- │Container│ │Container│ │Container│
- └─────┘    └─────┘    └─────┘
-     ▲          ▲          ▲
-     └──────────┴──────────┘
-              │
-           Service (안정적인 단일 진입점, 로드밸런싱)
-              │  ClusterIP: 10.0.0.5 (Pod IP 바뀌어도 고정)
-              ▼
-        외부/다른 서비스의 요청
-```
+
+Pod가 **가장 작은 배포 단위**다(컨테이너 1개 이상 + 공유 네트워크/볼륨).
+Pod IP는 재생성마다 바뀌므로 외부는 절대 Pod를 직접 부르지 않고 Service를 부른다.
 
 ## 4. 왜 오케스트레이션이 필요한가
 - 컨테이너가 늘어날수록 **어디서 몇 개 뜨는지, 죽으면 누가 재시작하는지, 트래픽을 어떻게 분산하는지, 무중단으로 어떻게 배포하는지**를 사람이 수동 관리 불가능.
@@ -446,15 +492,21 @@ ReplicaSet (실제 Pod 개수를 감시 → 부족하면 채움)
 
 **비유**: Service가 각 매장의 내선번호라면, **Ingress는 건물 정문 안내데스크** — 방문객이 "어디로 가야 하죠?"라고 물으면 방문 목적(도메인/URL 경로)을 보고 적절한 매장(Service)으로 안내한다. Service만 있으면 매장마다 대표번호가 따로 필요하지만, Ingress가 있으면 정문 안내데스크 하나(진입점 하나)로 여러 매장을 다 연결할 수 있다.
 
+```mermaid
+flowchart LR
+  C(["Client"])
+  ING["<b>Ingress</b><br/>host / path 규칙"]
+  SA["Service A"]
+  SB["Service B"]
+  PA["Pod들"]
+  PB["Pod들"]
+  C --> ING
+  ING -- "api.example.com/users" --> SA --> PA
+  ING -- "api.example.com/orders" --> SB --> PB
 ```
-Client ──► Ingress (host/path 규칙)
-              │  host: api.example.com, path: /users  → Service A
-              │  host: api.example.com, path: /orders → Service B
-              ▼
-        Service A          Service B
-           │                   │
-         Pod들               Pod들
-```
+
+L7(HTTP) 라우팅이다. Service를 `LoadBalancer`로 하나씩 노출하면 클라우드
+LB가 서비스 수만큼 필요하지만, Ingress는 **하나의 진입점에서 경로로 분기**한다.
 
 - Ingress는 **규칙(리소스) 정의**일 뿐이고, 실제 라우팅은 **Ingress Controller**(Nginx Ingress, Traefik 등)가 수행한다. Controller가 없으면 Ingress 리소스를 만들어도 아무 일도 안 일어남.
 - L7(HTTP/HTTPS) 라우팅, TLS 종료, 경로 기반/도메인 기반 라우팅을 클러스터 진입점 한 곳에서 처리 → Service를 매번 LoadBalancer 타입으로 만들 필요가 없어짐(비용 절감).
@@ -484,10 +536,13 @@ Client ──► Ingress (host/path 규칙)
 
 CPU/메모리/커스텀 메트릭을 감시하다가 임계값을 넘으면 Pod 개수를 자동으로 늘리고(scale-out), 부하가 줄면 다시 줄인다(scale-in). 대략적인 계산 방식:
 
-```
+```text
 desiredReplicas = ceil( currentReplicas × (currentMetricValue / targetMetricValue) )
+```
 
 예) target CPU 50%, 현재 CPU 사용률 80%, 현재 replica 4개
+
+```text
 desiredReplicas = ceil(4 × (80/50)) = ceil(6.4) = 7개로 증설
 ```
 
@@ -523,10 +578,15 @@ Deployment의 기본 배포 전략은 **RollingUpdate**이며, 두 파라미터�
 - `maxUnavailable`: 배포 중 동시에 내려도 되는 Pod 비율/개수(가용성 하한).
 - `maxSurge`: 배포 중 원래 개수보다 몇 개까지 더 띄워도 되는지(리소스 여유 필요).
 
-```
+```text
 Deployment (replicas=4, maxUnavailable=1, maxSurge=1)
+
 [v1 v1 v1 v1] → [v1 v1 v1 v2] → [v1 v1 v2 v2] → ... → [v2 v2 v2 v2]
 ```
+
+`maxUnavailable=1`은 "한 번에 최대 1개만 내려도 된다", `maxSurge=1`은
+"정원보다 최대 1개 더 띄워도 된다"는 뜻이다. 둘이 롤아웃 속도와 가용 용량의
+트레이드오프를 정한다.
 
 K8s에서 **Blue-Green**과 **Canary**는 기본 오브젝트만으론 지원 안 되고, 보통 **두 개의 Deployment(v1/v2) + Service의 selector 전환** 또는 Istio/Argo Rollouts 같은 서비스 메시·전용 컨트롤러로 구현한다.
 
@@ -555,32 +615,60 @@ K8s에서 **Blue-Green**과 **Canary**는 기본 오브젝트만으론 지원 �
 - Delivery(수동 승인 후 배포) vs Deployment(승인 없이 자동 배포) — 흔히 혼용하지만 엄밀히 다름.
 
 ## 3. 다이어그램 — 파이프라인 단계
-```
-[코드 push] → CI ─────────────────────────┐
-   │  1. Build   (컴파일, 의존성 설치)        │
-   │  2. Test    (단위/통합 테스트, 린트)      │
-   │  3. Package (이미지 빌드, 아티팩트 생성)   │
-   └───────────────────────────────────────┘
-                     │  통과 시
-                     ▼
-                    CD ─────────────────────
-   │  4. Deploy(Staging) → 검증
-   │  5. Deploy(Production) — 배포 전략 적용
-   │  6. Monitor / Rollback (문제 시 자동 롤백)
-   └───────────────────────────────────────
+```mermaid
+flowchart TB
+  PUSH(["코드 push"])
+  subgraph CI["CI"]
+    direction TB
+    B["1. Build — 컴파일, 의존성 설치"]
+    T["2. Test — 단위/통합 테스트, 린트"]
+    P["3. Package — 이미지 빌드, 아티팩트 생성"]
+    B --> T --> P
+  end
+  subgraph CD["CD"]
+    direction TB
+    S["4. Deploy (Staging) → 검증"]
+    PR["5. Deploy (Production) — 배포 전략 적용"]
+    M["6. Monitor / Rollback — 문제 시 자동 롤백"]
+    S --> PR --> M
+  end
+  PUSH --> CI
+  CI -- "통과 시" --> CD
+  M -. "롤백" .-> PR
 ```
 
 ## 4. 배포 전략 비교
-```
-Rolling:  [v1 v1 v1] → [v2 v1 v1] → [v2 v2 v1] → [v2 v2 v2]   (순차 교체)
+| 전략 | 방식 | 리소스 | 롤백 속도 | 위험 노출 |
+|------|------|--------|-----------|-----------|
+| **Rolling** | 순차 교체 | 정원 + maxSurge | 느림(다시 롤링) | 전체에 점진 |
+| **Blue-Green** | 두 환경, 트래픽 한 번에 스위치 | **2배** | **즉시**(되돌리기) | 전체 or 없음 |
+| **Canary** | 일부 트래픽만 신버전 | 조금 더 | 빠름(비율 0) | **소수에게만** |
 
-Blue-Green:  Blue(v1, 운영 중) ──┐
-             Green(v2, 대기)  ───┴─► 트래픽 스위치(한 번에) ─► Blue(v1, 대기)
+**Rolling**
 
-Canary:  트래픽 100% → v1
-         트래픽 95%→v1, 5%→v2  (일부만 신버전, 문제 없으면 점진 확대)
-         트래픽 0%→v1, 100%→v2
+```text
+[v1 v1 v1] → [v2 v1 v1] → [v2 v2 v1] → [v2 v2 v2]
 ```
+
+**Blue-Green**
+
+```mermaid
+flowchart LR
+  LB{"트래픽 스위치<br/>(한 번에)"}
+  BLUE["Blue (v1)<br/>운영 중 → 대기"]
+  GREEN["Green (v2)<br/>대기 → 운영 중"]
+  LB -- "before" --> BLUE
+  LB -- "after" --> GREEN
+```
+
+**Canary**
+
+```mermaid
+flowchart LR
+  S1["100% → v1"] --> S2["95% → v1<br/>5% → v2"] --> S3["0% → v1<br/>100% → v2"]
+```
+
+문제가 없으면 점진 확대한다. 소수 사용자만 위험에 노출되는 것이 핵심 이점이다.
 
 ## 5. 핵심 포인트 (자주 하는 실수)
 - 🔴 "CI/CD는 하나의 개념" ❌ — CI(통합 검증)와 CD(배포)는 **목적이 다른 별개 단계**. CI 없이 CD만 있으면 검증 안 된 코드가 배포될 위험.
@@ -666,18 +754,29 @@ Canary:  트래픽 100% → v1
 > **Observability** = 시스템이 내보내는 신호(로그·메트릭·트레이스)만으로 **내부 상태를 추론하고 "왜" 문제가 생겼는지 원인을 찾아낼 수 있는 능력**. 단순히 "정상/비정상"을 알리는 모니터링보다 상위 개념 — 모니터링은 "무엇을 볼지 미리 정의", 옵저버빌리티는 "예측 못 한 문제도 사후에 파고들 수 있는" 시스템 설계 철학.
 
 ## 3. 다이어그램 — 3가지 축과 관계
+```mermaid
+flowchart TB
+  REQ(["요청 하나가 서비스 A → B → C를 거침"])
+  subgraph TRACE["Trace — 이 요청이 <b>어디서</b> 느렸는지"]
+    direction LR
+    TA["A: 120ms"] --> TB["B: <b>300ms</b>"] --> TC["C: 50ms"]
+  end
+  subgraph LOGS["Log — 그 구간에서 <b>무슨 일</b>이 있었는지"]
+    direction LR
+    LA["..."]
+    LB["'B에서 타임아웃'"]
+    LC["'DB 커넥션 풀 고갈'"]
+  end
+  MET["Metrics — 전체 시스템의 <b>현재 상태</b> 숫자 요약<br/>CPU 90% · 요청 1200/s · 에러율 5%<br/><i>시계열·집계 — '왜 튀었는지'는 답 못 함</i>"]
+  REQ --> TRACE
+  TB --> LB
+  TC --> LC
+  TA --> LA
+  MET -. "이상 감지의 출발점" .-> TRACE
 ```
-        요청 하나가 서비스 A → B → C를 거침
-┌─────────────────────────────────────────────┐
-│ Trace: [A: 120ms] → [B: 300ms] → [C: 50ms]    │  ← 이 요청이 "어디서" 느렸는지
-│           │            │            │          │
-│         Log: "B에서    Log: "DB     Log: ...   │  ← 그 구간에서 "무슨 일"이 있었는지
-│         타임아웃"       커넥션 풀 고갈"           │     (구체적 이벤트, 텍스트)
-└─────────────────────────────────────────────┘
-                     ▲
-        Metrics: CPU 90%, 요청 수 1200/s, 에러율 5%   ← 전체 시스템 "현재 상태" 숫자 요약
-        (시계열, 집계됨 — "B 서비스 에러율이 왜 튀었는지"는 답 못 함)
-```
+
+세 축의 역할이 다르다. **Metrics로 알아채고, Trace로 좁히고, Log로 확인한다.**
+Metrics만으로는 원인에 도달할 수 없고, Log만으로는 분산 요청을 못 잇는다.
 
 ## 4. 3가지 축 비교
 | 축 | 정의 | 강점 | 약점 | 예시 도구 |
@@ -730,20 +829,31 @@ Canary:  트래픽 100% → v1
 > **Span** = trace 안의 개별 작업 단위(한 서비스의 처리, DB 쿼리 등). `span id` + `parent span id`로 **부모-자식 트리**를 이루고, start/end 타임스탬프로 각 구간 지연을 계산.
 > **Context 전파(propagation)** = 서비스 A가 B를 호출할 때 **HTTP 헤더에 trace context를 실어** 보내고 B가 이어받아 자식 span을 만드는 것. 표준은 **W3C Trace Context**의 `traceparent` 헤더.
 
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant A as Service A
+  participant B as Service B
+  participant S as Service C
+  C->>A: traceparent: 00-trace_id-span_id-01
+  Note over A: span A (root)
+  A->>B: traceparent에 자기 span_id를 부모로 넣어 전파
+  Note over B: span B (parent=A)
+  B->>S: 전파
+  Note over S: span C (parent=B)
 ```
-Client ──(traceparent: 00-<trace_id>-<span_id>-01)──► Service A
-                                                        │  span A (root)
-        A가 B 호출 시 traceparent에 자기 span_id를 부모로 넣어 전파
-                                                        ▼
-                                                     Service B
-                                                        │  span B (parent=A)
-                                                        ▼
-                                                     Service C  span C (parent=B)
 
-한 Trace 트리:  A[120ms]
-                 └─ B[300ms]  ← 여기가 병목
-                     └─ C[50ms]
+한 Trace의 트리:
+
+```text
+A [120ms]
+└─ B [300ms]   ← 여기가 병목
+   └─ C [50ms]
 ```
+
+`trace_id`는 요청 전체에서 하나, `span_id`는 구간마다 하나다. 부모 관계가
+있어서 평평한 로그 더미가 **트리**로 복원된다.
 
 ### 9-3. 샘플링 — 왜, 어떻게
 모든 요청을 추적하면 오버헤드·저장비용이 폭발 → **일부만 샘플링**한다.
@@ -826,21 +936,27 @@ Client ──(traceparent: 00-<trace_id>-<span_id>-01)──► Service A
 
 ## 3. 다이어그램 — 소유 계층과 라벨 연결
 
+```mermaid
+flowchart TB
+  DEP["<b>Deployment</b><br/>spec: replicas=3, image=app:v2, selector app=web"]
+  RS2["<b>ReplicaSet-v2</b><br/>replicas=3 감시"]
+  RS1["ReplicaSet-v1<br/>replicas=0 · <i>롤백용 히스토리</i>"]
+  P1["Pod (IP a.1)"]
+  P2["Pod (IP a.2)"]
+  P3["Pod (IP a.3)"]
+  SVC["<b>Service</b><br/>ClusterIP 10.96.0.7 (고정)<br/>selector: app=web"]
+  DEP -- "소유 — 롤아웃마다 새 ReplicaSet" --> RS2
+  DEP -. "이전 리비전" .-> RS1
+  RS2 -- 소유 --> P1
+  RS2 --> P2
+  RS2 --> P3
+  SVC -- "label app=web 으로 묶음" --> P1
+  SVC --> P2
+  SVC --> P3
 ```
-Deployment  (spec: replicas=3, image=app:v2, selector app=web)
-    │  소유(owns) — 롤아웃마다 새 ReplicaSet 생성
-    ▼
-ReplicaSet-v2  (replicas=3 감시)      [ReplicaSet-v1: replicas=0, 롤백용 히스토리]
-    │  소유
-    ▼
- Pod        Pod        Pod           label: app=web
- (IP a.1)   (IP a.2)   (IP a.3)      ← IP는 재생성마다 바뀜(휘발성)
-    ▲          ▲          ▲
-    └──────────┴──────────┘
-        selector: app=web            ← Service는 "IP"가 아니라 "라벨"로 Pod를 묶는다
-              │
-          Service (ClusterIP 10.96.0.7, 고정)
-```
+
+Pod IP는 재생성마다 바뀌는 **휘발성** 값이다. Service는 IP가 아니라
+**라벨(`selector`)로 Pod를 묶기** 때문에, Pod가 전부 교체돼도 진입점은 그대로다.
 
 핵심: Service와 Pod는 **직접 연결이 아니라 라벨(app=web)로 느슨하게 연결**된다. 그래서 Pod가 죽고 새로 떠 IP가 바뀌어도 라벨만 같으면 Service가 자동으로 다시 묶는다.
 
@@ -914,32 +1030,39 @@ ReplicaSet-v2  (replicas=3 감시)      [ReplicaSet-v1: replicas=0, 롤백용 �
 
 ## 3. 사고 시나리오 — 프로브 오설정 3대 함정
 
-```
-① liveness에 "무거운 의존성 체크"를 넣음
-   liveness: GET /health  →  이 핸들러가 DB·Redis까지 확인
-   DB가 잠깐 느려짐 → liveness 실패 → 컨테이너 재시작
-   → 재시작해도 DB는 여전히 느림 → 또 실패 → 무한 재시작(CrashLoopBackOff)
-   ✅ 교훈: liveness는 "프로세스 자체"만(가볍게), 의존성 체크는 readiness로.
+**① `liveness`에 무거운 의존성 체크를 넣음**
 
-② startupProbe 없이 initialDelaySeconds도 짧음
-   부팅에 40초 걸리는 앱, liveness initialDelay=10s
-   → 아직 뜨는 중인데 liveness가 죽여버림 → 영원히 못 뜸
-   ✅ 교훈: 부팅 느린 앱은 startupProbe로 "다 뜰 때까지" liveness 유예.
-
-③ readiness는 없고 liveness만 있음
-   롤링 업데이트 중 새 Pod가 아직 웜업 안 됐는데 Service가 트래픽 전송
-   → 초기 요청 다수 실패(콜드 스타트)
-   ✅ 교훈: 웜업 필요한 앱은 readiness로 "준비 끝나면" 트래픽 받기.
+```yaml
+liveness: GET /health   # 이 핸들러가 DB·Redis까지 확인
 ```
+
+DB가 잠깐 느려짐 → liveness 실패 → 컨테이너 재시작 → 재시작해도 DB는 여전히
+느림 → 또 실패 → **무한 재시작(`CrashLoopBackOff`)**.
+
+> **교훈:** `liveness`는 **프로세스 자체**만 가볍게 확인한다.
+> 의존성 체크는 `readiness`로 옮긴다.
+
+**② `startupProbe` 없이 `initialDelaySeconds`도 짧음**
+
+부팅에 40초 걸리는 앱에 `liveness initialDelay=10s` → 아직 뜨는 중인데
+liveness가 죽여버림 → **영원히 못 뜸**.
+
+> **교훈:** 부팅 느린 앱은 `startupProbe`로 "다 뜰 때까지" liveness를 유예한다.
+
+**③ `readiness`는 없고 `liveness`만 있음**
+
+롤링 업데이트 중 새 Pod가 아직 웜업 안 됐는데 Service가 트래픽을 보냄
+→ **초기 요청 다수 실패(콜드 스타트)**.
+
+> **교훈:** 웜업이 필요한 앱은 `readiness`로 "준비가 끝나면" 트래픽을 받는다.
 
 ## 4. HPA — 개수 계산과 동작
 
-```
+```text
 desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭) )
-
-예) 목표 CPU 50%, 현재 평균 CPU 80%, 현재 4개
-   → ceil(4 × 80/50) = ceil(6.4) = 7개로 scale-out
 ```
+
+예) 목표 CPU 50%, 현재 평균 CPU 80%, 현재 4개 → `ceil(4 × 80/50) = ceil(6.4) = 7`개로 scale-out.
 - 대상 메트릭: CPU/메모리(기본) 또는 커스텀 메트릭(RPS, 큐 길이 등, Prometheus Adapter 등 연동).
 - **scale-in은 보수적**(기본 안정화 윈도 5분) — 트래픽이 출렁일 때 Pod가 잦게 오르내리는 flapping을 막기 위해.
 - HPA(개수) vs **VPA**(개별 Pod의 CPU/메모리 할당량 자체) — VPA는 변경 시 Pod 재시작이 필요해 무중단성이 떨어짐. 보통 HPA를 먼저 고려.
@@ -977,30 +1100,41 @@ desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭)
 **Control Plane = 본사 경영진**: 방침을 접수하는 접수처(API Server), 모든 계약서 원본 보관소(etcd), 신규 인력을 어느 지점에 보낼지 정하는 인사팀(Scheduler), "인원 3명 유지" 같은 방침을 실제로 맞추는 관리팀(Controller Manager). **Worker Node = 지점**: 지점장(kubelet)이 본사 지시대로 직원(컨테이너)을 배치·관리하고, 지점 안내데스크(kube-proxy)가 손님을 올바른 직원에게 연결.
 
 ## 2. 컴포넌트 구성 ⭐
+```mermaid
+flowchart TB
+  subgraph CP["Control Plane (마스터)"]
+    direction TB
+    API["<b>API Server</b><br/>모든 통신의 관문 · <i>유일한 etcd 접근자</i>"]
+    ETCD[("<b>etcd</b><br/>클러스터의 유일한 상태 저장소<br/>분산 KV · Raft 합의 · desired + current")]
+    SCH["<b>Scheduler</b><br/>Pod를 어느 노드에 놓을지 결정"]
+    CM["<b>Controller Manager</b><br/>ReplicaSet/Deployment 등 컨트롤러<br/>현재 → desired 수렴 (reconcile)"]
+    API <-- "읽기/쓰기" --> ETCD
+    SCH --> API
+    CM --> API
+  end
+  subgraph W1["Worker Node"]
+    direction TB
+    K1["kubelet<br/><i>Pod 스펙대로 컨테이너 실행</i>"]
+    PX1["kube-proxy<br/><i>Service → Pod 라우팅</i>"]
+    CR1["container runtime (containerd)"]
+    PD1["Pod · Pod"]
+    K1 --> CR1 --> PD1
+  end
+  subgraph W2["Worker Node"]
+    direction TB
+    K2["kubelet"]
+    PX2["kube-proxy"]
+    CR2["containerd"]
+    PD2["Pod"]
+    K2 --> CR2 --> PD2
+  end
+  KC(["kubectl"]) --> API
+  K1 -- "API Server 통해서만" --> API
+  K2 --> API
 ```
-┌──────────────── Control Plane (마스터) ────────────────┐
-│  ┌──────────────┐   모든 통신의 관문(유일한 etcd 접근자)  │
-│  │  API Server  │◄──── kubectl / 컨트롤러 / kubelet 전부 여기로
-│  └──────┬───────┘                                       │
-│         │ 읽기/쓰기                                       │
-│  ┌──────▼───────┐   클러스터의 유일한 상태 저장소          │
-│  │     etcd     │  (분산 KV, Raft 합의, desired+current) │
-│  └──────────────┘                                       │
-│  ┌──────────────┐   Pod를 어느 노드에 놓을지 결정          │
-│  │  Scheduler   │                                        │
-│  └──────────────┘                                       │
-│  ┌──────────────────┐  ReplicaSet/Deployment 등 컨트롤러  │
-│  │ Controller Mgr   │  현재→desired 수렴(reconcile)       │
-│  └──────────────────┘                                    │
-└──────────────────────────────────────────────────────────┘
-        │ (API Server 통해서만 통신)
-┌───────▼─────── Worker Node ────────┐   ┌──── Worker Node ────┐
-│  kubelet (Pod 스펙대로 컨테이너 실행) │   │  kubelet            │
-│  kube-proxy (Service→Pod 라우팅)     │   │  kube-proxy         │
-│  container runtime (containerd)     │   │  containerd         │
-│   └─ Pod ─ Pod                       │   │   └─ Pod            │
-└──────────────────────────────────────┘   └─────────────────────┘
-```
+
+**모든 통신이 API Server를 지난다.** kubelet도 etcd를 직접 보지 않는다.
+그래서 인증·인가·admission을 한 곳에서 걸 수 있고, etcd는 단일 접근자만 갖는다.
 
 | 컴포넌트 | 위치 | 역할 |
 |---------|------|------|
@@ -1013,14 +1147,31 @@ desiredReplicas = ceil( currentReplicas × (현재 메트릭 / 목표 메트릭)
 | **container runtime** | Worker | 실제 컨테이너 실행(containerd, CRI-O) |
 
 ## 3. `kubectl apply` 한 줄의 내부 흐름 ⭐
+```mermaid
+sequenceDiagram
+  autonumber
+  participant K as kubectl
+  participant A as API Server
+  participant E as etcd
+  participant D as Deployment 컨트롤러
+  participant S as Scheduler
+  participant L as kubelet (노드)
+  K->>A: apply
+  A->>A: 인증 · 인가 · admission 검증
+  A->>E: desired: Pod 3개 저장
+  D->>A: 변화 감지 → ReplicaSet 생성
+  A->>E: Pod 3개 생성 요청 기록
+  S->>A: 노드 미할당 Pod 발견 → 노드 선정
+  A->>E: Pod에 nodeName 기록
+  L->>A: 내 노드에 배정된 Pod 감지
+  L->>L: containerd로 컨테이너 실행
+  L->>A: 상태 보고
+  A->>E: current state 갱신
+  Note over D: controller가 current vs desired를 계속 비교(reconcile)<br/>하나 죽으면 다시 생성 흐름으로
 ```
-① kubectl apply → API Server (인증·인가·admission 검증) → etcd에 "desired: Pod 3개" 저장
-② Deployment 컨트롤러가 변화 감지 → ReplicaSet 생성 → etcd에 Pod 3개 "생성 요청" 기록
-③ Scheduler가 노드 미할당 Pod 발견 → 적절한 노드 선정 → Pod에 nodeName 기록(API Server 통해)
-④ 해당 노드의 kubelet이 "내 노드에 배정된 Pod" 감지 → containerd로 컨테이너 실행
-⑤ kubelet이 상태를 API Server에 보고 → etcd의 current state 갱신
-   → controller가 current vs desired 계속 비교(reconcile). 하나 죽으면 다시 ②~④
-```
+
+선언한 상태를 저장하고, 컨트롤러가 **현재와 desired의 차이를 계속 메우는**
+구조다. "명령을 실행"하는 게 아니라 "상태를 수렴시킨다".
 - 핵심: **모든 컴포넌트는 서로 직접 호출하지 않고 API Server를 통해서만** 통신하고, etcd의 상태를 **watch**하며 자기 일을 한다(level-triggered reconciliation). 이 느슨한 결합이 확장성·복원력의 근원.
 
 <details class="deep">
@@ -1130,18 +1281,21 @@ Deployment의 Pod는 **교대 알바**(누가 오든 같은 유니폼, 이름표
 
 ## 3. PV · PVC · StorageClass ⭐
 컨테이너는 기본적으로 **휘발성**(재시작하면 파일 사라짐). 영속 저장은 볼륨 추상화로 분리한다.
+```mermaid
+flowchart TB
+  POD["Pod"]
+  PVC["<b>PVC</b> (PersistentVolumeClaim)<br/>'10Gi SSD 주세요' — <i>사용자의 요청</i>"]
+  PV["<b>PV</b> (PersistentVolume)<br/>실제 스토리지 조각 — <i>관리자 또는 동적 프로비저닝</i>"]
+  BE[("실제 백엔드<br/>EBS · NFS · Ceph …")]
+  SC["<b>StorageClass</b><br/>'어떤 종류를 동적으로 만들지' 템플릿"]
+  POD -- 마운트 --> PVC
+  PVC -- 바인딩 --> PV
+  PV --> BE
+  SC -. "PVC가 지정하면 PV를 자동 생성<br/>(동적 프로비저닝)" .-> PV
 ```
-Pod ──마운트──► PVC (PersistentVolumeClaim: "10Gi SSD 주세요" — 사용자의 요청)
-                     │  바인딩
-                     ▼
-                PV (PersistentVolume: 실제 스토리지 조각 — 관리자/동적 프로비저닝)
-                     │
-                     ▼
-                실제 백엔드(EBS, NFS, Ceph…)
 
-StorageClass: "어떤 종류의 스토리지를 동적으로 만들지" 템플릿
-  → PVC가 StorageClass를 지정하면 PV를 자동 생성(동적 프로비저닝)
-```
+PVC는 **요청**이고 PV는 **실물**이다. 이 분리 덕분에 애플리케이션 매니페스트가
+"EBS냐 NFS냐"를 몰라도 된다.
 - **PVC**(요청)와 **PV**(실제 볼륨)를 분리 → 개발자는 "얼마나·어떤 성능"만 요청하고, 실제 스토리지 프로비저닝은 인프라가 담당(관심사 분리).
 - **StorageClass**: PVC가 올 때마다 PV를 **동적 생성**(클라우드 디스크 자동 프로비저닝). 없으면 관리자가 PV를 미리 만들어둬야(정적).
 - **Reclaim Policy**: PVC 삭제 시 PV를 어떻게 할지 — `Retain`(보존, 데이터 안전)/`Delete`(삭제). DB는 보통 Retain.
@@ -1178,15 +1332,22 @@ Service의 ClusterIP는 **회사 대표번호**(실체 없는 가상 번호). �
 | **외부 → 클러스터** | Service(LoadBalancer/NodePort), Ingress | (DO2 §10, DO5 §5) |
 
 ## 3. Service 요청이 Pod까지 가는 실제 경로 ⭐
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Pod A
+  participant D as CoreDNS
+  participant P as kube-proxy 규칙 (iptables/IPVS)
+  participant B as 백엔드 Pod
+  A->>D: order-svc.default.svc.cluster.local ?
+  D->>A: ClusterIP 10.96.0.7
+  A->>P: 10.96.0.7 로 패킷 전송
+  P->>P: DNAT — 가상 IP → 실제 백엔드 Pod IP 중 하나 + 로드밸런싱
+  P->>B: CNI 네트워크를 통해 전달
 ```
-Pod A가 "order-svc"를 호출:
-① CoreDNS: "order-svc.default.svc.cluster.local" → ClusterIP 10.96.0.7 반환
-② Pod A가 10.96.0.7로 패킷 전송
-③ 노드의 kube-proxy가 심어둔 iptables/IPVS 규칙이 이 가상 IP를
-   실제 백엔드 Pod IP들 중 하나로 DNAT(목적지 주소 변환) + 로드밸런싱
-④ CNI 네트워크를 통해 그 Pod로 전달
-  → ClusterIP는 실존 인터페이스가 아니라 "iptables 규칙상의 가상 IP"일 뿐
-```
+
+**ClusterIP는 실존하는 인터페이스가 아니다.** 어느 NIC에도 붙어 있지 않고,
+`iptables`/IPVS 규칙상의 가상 IP일 뿐이다 — 그래서 ping은 안 되지만 통신은 된다.
 - 핵심: **Service(ClusterIP)는 물리적 실체가 없다.** kube-proxy가 각 노드에 심은 iptables/IPVS 규칙이 그 가상 IP를 살아있는 Pod로 바꿔주는 것. Pod가 바뀌면 endpoints가 갱신되고 kube-proxy가 규칙을 다시 씀.
 
 ## 4. NetworkPolicy — Pod 간 통신 방화벽

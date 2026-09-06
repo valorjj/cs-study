@@ -34,12 +34,24 @@
 | 1 Physical | (Network Access) | 비트 전송 | 케이블, 전기신호 |
 
 ## 3. 다이어그램 — 캡슐화
-```
-송신 (내려가며 헤더 추가)          수신 (올라가며 헤더 제거)
- App:  [        Data        ]        [        Data        ]
- TCP:  [TCP hdr| Data ]  ← 세그먼트    ▲ 역캡슐화
- IP:   [IP hdr|TCP| Data]  ← 패킷      │
- Link: [Eth|IP|TCP|Data|]  ← 프레임 ───┘ 물리 전송
+| 계층 | 내려가며 붙는 것 | 단위 |
+|------|------------------|------|
+| Application | `Data` | 메시지 |
+| Transport (TCP) | `TCP hdr` + Data | **세그먼트** |
+| Network (IP) | `IP hdr` + TCP hdr + Data | **패킷** |
+| Link (Ethernet) | `Eth hdr` + IP + TCP + Data + `FCS` | **프레임** |
+
+```mermaid
+flowchart LR
+  subgraph TX["송신 — 내려가며 헤더 추가"]
+    direction TB
+    T1["App: Data"] --> T2["TCP: 세그먼트"] --> T3["IP: 패킷"] --> T4["Link: 프레임"]
+  end
+  subgraph RX["수신 — 올라가며 헤더 제거 (역캡슐화)"]
+    direction TB
+    R4["Link: 프레임"] --> R3["IP: 패킷"] --> R2["TCP: 세그먼트"] --> R1["App: Data"]
+  end
+  T4 -- "물리 전송" --> R4
 ```
 
 **계층별 PDU 이름** (면접 단골): L4 = **세그먼트**(TCP)/**데이터그램**(UDP) · L3 = **패킷** · L2 = **프레임** · L1 = **비트**. "패킷"은 넓게도 쓰지만 엄밀히는 L3 단위다.
@@ -50,10 +62,15 @@
 한 번의 `HTTP GET`이 내려가며 실제로 어떤 바이트가 붙는지. 위→아래로 헤더가 감싸진다.
 
 ### L2 — Ethernet II 프레임
-```
-[ Preamble 7 | SFD 1 ][ Dst MAC 6 | Src MAC 6 | EtherType 2 |  Payload 46~1500  | FCS 4 ]
-   (물리 동기화, 프레임 밖)     ▲목적지 물리주소  ▲상위 프로토콜         ▲IP 패킷         ▲CRC 오류검출
-```
+| 필드 | 크기(B) | 역할 |
+|------|--------:|------|
+| Preamble | 7 | 물리 동기화 — **프레임 밖** |
+| SFD | 1 | 프레임 시작 구분자 — 프레임 밖 |
+| Dst MAC | 6 | 목적지 **물리 주소** |
+| Src MAC | 6 | 출발지 물리 주소 |
+| EtherType | 2 | **상위 프로토콜** (0x0800=IPv4, 0x0806=ARP) |
+| Payload | 46~1500 | **IP 패킷** (최대 1500 = MTU) |
+| FCS | 4 | **CRC 오류 검출** |
 - **Dst/Src MAC(각 6B)**: 같은 링크(LAN) 안 **인접 노드**의 물리주소. 라우터를 지날 때마다 **바뀐다**(IP는 안 바뀜).
 - **EtherType(2B)**: 페이로드가 뭔지 — `0x0800`=IPv4, `0x86DD`=IPv6, `0x0806`=ARP.
 - **MTU**: 페이로드 최대 1500B(표준 이더넷). 이보다 크면 L3에서 조각화(fragmentation).
@@ -83,9 +100,15 @@
 | Options | 가변 | **MSS**, Window Scale, SACK, Timestamp |
 
 ### L4 — UDP 헤더 (딱 8B)
-```
-[ Src Port 2 | Dst Port 2 | Length 2 | Checksum 2 ]
-```
+| 필드 | 크기(B) | 역할 |
+|------|--------:|------|
+| Src Port | 2 | 출발지 포트 |
+| Dst Port | 2 | 목적지 포트 |
+| Length | 2 | 헤더 + 데이터 길이 |
+| Checksum | 2 | 오류 검출 (IPv4에서는 선택) |
+
+TCP 헤더(최소 20B)와 달리 **seq/ack·윈도·플래그가 아예 없다.** 그래서
+순서 보장·재전송·흐름 제어도 없고, 그만큼 가볍고 지연이 낮다.
 - TCP의 seq/ack/window/flags가 **전부 없음** → 연결·순서·재전송·흐름제어 없음. 그래서 헤더가 8B로 가볍고 빠르다.
 
 ### MSS와 조각화
@@ -125,21 +148,30 @@
 | 용도 | HTTP, 파일, 메일 | 스트리밍, 게임, DNS, VoIP |
 
 ## 3. 3-way Handshake (연결 수립)
-```
-Client                         Server
-   │  ── SYN (seq=x) ──────────►│   "연결하자"
-   │  ◄── SYN+ACK (seq=y,ack=x+1)│   "그래, 나도 준비"
-   │  ── ACK (ack=y+1) ────────►│   "확인, 시작"
-   │        [연결 established]    │
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant S as Server
+  C->>S: SYN (seq=x) — "연결하자"
+  S->>C: SYN+ACK (seq=y, ack=x+1) — "그래, 나도 준비"
+  C->>S: ACK (ack=y+1) — "확인, 시작"
+  Note over C,S: 연결 established
 ```
 > 왜 3번? 양쪽 모두 **상대의 송신·수신 능력**을 확인하려면 최소 3번 필요.
 
 ## 4. 4-way Handshake (연결 종료)
-```
-   │ ── FIN ──►│   "나 끝"
-   │ ◄── ACK ──│   "알겠어"
-   │ ◄── FIN ──│   "나도 끝"   (남은 데이터 보내고)
-   │ ── ACK ──►│   "확인"      → TIME_WAIT 후 close
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client (active close)
+  participant S as Server (passive close)
+  C->>S: FIN — "나 끝"
+  S->>C: ACK — "알겠어"
+  Note over S: 남은 데이터 전송
+  S->>C: FIN — "나도 끝"
+  C->>S: ACK — "확인"
+  Note over C: TIME_WAIT (2×MSL) 후 close
 ```
 > 종료가 4번인 이유: 서버가 보낼 데이터가 남았을 수 있어 **ACK와 FIN을 분리**해서 보냄.
 
@@ -154,11 +186,19 @@ Client                         Server
 - 수신자는 매 ACK에 **rwnd(receive window)** 값을 실어 보냄 = "지금 이만큼 더 받을 수 있어".
 - 송신자는 ACK를 기다리지 않고도 rwnd 범위 안에서는 **여러 세그먼트를 미리 연속 전송**(sliding window) → 한 번 보내고 기다리는 stop-and-wait보다 훨씬 효율적.
 - `rwnd = 0`(Zero Window) → 송신 중단, 수신자가 버퍼 비우면 **Window Update**로 재개.
+```text
+        ┌── 이미 보냄 ──┐┌── 보낼 수 있음 ──┐
+seq:    1   2   3   4   5   6   7   8   9  10
+       [A] [A] [S] [S] [ ] [ ] [ ] [ ]  .   .
+            ▲                       ▲
+            └─ ACK 대기             └─ window 끝 (rwnd)
+
+ACK(ack=3, rwnd=5) 도착 → 왼쪽 경계가 3으로 이동 → window가 오른쪽으로 슬라이드
+        A = ACK 완료   S = 전송 후 ACK 대기   [ ] = 아직 전송 안 함
 ```
-송신자 window(rwnd만큼)                수신 버퍼
-[1][2][3][4][5][6][7][8] ─────►  ACK(ack=3, rwnd=5) 오면 window가 오른쪽으로 슬라이드
-        └── 이미 보낸/ACK 대기 ──┘
-```
+
+수신자가 **rwnd**(남은 버퍼 크기)를 ACK에 실어 보내고, 송신자는 그만큼만
+미확인 상태로 띄운다. `rwnd=0`이면 송신자는 멈춘다(zero window).
 > 핵심: 흐름 제어는 **수신자(상대방) 버퍼 상태** 기준 — "너 못 따라오니 늦출게".
 
 ### 6-2. 혼잡 제어(Congestion Control) — Slow Start / AIMD
@@ -170,15 +210,23 @@ Client                         Server
    - **Timeout**(패킷 완전 유실 추정) → cwnd를 1로 리셋하고 slow start부터 재시작(강한 처벌).
    - **3중복 ACK(Fast Retransmit)** → 아직 네트워크가 살아있다는 신호이므로 cwnd를 **절반으로만** 줄이고 congestion avoidance 재개(Fast Recovery) — timeout보다 훨씬 덜 가혹.
 
+```mermaid
+xychart-beta
+  title "cwnd — Slow Start(지수) → AIMD(선형) → 손실 시 급락"
+  x-axis "시간 (RTT)" 0 --> 19
+  y-axis "cwnd (MSS)" 0 --> 34
+  line [1, 2, 4, 8, 16, 32, 16, 17, 18, 19, 20, 21, 22, 1, 2, 4, 8, 9, 10, 11]
 ```
-cwnd
- │        /\slow start(지수)   AIMD(선형↑) 후 손실→반으로 뚝(톱니 모양)
- │       /  \___/\        /\
- │      /        \      _/  \___
- │     /  ssthresh \  _/        \_
- │    /              \/
- └──────────────────────────────► time (RTT)
-```
+
+| 단계 | 규칙 | 언제 |
+|------|------|------|
+| **Slow Start** | RTT마다 cwnd **×2** (지수) | 시작, 그리고 timeout 이후 |
+| **Congestion Avoidance** | RTT마다 **+1 MSS** (선형) | `cwnd ≥ ssthresh` |
+| **Fast Recovery** | cwnd를 **절반**으로 | 3 dup ACK (가벼운 손실 신호) |
+| **Timeout** | cwnd = **1 MSS**, ssthresh = 절반 | 심각한 손실 |
+
+AIMD = **A**dditive **I**ncrease(선형 증가) / **M**ultiplicative **D**ecrease(곱셈 감소).
+천천히 올리고 확 줄이는 비대칭이 혼잡 붕괴를 막는다.
 
 ### 6-3. 흐름 제어 vs 혼잡 제어 비교표
 | 구분 | 흐름 제어 | 혼잡 제어 |
@@ -269,12 +317,20 @@ cwnd
 - **`ETag` / `If-None-Match`**: `ETag`는 리소스의 해시/버전 값(내용 기반이라 정확). 클라이언트가 다음 요청 때 `If-None-Match: <ETag값>`을 보내면 서버가 비교해 같으면 304.
 - (참고) `Last-Modified` / `If-Modified-Since`: 수정 **시각** 기반이라 초 단위 미만의 변경은 놓칠 수 있음 → 정확도는 ETag가 더 높음.
 
-```
-[강한 캐시]                         [약한 캐시(재검증)]
-브라우저: max-age 안 지남             브라우저: max-age 지남
-   └─ 서버 요청 없이 바로 사용          └─ GET + If-None-Match: "abc123"
-                                            └─ 서버: 안 바뀜 → 304 (바디 없음)
-                                               바뀜   → 200 + 새 ETag + 새 바디
+```mermaid
+flowchart TB
+  REQ["브라우저가 리소스 필요"]
+  Q{"max-age 안 지났나?"}
+  STRONG["<b>강한 캐시</b><br/>서버 요청 없이 바로 사용<br/><i>네트워크 0회</i>"]
+  REVAL["<b>약한 캐시 — 재검증</b><br/>GET + If-None-Match: #quot;abc123#quot;<br/>(또는 If-Modified-Since)"]
+  Q304["서버: 바뀌었나?"]
+  R304["<b>304 Not Modified</b><br/>바디 없음 → 캐시 재사용"]
+  R200["<b>200 OK</b><br/>새 ETag + 새 바디"]
+  REQ --> Q
+  Q -- YES --> STRONG
+  Q -- NO --> REVAL --> Q304
+  Q304 -- "안 바뀜" --> R304
+  Q304 -- "바뀜" --> R200
 ```
 
 | 구분 | 강한 캐시 | 약한 캐시(재검증) |
@@ -308,12 +364,17 @@ cwnd
 - **CORS(Cross-Origin Resource Sharing)**: 브라우저가 강제하는 보안 정책. 서버가 막는 게 아니라 **브라우저가 응답을 JS에 넘길지 말지**를 CORS 헤더(`Access-Control-Allow-Origin` 등) 기준으로 결정.
 - **Preflight(사전 요청)**: 상태를 바꿀 수 있는 "위험할 수 있는" 요청(PUT/DELETE, 커스텀 헤더, `application/json` 바디 등)은 실제 요청 전에 브라우저가 먼저 `OPTIONS` 메서드로 "이 요청 보내도 돼?"라고 물어봄 → 서버가 허용 응답(`Access-Control-Allow-Methods` 등)해야 실제 요청 진행.
 
-```
-브라우저(다른 출처 요청)                     서버
-   │ ── OPTIONS (Preflight) ──────────────►│
-   │ ◄─ Access-Control-Allow-Origin: ... ──│  "이 출처/메서드/헤더 허용"
-   │ ── 실제 GET/POST/... ─────────────────►│
-   │ ◄──────── 응답 ────────────────────────│
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as 브라우저 (다른 출처)
+  participant S as 서버
+  B->>S: OPTIONS (Preflight)
+  Note right of B: 단순 요청이 아니면<br/>실제 요청 전에 먼저 물어본다
+  S->>B: Access-Control-Allow-Origin / -Methods / -Headers
+  Note over S: "이 출처 · 메서드 · 헤더 허용"
+  B->>S: 실제 GET / POST / ...
+  S->>B: 응답
 ```
 
 - 🔴 "CORS 에러는 서버가 요청을 거부한 것" — ❌ 서버는 보통 정상 응답을 보냈지만, **브라우저가** 응답 헤더에 허가가 없어 JS에서 그 응답을 못 읽게 막은 것. (서버 대 서버, Postman/curl 요청은 CORS의 영향을 받지 않음 — CORS는 브라우저 전용 정책.)
@@ -350,11 +411,41 @@ cwnd
 | Long Polling | 서버가 이벤트 생길 때까지 응답을 들고 있다가 응답, 클라는 받자마자 재요청 | Polling보다 지연 적음 | 연결 유지 비용, 재연결 반복 |
 | **WebSocket** | 최초 HTTP Upgrade 핸드셰이크 후 **하나의 TCP 연결**에서 서버-클라 양방향(풀 듀플렉스) 실시간 통신 | 지연 최소, 매 메시지마다 HTTP 헤더 오버헤드 없음 | 연결 상태 유지 필요(서버 자원), 로드밸런서/프록시 설정 신경 써야 함 |
 
+**Polling** — 매번 새 요청/응답. 간격이 짧으면 낭비, 길면 지연.
+
+```mermaid
+sequenceDiagram
+  participant C as 클라이언트
+  participant S as 서버
+  loop 일정 간격마다 반복
+    C->>S: GET
+    S->>C: 응답 (보통 "변화 없음")
+  end
 ```
-Polling:      클라 ──GET──►서버   (반복, 매번 새 요청/응답)
-Long Polling: 클라 ──GET──►서버 (이벤트 생길 때까지 대기) ──응답──►클라 (즉시 재요청)
-WebSocket:    클라 ──HTTP Upgrade──►서버 ──101 Switching Protocols──►
-              이후 같은 TCP 연결 위에서 양방향 자유롭게 메시지 송수신
+
+**Long Polling** — 서버가 이벤트 생길 때까지 응답을 붙잡는다.
+
+```mermaid
+sequenceDiagram
+  participant C as 클라이언트
+  participant S as 서버
+  C->>S: GET
+  Note over S: 이벤트 생길 때까지 대기
+  S->>C: 응답 (이벤트)
+  C->>S: 즉시 재요청
+```
+
+**WebSocket** — 한 번 업그레이드하면 같은 TCP 연결에서 양방향.
+
+```mermaid
+sequenceDiagram
+  participant C as 클라이언트
+  participant S as 서버
+  C->>S: HTTP Upgrade: websocket
+  S->>C: 101 Switching Protocols
+  Note over C,S: 이후 같은 TCP 연결 위에서<br/>양방향으로 자유롭게 메시지 송수신
+  C-->>S: 메시지
+  S-->>C: 메시지
 ```
 
 - 🟡 WebSocket도 시작은 HTTP 요청(`Upgrade: websocket` 헤더)이며, 서버가 `101 Switching Protocols`로 응답하면 그 뒤부턴 HTTP가 아닌 WebSocket 프로토콜로 전환됩니다.
@@ -414,14 +505,22 @@ WebSocket:    클라 ──HTTP Upgrade──►서버 ──101 Switching Proto
 > 비대칭은 느려서 데이터 전체엔 부적합 → **핸드셰이크에서 대칭키만 안전 교환**하고 본 통신은 대칭키.
 
 ## 3. TLS 핸드셰이크 (개념)
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant S as Server
+  C->>S: ClientHello (지원 암호군)
+  S->>C: ServerHello + 인증서(공개키)
+  Note over C: 인증서로 서버 신원 확인 (CA 서명 검증)
+  C->>S: 공개키로 pre-master secret 전달
+  Note over C,S: 양쪽이 같은 세션키(대칭) 생성
+  S->>C: Finished — 암호화 시작
+  Note over C,S: 이후 대칭키로 암호화 통신
 ```
-Client                              Server
-  │ ── ClientHello (지원 암호군) ───►│
-  │ ◄── ServerHello + 인증서(공개키) │  인증서로 서버 신원 확인(CA 서명)
-  │ ── (공개키로 pre-master 전달) ──►│  → 양쪽이 같은 세션키(대칭) 생성
-  │ ◄──── Finished (암호화 시작) ────│
-  │      [이후 대칭키로 암호화 통신]  │
-```
+
+**비대칭(공개키)은 세션키를 안전하게 나누는 데만** 쓰고, 실제 데이터는
+빠른 **대칭키**로 암호화한다. 비대칭이 대칭보다 수백 배 느리기 때문이다.
 - **인증서(CA 서명)**: 서버가 진짜인지 신뢰된 기관(CA)이 보증 → 중간자 공격 방지.
 
 ## 4. 핵심 포인트
@@ -445,24 +544,27 @@ Client                              Server
 사람은 이름(도메인 `google.com`)을 기억, 통신은 번호(IP `142.250...`)가 필요. **DNS = 이름 → IP 전화번호부**.
 
 ## 2. DNS 조회 흐름
-```
-브라우저 캐시 → OS/hosts 캐시 → Local DNS(리졸버)
-   → Root 서버(.) → TLD 서버(.com) → Authoritative 서버(google.com)
-   → IP 응답 (TTL 동안 캐시)
+```mermaid
+flowchart LR
+  A["브라우저 캐시"] --> B["OS · hosts 캐시"] --> C["Local DNS<br/>리졸버"]
+  C --> R["Root 서버 (.)"] --> T["TLD 서버 (.com)"] --> AU["Authoritative<br/>google.com"]
+  AU -- "IP 응답" --> C
+  C -- "TTL 동안 캐시" --> A
 ```
 
+앞쪽 캐시에서 맞으면 뒤로 가지 않는다. Root → TLD → Authoritative는
+**재귀 질의를 리졸버가 대신** 밟아주는 경로다.
+
 ## 3. 주소창 입력 후 전 과정 ⭐ (계층 총정리)
-```
-1. URL 파싱 (google.com)
-2. DNS 조회 → IP 획득                         (N5, Application)
-3. TCP 3-way handshake로 서버와 연결            (N2, Transport)
-4. HTTPS면 TLS 핸드셰이크 (대칭키 교환)          (N4)
-5. HTTP 요청 전송 (GET / …)                     (N3, Application)
-   └ 도중에 로드밸런서가 서버로 분산            (↔ System Design)
-6. 서버 응답 (HTML/JSON) + 상태코드
-7. 브라우저 렌더링 (HTML 파싱 → DOM → 표시)
-8. 연결 종료 (4-way) 또는 keep-alive 재사용
-```
+1. **URL 파싱** (`google.com`)
+2. **DNS 조회** → IP 획득 — *N5, Application*
+3. **TCP 3-way handshake**로 서버와 연결 — *N2, Transport*
+4. HTTPS면 **TLS 핸드셰이크** (대칭키 교환) — *N4*
+5. **HTTP 요청 전송** (`GET / …`) — *N3, Application*
+   도중에 **로드밸런서**가 서버로 분산 — *↔ System Design*
+6. **서버 응답** (HTML/JSON) + 상태코드
+7. **브라우저 렌더링** (HTML 파싱 → DOM → 표시)
+8. **연결 종료** (4-way) 또는 `keep-alive`로 재사용
 > 이 한 흐름에 N1\~N4가 다 나옴. 면접에서 이걸로 "계층을 실제로 이해했다"를 보여줄 수 있다.
 
 ## 4. 핵심 포인트
@@ -490,25 +592,46 @@ Client                              Server
 - **4-way(종료)**: TCP는 **전이중(full-duplex)** 이라 각 방향 스트림을 독립적으로 닫는다. 한쪽이 FIN을 보내도 반대 방향은 아직 열려 있어(**half-close**) 남은 데이터를 마저 보낼 수 있다. 그래서 상대의 ACK와 상대의 FIN이 **분리**되어 총 4번. (보낼 데이터가 없으면 ACK+FIN이 합쳐져 3번으로 줄기도 함.)
 
 ## 3. 다이어그램 — 상태 전이 (state machine)
-```
-[수립]  Client                         Server
-        CLOSED                          LISTEN
-          │ ── SYN (seq=x) ───────────►│
-        SYN_SENT                        SYN_RCVD
-          │ ◄── SYN+ACK(seq=y,ack=x+1)─│
-          │ ── ACK (ack=y+1) ─────────►│
-        ESTABLISHED ◄──────────────► ESTABLISHED
+**연결 수립**
 
-[종료]  (active close)                 (passive close)
-        ESTABLISHED                     ESTABLISHED
-          │ ── FIN ───────────────────►│
-        FIN_WAIT_1                      CLOSE_WAIT   ← 앱이 close() 호출 대기
-          │ ◄── ACK ───────────────────│
-        FIN_WAIT_2                      │ (남은 데이터 전송)
-          │ ◄── FIN ───────────────────│
-        TIME_WAIT ── ACK ─────────────►│ LAST_ACK → CLOSED
-          │ (2×MSL 대기 후) CLOSED       │
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant S as Server
+  Note over C: CLOSED
+  Note over S: LISTEN
+  C->>S: SYN (seq=x)
+  Note over C: SYN_SENT
+  Note over S: SYN_RCVD
+  S->>C: SYN+ACK (seq=y, ack=x+1)
+  C->>S: ACK (ack=y+1)
+  Note over C,S: ESTABLISHED
 ```
+
+**연결 종료**
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client (active close)
+  participant S as Server (passive close)
+  Note over C,S: ESTABLISHED
+  C->>S: FIN
+  Note over C: FIN_WAIT_1
+  Note over S: CLOSE_WAIT — 앱이 close() 호출 대기
+  S->>C: ACK
+  Note over C: FIN_WAIT_2
+  Note over S: 남은 데이터 전송
+  S->>C: FIN
+  Note over S: LAST_ACK
+  C->>S: ACK
+  Note over C: TIME_WAIT — 2×MSL 대기 후 CLOSED
+  Note over S: CLOSED
+```
+
+`CLOSE_WAIT`가 쌓여 있으면 **애플리케이션이 `close()`를 부르지 않은 것**이고,
+`TIME_WAIT`가 쌓이는 건 정상이다(먼저 닫은 쪽이 지불하는 비용).
 
 ## 4. 비교표 — 핵심 상태
 | 상태 | 어느 쪽 | 의미 |
@@ -555,18 +678,25 @@ Client                              Server
 - **슬라이딩 윈도우(Sliding Window)**: ACK를 매번 기다리지 않고 윈도우 크기만큼 **미리 연속 전송**하는 방식. ACK가 오면 윈도우가 오른쪽으로 미끄러지며 새 세그먼트를 내보낸다. stop-and-wait 대비 링크를 꽉 채워 쓴다(대역폭×지연 곱만큼).
 
 ## 3. 다이어그램 — cwnd 톱니와 단계
+```mermaid
+xychart-beta
+  title "cwnd 톱니 — 지수 상승, 선형 상승, 두 종류의 하강"
+  x-axis "시간 (RTT)" 0 --> 23
+  y-axis "cwnd (MSS)" 0 --> 34
+  line [1, 2, 4, 8, 16, 32, 16, 17, 18, 19, 20, 21, 22, 23, 11, 12, 13, 14, 1, 2, 4, 8, 9, 10]
 ```
-cwnd
- │            손실(timeout)→cwnd=1로 급락
- │   Slow Start │        Congestion Avoidance(선형 +1 MSS/RTT)
- │   (지수 ×2)   │        ╱│      3dupACK→절반(Fast Recovery)
- │      ╱│       ▼      ╱  │     ╱│
- │     ╱ │ ssthresh ─ ╱    ▼   ╱  ▼
- │    ╱  └──────────╱      ╱  ╱
- │   ╱             ╱  ×2? 아니오 선형↗
- └──╱────────────────────────────────► time (RTT)
-    ↑ cwnd=1 MSS에서 시작
-```
+
+| 구간 | 무슨 일 | cwnd |
+|------|---------|------|
+| RTT 0~5 | **Slow Start** — 1 MSS에서 시작해 지수 상승 | ×2 / RTT |
+| RTT 5 | `ssthresh` 도달 | — |
+| RTT 6~13 | **Congestion Avoidance** — 선형 상승 | +1 MSS / RTT |
+| RTT 14 | **3 dup ACK** → Fast Recovery | **절반**으로 |
+| RTT 18 | **Timeout** (심각한 손실) | **1 MSS**로 급락 |
+
+두 하강이 다르다는 게 핵심이다. 3 dup ACK는 "패킷 하나 잃었지만 길은 살아
+있다"는 신호라 절반만 줄이고, timeout은 "길이 막혔다"는 신호라 처음부터 다시
+시작한다.
 
 ## 4. 비교표
 | 구분 | 흐름 제어 | 혼잡 제어 |
@@ -658,17 +788,27 @@ cwnd
 > **소켓** = 네트워크 통신의 **양 끝점(endpoint)**을 추상화한 것. OS가 파일처럼 다루는 **파일 디스크립터(fd)**로, `{프로토콜, 출발 IP:Port, 목적 IP:Port}` **5-튜플**로 하나의 연결이 유일하게 식별된다.
 
 ## 3. 다이어그램 — TCP 서버·클라이언트 생명주기
+```mermaid
+sequenceDiagram
+  autonumber
+  participant S as 서버
+  participant C as 클라이언트
+  Note over S: socket() — 소켓(fd) 생성
+  Note over S: bind() — IP:Port 할당
+  Note over S: listen() — 수신 대기 (backlog 큐)
+  Note over S: accept() — 블로킹, 연결 대기
+  Note over C: socket()
+  C->>S: connect() → 3-way handshake (SYN / SYN-ACK / ACK)
+  Note over S: accept() 리턴 — 통신 전용 fd 반환
+  C->>S: send()
+  S->>C: send()
+  Note over S,C: recv()/send() 양방향 바이트 스트림
+  C->>S: close() → 4-way handshake
+  Note over S: close()
 ```
-   서버                             클라이언트
- socket()      소켓(fd) 생성          socket()
- bind()        IP:Port 할당
- listen()      수신 대기(backlog 큐)
- accept() ───┐ 블로킹, 연결 대기
-             │        connect() ──►  3-way handshake (SYN/SYN-ACK/ACK)
- (새 소켓) ◄─┘ 연결 성사 → 통신 전용 fd 반환
- recv()/send() ◄──────────────────► send()/recv()   양방향 바이트 스트림
- close()                            close()          4-way handshake
-```
+
+`listen()`의 소켓과 `accept()`가 돌려주는 소켓은 **다른 fd**다. 전자는 계속
+새 연결을 받고, 후자가 이 클라이언트와의 통신을 담당한다.
 - `accept()`는 **연결마다 새 소켓(fd)**을 돌려준다. listening 소켓은 계속 새 연결을 받는 역할만.
 - `listen(backlog)`의 backlog = 아직 `accept()` 안 된 **완성된 연결의 대기 큐 크기**.
 
@@ -757,7 +897,7 @@ cwnd
 - **HTTP 위에서 동작**: 클라이언트가 평범한 GET을 보내고, 서버가 `Content-Type: text/event-stream`으로 응답을 **닫지 않고** 이벤트를 계속 흘려보낸다.
 - **브라우저 API 내장**: `EventSource` — 연결 끊기면 **자동 재연결**하고, `Last-Event-ID` 헤더로 **놓친 이벤트부터 재개**까지 표준 제공.
 - **텍스트 이벤트 포맷**(줄 기반):
-```
+```text
 data: {"price": 42100}\n\n         ← 한 이벤트 (빈 줄로 구분)
 event: alert\ndata: 임계치 초과\n\n   ← 이름 있는 이벤트
 id: 1027\ndata: ...\n\n              ← id (재연결 시 Last-Event-ID로 전송)
