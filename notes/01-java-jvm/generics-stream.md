@@ -183,14 +183,32 @@ static <T extends Comparable<T> & Serializable> T max(T a, T b) {
 
 ## 3. 파이프라인 — 중간 연산 vs 종단 연산
 
+```java
+List<String> names                  // 소스(Source)
+    .stream()                       // 스트림 생성
+    .filter(s -> s.length() > 3)    // 중간 연산 ─┐  Stream<T> 반환
+    .map(String::toUpperCase)       // 중간 연산 ─┤  아직 아무것도 실행 안 됨 (lazy)
+    .sorted()                       // 중간 연산 ─┘
+    .collect(toList());             // 종단 연산 ← 이 순간 전체 파이프라인이 "한 번" 흐름
 ```
-List<String> names           소스(Source)
-    .stream()                스트림 생성
-    .filter(s -> s.length()>3)   중간 연산 ─┐  Stream<T> 반환
-    .map(String::toUpperCase)    중간 연산 ─┤  (아직 아무것도 실행 안 됨: lazy)
-    .sorted()                    중간 연산 ─┘
-    .collect(toList());          종단 연산 ← 이 순간 전체 파이프라인이 "한 번" 흐름
+
+```mermaid
+flowchart LR
+  SRC[("List&lt;String&gt;<br/><i>소스</i>")]
+  ST["stream()"]
+  F["filter<br/><i>중간</i>"]
+  M["map<br/><i>중간</i>"]
+  S["sorted<br/><i>중간</i>"]
+  C["collect<br/><b>종단</b>"]
+  R(["결과"])
+  SRC --> ST --> F --> M --> S --> C --> R
+  F -. "lazy — 아직 실행 안 됨" .-> S
 ```
+
+중간 연산은 **레시피를 쌓기만** 한다. 종단 연산이 붙는 순간 원소 하나가
+파이프라인 전체를 통과하고 다음 원소로 넘어간다(원소별 수직 흐름).
+그래서 `filter` 다음 `map`이 원소마다 한 번씩 번갈아 불린다 —
+단계별로 컬렉션을 새로 만드는 것이 아니다.
 
 | 구분 | 반환 | 실행 시점 | 예 |
 |------|------|-----------|-----|

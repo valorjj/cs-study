@@ -20,11 +20,15 @@
 JWT는 **위조 방지 도장이 찍힌 입장권**이다. 표 안에 "누구, 등급, 만료시각"이 적혀 있고(claims), 발급처의 도장(서명)이 찍혀 있다. 문지기(서버)는 발급 대장을 뒤질 필요 없이 **도장이 진짜인지만 확인**하면 통과시킨다(무상태 검증). 대신 한 번 발급된 표는 만료 전까지 회수하기 어렵다.
 
 ## 2. JWT 구조 — `header.payload.signature` ⭐
-```
-eyJhbGci...  .  eyJzdWIi...  .  SflKxwRJ...
-─── Header ──    ── Payload ──   ── Signature ──
-{alg,typ}       {claims}         HMAC/RSA(header+payload, key)
-```
+| 부분 | 예 | 내용 | 인코딩 |
+|------|-----|------|--------|
+| **Header** | `eyJhbGci...` | `{alg, typ}` — 서명 알고리즘 | base64url |
+| **Payload** | `eyJzdWIi...` | `{claims}` — sub, exp, iat, 권한 등 | base64url |
+| **Signature** | `SflKxwRJ...` | `HMAC/RSA(header + "." + payload, key)` | base64url |
+
+**base64url은 암호화가 아니라 인코딩이다.** Payload는 누구나 디코딩해서
+읽을 수 있으므로 **비밀을 넣으면 안 된다.** 서명이 보장하는 것은
+기밀성이 아니라 **위조 불가(무결성)**뿐이다.
 - **Header**: 서명 알고리즘(`alg`: HS256/RS256), 타입(`typ`: JWT). Base64URL 인코딩.
 - **Payload**: **claims**(주장) 집합. Base64URL 인코딩 — **암호화가 아니라 인코딩**이라 누구나 디코딩해 내용을 볼 수 있다(민감정보 금지!).
 - **Signature**: `sign(base64(header) + "." + base64(payload), secret/private key)`. 이 서명으로 **위·변조를 탐지**한다(내용을 바꾸면 서명이 안 맞음).
@@ -57,11 +61,30 @@ eyJhbGci...  .  eyJzdWIi...  .  SflKxwRJ...
 </details>
 
 ## 5. Access Token vs Refresh Token — 왜 나누나 ⭐
+```mermaid
+sequenceDiagram
+  autonumber
+  participant C as Client
+  participant A as Auth Server
+  participant R as Resource Server
+  C->>A: 로그인
+  A->>C: Access Token (짧게, 예 15분)<br/>+ Refresh Token (길게, 예 2주)
+  C->>R: API 호출 (Access Token)
+  R->>C: 응답
+  Note over C: Access Token 만료
+  C->>A: Refresh Token 제출
+  A->>C: 새 Access Token 발급<br/><i>재로그인 없이</i>
 ```
-로그인 → Access Token(짧게, 예 15분) + Refresh Token(길게, 예 2주)
-API 호출: Access Token 사용
-Access 만료 → Refresh Token으로 새 Access 발급(재로그인 없이)
-```
+
+| | Access Token | Refresh Token |
+|---|---|---|
+| 수명 | 짧다 (분 단위) | 길다 (주 단위) |
+| 쓰는 곳 | **매 API 호출** | Access 재발급 시**만** |
+| 노출 위험 | 높다(자주 오감) | 낮다(드물게 오감) |
+| 탈취 시 피해 | **짧게 제한됨** | 크다 → 저장 위치·rotation 중요 |
+
+둘로 나누는 이유가 여기 있다. 자주 오가는 토큰은 **짧게** 만들어 탈취 피해를
+시간으로 제한하고, 긴 수명은 드물게 쓰는 토큰에만 준다.
 | | Access Token | Refresh Token |
 |--|--------------|----------------|
 | 수명 | 짧음(분 단위) | 김(일/주 단위) |
@@ -133,13 +156,30 @@ Access 만료 → Refresh Token으로 새 Access 발급(재로그인 없이)
 > **OAuth2** = 사용자가 비밀번호를 제3자 앱에 주지 않고, **제한된 권한(scope)을 위임**하는 프로토콜. 4개 역할: Resource Owner(사용자), Client(앱), Authorization Server(인증 서버), Resource Server(API).
 
 ### Authorization Code Grant + PKCE (표준 흐름) ⭐
+```mermaid
+sequenceDiagram
+  autonumber
+  participant U as 사용자
+  participant C as Client (앱)
+  participant A as Authorization Server
+  participant R as Resource Server
+  U->>C: "구글로 로그인" 클릭
+  C->>A: 리다이렉트 (+ PKCE code_challenge)
+  U->>A: 로그인 · 동의
+  A->>C: authorization code 전달 (리다이렉트)
+  C->>A: code + client_secret + PKCE code_verifier
+  A->>C: access token (+ refresh, + id token)
+  C->>R: access token으로 호출
+  R->>C: 리소스
 ```
-① 사용자가 "구글로 로그인" 클릭 → Client가 Authorization Server로 리다이렉트
-② 사용자가 Auth Server에서 로그인·동의 → Client에 authorization code 전달(리다이렉트)
-③ Client가 code + client_secret(+PKCE verifier)를 Auth Server에 제출
-④ Auth Server가 access token(+refresh, +id token) 발급
-⑤ Client가 access token으로 Resource Server 호출
-```
+
+**왜 code를 한 번 더 교환하나?** authorization code는 리다이렉트 URL에
+실려 오므로 브라우저 히스토리·로그에 남는다. 그걸로는 아무것도 못 하게 하고,
+실제 토큰은 **서버 대 서버**로 `client_secret`과 함께 받는다.
+
+**PKCE**는 `client_secret`을 안전하게 보관할 수 없는 클라이언트(SPA, 모바일)를
+위한 것이다. 처음에 `code_challenge`를 보내고 교환 시 `code_verifier`를 제시해,
+code를 가로챈 공격자가 교환하지 못하게 한다.
 - **왜 code를 한 번 더 교환하나**: 토큰을 리다이렉트 URL에 직접 실으면 브라우저 history·로그에 노출. code는 일회용·단명이라 가로채도 client_secret 없이는 토큰 교환 불가.
 - **PKCE(Proof Key for Code Exchange)**: SPA·모바일처럼 client_secret을 숨길 수 없는 **public client**를 위한 보강. Client가 `code_verifier`(랜덤)를 만들고 그 해시(`code_challenge`)를 ①에 보냄 → ③에서 원본 verifier를 제출해 "code를 요청한 그 클라이언트가 맞음"을 증명. **인가 코드 가로채기(interception) 공격 방어**. 요즘은 confidential client에도 권장.
 
@@ -203,13 +243,26 @@ Access 만료 → Refresh Token으로 새 Access 발급(재로그인 없이)
 - **핵심**: CORS는 **브라우저가 강제**한다. 서버는 대개 정상 응답을 보내지만, 응답 헤더에 허가가 없으면 **브라우저가 JS에 응답을 안 넘긴다**(그래서 서버-서버·curl·Postman은 CORS 영향 없음).
 
 ## 3. Preflight(사전 요청) ⭐
+| 분류 | 조건 | 브라우저 동작 |
+|------|------|---------------|
+| **단순 요청** | `GET`/`HEAD`/`POST` + 단순 헤더(`text/plain` 등) | **바로 전송**, 응답 CORS 헤더로 판단 |
+| **Preflight 필요** | `PUT`/`DELETE`, 커스텀 헤더, `application/json` 바디 등 | **먼저 물어본 뒤** 전송 |
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as 브라우저
+  participant S as 서버
+  B->>S: OPTIONS<br/>Access-Control-Request-Method / -Headers
+  S->>B: Access-Control-Allow-Methods / -Headers / -Origin
+  Note over B: 허용 여부 판단
+  B->>S: 실제 요청 전송
+  S->>B: 응답
 ```
-[단순 요청] GET/HEAD/POST + 단순 헤더(text/plain 등) → 바로 전송, 응답 CORS 헤더로 판단
-[Preflight]  PUT/DELETE, 커스텀 헤더, application/json 바디 등 "위험할 수 있는" 요청
-  ① 브라우저 → OPTIONS (Access-Control-Request-Method/Headers)
-  ② 서버 → 허용 응답 (Access-Control-Allow-Methods/Headers/Origin)
-  ③ 허용되면 실제 요청 전송
-```
+
+**중요한 함의:** 서버는 이미 요청을 처리했더라도, 응답에 CORS 헤더가 없으면
+브라우저가 **응답을 자바스크립트에 넘겨주지 않는다.** CORS는 서버 보호 장치가
+아니라 **브라우저가 스크립트에게 응답을 감추는** 장치다.
 - Preflight는 "상태를 바꿀 수 있는 요청을 실제로 보내기 전에 서버 허락을 먼저 받는" 안전장치.
 
 ## 4. 자격증명(쿠키) 포함 요청 — 주의 ⭐
@@ -266,10 +319,19 @@ Access 만료 → Refresh Token으로 새 Access 발급(재로그인 없이)
 
 ## 3. SQL Injection ⭐
 > **SQLi** = 입력값을 SQL 쿼리에 문자열로 이어 붙일 때, 공격자가 SQL 구문을 주입해 인증 우회·데이터 탈취·삭제를 하는 공격.
-```
+```java
+// ❌ 문자열 연결 — 취약
 "SELECT * FROM users WHERE id='" + input + "'"
-input = "' OR '1'='1"  →  ... WHERE id='' OR '1'='1'  (전체 반환)
 ```
+
+```text
+input = "' OR '1'='1"
+  →  SELECT * FROM users WHERE id='' OR '1'='1'   (전체 반환)
+```
+
+입력이 **데이터가 아니라 SQL 문법으로 해석**되는 것이 문제의 본질이다.
+그래서 이스케이프로 막는 게 아니라, **PreparedStatement의 바인딩 파라미터**로
+"이건 값이다"를 구조적으로 못 박아야 한다.
 - **방어**: ① **PreparedStatement(파라미터 바인딩)** — 쿼리 구조와 데이터를 분리해 입력이 구문으로 해석되지 않게(가장 근본적). ② ORM/JPA 사용(내부적으로 바인딩). ③ 입력 검증·최소 권한 DB 계정. → `db-index`/쿼리와 연결.
 
 ## 4. 비밀번호 저장 — 해싱 ⭐

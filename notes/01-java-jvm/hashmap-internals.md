@@ -15,11 +15,11 @@
 **학습 목표**: *"HashMap을 왜 쓰고, 언제 안 쓰는지, 내부적으로 어떻게 동작하는지"* 5분 동안 자료구조 비교까지 곁들여 답할 수 있다. (핵심은 항상 보이고, 내부 동작은 아래 **심화** 블록을 펼쳐 확인하세요.)
 
 ## 1. 비유 — 도서관 카드 카탈로그
-```
-책장에서 책 찾기              → 한 권씩 훑기                O(N)
-사전(알파벳 정렬)에서 단어 찾기 → 펼쳐서 좁혀가기            O(log N)
-도서관 카드 카탈로그          → "제목 → 카드 번호" 한 번에   O(1)  ← Hash
-```
+| 찾는 방법 | 어떻게 | 복잡도 |
+|-----------|--------|--------|
+| 책장에서 책 찾기 | 한 권씩 훑기 | `O(N)` |
+| 사전(알파벳 정렬)에서 단어 찾기 | 펼쳐서 좁혀가기 | `O(log N)` |
+| **도서관 카드 카탈로그** | "제목 → 카드 번호" **한 번에** | **`O(1)`** ← Hash |
 Hash의 본질: **"키 → 숫자(인덱스) 변환 함수"**. 변환만 빠르면 배열처럼 한 번에 꽂힌다.
 
 ## 2. 개념 정의 (1줄)
@@ -27,12 +27,14 @@ Hash의 본질: **"키 → 숫자(인덱스) 변환 함수"**. 변환만 빠르�
 > 배열의 O(1) 인덱스 접근을 **임의의 키**(문자열, 객체)로 확장한 자료구조.
 
 ## 3. 다이어그램
-```
-"apple"  →  hashCode()  →  spread (h ^ h>>>16)  →  & (n-1)  →  buckets[5]
-              6293             12993                            ↓
-                                                      Node{key="apple", value=...}
-                                                              ↓ (충돌 시)
-                                                      Node{key="grape", value=...}
+```mermaid
+flowchart LR
+  K["#quot;apple#quot;"] --> HC["hashCode()<br/><i>6293</i>"]
+  HC --> SP["spread<br/>h ^ h >>> 16<br/><i>12993</i>"]
+  SP --> IX["& (n-1)"]
+  IX --> B["buckets[5]"]
+  B --> N1["Node{key='apple', value=...}"]
+  N1 -- "충돌 시" --> N2["Node{key='grape', value=...}"]
 ```
 
 ## 4. 언제 쓰는가
@@ -108,24 +110,31 @@ static final int hash(Object key) {
 int i = (n - 1) & hash;   // bucket index, n = capacity
 Node<K,V> p = tab[i];
 ```
-```
-[key]  →  Step 1: hashCode()       →  32비트 정수 h
-       →  Step 2: spread h ^ h>>>16 →  상위·하위 비트 섞임
-       →  Step 3: (n - 1) & hash    →  0 ~ n-1 범위 bucket index
+```mermaid
+flowchart LR
+  K["key"] --> S1["<b>Step 1</b><br/>hashCode()<br/>→ 32비트 정수 h"]
+  S1 --> S2["<b>Step 2</b><br/>spread: h ^ h >>> 16<br/>→ 상위·하위 비트 섞임"]
+  S2 --> S3["<b>Step 3</b><br/>(n - 1) & hash<br/>→ 0 ~ n-1 범위 bucket index"]
 ```
 
 ## 3. 다이어그램 — 비트 단위로 본 spread
 `capacity = 16` (n=16, n-1 = `0000_1111`)이면, `& (n-1)` 은 **하위 4비트만 본다**.
 
-```
+```text
 hashCode(key)        :  1010_1101_0011_0110_1100_1100_0001_0011
-                                                  ▲ 하위 4비트만 살아남음
-                       1010_1101_0011_0110_1100_1100_0001_0011  (h)
-                  ^    0000_0000_0000_0000_1010_1101_0011_0110  (h >>> 16)
-spread (h ^ h>>>16) :  1010_1101_0011_0110_0110_0001_0010_0101
-                                                              ▲ 이제 상위 16비트가 하위 4비트에 섞임
-(n-1) & spread       : 0000_0000_0000_0000_0000_0000_0000_0101 = 5 → buckets[5]
+                                                            ▲ 하위 4비트만 살아남음
+
+                        1010_1101_0011_0110_1100_1100_0001_0011   (h)
+                  ^     0000_0000_0000_0000_1010_1101_0011_0110   (h >>> 16)
+spread (h ^ h>>>16) :   1010_1101_0011_0110_0110_0001_0010_0101
+                                                            ▲ 상위 16비트가 하위에 섞였다
+
+(n-1) & spread       :  0000_0000_0000_0000_0000_0000_0000_0101 = 5 → buckets[5]
 ```
+
+`(n-1) & hash`는 **하위 비트만** 본다. 그래서 spread 없이는 상위 비트가 아무리
+달라도 같은 버킷으로 몰린다 — `h ^ h>>>16`은 상위 정보를 하위로 끌어내리는
+한 줄짜리 보험이다.
 ➜ **상위 16비트도 bucket 결정에 영향**. 안 그러면 hashCode가 상위 비트만 다른 객체들이 전부 같은 bucket으로 몰림.
 
 ## 4. 핵심 Q — *왜 capacity는 2의 거듭제곱?*
@@ -141,14 +150,31 @@ i = (n - 1) & hash    // 빠른 bit AND
 규칙: HashMap은 생성 시 capacity를 **요청값보다 크거나 같은 2의 거듭제곱**으로 올림 (`tableSizeFor`).
 
 ## 5. Collision이 일어나면? — Chaining + Treeify
+```mermaid
+flowchart TB
+  subgraph J7["Java 7 — 항상 LinkedList"]
+    direction LR
+    B7["buckets[5]"] --> A7["A"] --> BB7["B"] --> C7["C"] --> D7["D"]
+  end
+  subgraph J8["Java 8+ — 길어지면 트리로 전환"]
+    direction TB
+    B8["buckets[5]"]
+    LL["LinkedList<br/><i>length &lt; 8</i>"]
+    RB["Red-Black Tree(A, B, C, D, ...)<br/><i>search = O(log N)</i>"]
+    B8 --> LL
+    LL -- "length ≥ 8 <b>그리고</b> capacity ≥ 64<br/>→ treeify" --> RB
+    RB -- "length ≤ 6 → untreeify" --> LL
+  end
+  J7 --> J8
 ```
-Java 7                            Java 8+
-buckets[5] → A → B → C → D        buckets[5] → A → B → C → D      (length < 8: LinkedList)
-            ↑ 모두 LinkedList                  ↓ length ≥ 8 (& capacity ≥ 64)
-            ↑ search = O(N)                   buckets[5] → Red-Black Tree(A,B,C,D,...)
-                                              ↑ search = O(log N)
-                                              length ≤ 6 이면 다시 LinkedList (untreeify)
-```
+
+Java 7은 최악에 `search = O(N)`이었다. Java 8은 버킷이 길어지면 트리로
+바꿔 **`O(log N)`으로 방어**한다.
+
+전환 조건에 `capacity ≥ 64`가 붙는 게 중요하다. 테이블이 작아서 몰린
+것이라면 트리화가 아니라 **resize가 정답**이기 때문이다. 그리고 임계치가
+treeify 8 / untreeify 6으로 다른 것은 경계에서 왕복하는 것을 막기 위한
+히스테리시스다.
 
 **Threshold 두 개 + 한 개**:
 - `TREEIFY_THRESHOLD = 8` — 이상이면 트리화
@@ -322,18 +348,19 @@ JPA Entity는 특히 주의: ID 기반 equals/hashCode 권장 (영속화 전후 
 일반 BST는 들어오는 순서대로 책을 꽂아 한쪽 쏠리면 LinkedList. RB Tree는 사서가 5가지 색깔 규칙으로 회전·색깔 바꾸기를 강제 → 균형 자동 복구.
 
 ## 2. 일반 BST의 문제
+`1, 2, 3, 4, 5` 순서로 삽입하면:
+
+```mermaid
+flowchart TB
+  N1["1"] --> N2["2"]
+  N2 --> N3["3"]
+  N3 --> N4["4"]
+  N4 --> N5["5"]
 ```
-1,2,3,4,5 순서 삽입:
-1
- \
-  2
-   \
-    3       ← height = N, 모든 연산 O(N)
-     \
-      4
-       \
-        5
-```
+
+`height = N`이 되어 **모든 연산이 `O(N)`**이다 — 사실상 연결리스트다.
+정렬된 데이터를 넣는 건 드문 일이 아니므로(PK 순 삽입 등) 이건 이론적
+최악이 아니라 흔한 현실이다.
 현실의 정렬된 데이터(timestamp, auto-increment ID) 흔함 → self-balancing 필요.
 
 <details class="deep">
@@ -346,15 +373,31 @@ JPA Entity는 특히 주의: ID 기반 equals/hashCode 권장 (영속화 전후 
 4. Red의 자식은 모두 Black (Red 두 개 연속 X)
 5. 어떤 노드에서 자손 NIL까지의 경로의 Black 수는 모두 동일 (Black Height, bh)
 
+```mermaid
+flowchart TB
+  R7["7 (B)"]:::black
+  R3["3 (R)"]:::red
+  R18["18 (R)"]:::red
+  R2["2 (B)"]:::black
+  R5["5 (B)"]:::black
+  R13["13 (B)"]:::black
+  R21["21 (B)"]:::black
+  R11["11 (R)"]:::red
+  R16["16 (R)"]:::red
+  R7 --> R3
+  R7 --> R18
+  R3 --> R2
+  R3 --> R5
+  R18 --> R13
+  R18 --> R21
+  R13 --> R11
+  R13 --> R16
+  classDef red fill:#7f1d1d,stroke:#f87171,color:#fff
+  classDef black fill:#1f2937,stroke:#9ca3af,color:#fff
 ```
-        7(B)
-       /    \
-    3(R)   18(R)
-    / \    /  \
- 2(B) 5(B) 13(B) 21(B)
-              /  \
-           11(R) 16(R)
-```
+
+색은 장식이 아니라 **불변식을 표현하는 수단**이다. "루트에서 리프까지 검은
+노드 수가 모두 같다"는 규칙이 높이를 `2 log(n+1)` 이하로 묶는다.
 
 ## 4. *왜 height가 O(log N) 보장되나?* (면접 핵심)
 - 규칙 5: 모든 root→leaf 경로의 black 수 동일 (bh)
@@ -367,15 +410,32 @@ JPA Entity는 특히 주의: ID 기반 equals/hashCode 권장 (영속화 전후 
 규칙 위반 시 회전 + 색깔 변경으로 복구. BST 정렬은 유지, 부모-자식만 재배치.
 
 **Left Rotation**:
+```mermaid
+flowchart LR
+  subgraph BEFORE["회전 전"]
+    direction TB
+    P1["P"] --> X1["X"]
+    X1 --> A1["A"]
+    X1 --> Y1["Y"]
+    Y1 --> B1["B"]
+    Y1 --> C1["C"]
+  end
+  subgraph AFTER["회전 후"]
+    direction TB
+    P2["P"] --> Y2["Y"]
+    Y2 --> X2["X"]
+    Y2 --> C2["C"]
+    X2 --> A2["A"]
+    X2 --> B2["B"]
+  end
+  BEFORE -- "left rotate (X 기준)" --> AFTER
 ```
-    P                P
-    |                |
-    X                Y
-   / \    →         / \
-  A   Y            X   C
-     / \          / \
-    B   C        A   B
-```
+
+`Y`가 `X`의 자리로 올라가고 `X`는 `Y`의 왼쪽 자식이 된다. `Y`의 왼쪽
+서브트리 `B`는 `X`의 오른쪽 자식으로 옮겨간다.
+
+**중위 순회 결과(A < X < B < Y < C)는 회전 전후로 동일하다** — 그래서 회전은
+BST의 정렬 성질을 깨지 않고 높이만 바꾼다.
 
 ## 6. 삽입 시나리오
 1. BST처럼 위치 찾아 삽입, 새 노드는 Red

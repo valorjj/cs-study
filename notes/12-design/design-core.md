@@ -201,14 +201,27 @@ User user = User.builder()
 
 ## 3. Decorator vs Proxy — 자주 혼동 ⭐
 둘 다 "같은 인터페이스로 감싼다"는 구조가 같아 헷갈린다. **차이는 의도(intent)**:
-```
-Decorator: 원본에 "기능을 추가"가 목적 (여러 겹 중첩 가능)
-  new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)))
-  → 파일 읽기 + 압축해제 + 버퍼링을 한 겹씩 덧씌움
+| | Decorator | Proxy |
+|---|---|---|
+| 목적 | 원본에 **기능을 추가** | 원본 접근을 **제어·대리** |
+| 중첩 | 여러 겹 자유롭게 | 보통 한 겹 |
+| 원본 생성 | 밖에서 받아 감싼다 | **프록시가 통제**(지연 생성 등) |
+| 클라이언트 인지 | "기능을 붙였다"고 안다 | 원본인 줄 안다 |
 
-Proxy: 원본 접근을 "제어·대리"가 목적 (보통 한 겹, 원본 생성/호출 통제)
-  UserService proxy = AOP가 감싼 프록시  → 호출 전후에 트랜잭션 시작/커밋, 로깅
+**Decorator** — 한 겹씩 덧씌워 파일 읽기 + 압축해제 + 버퍼링을 조합한다.
+
+```java
+new BufferedInputStream(new GZIPInputStream(new FileInputStream(f)))
 ```
+
+**Proxy** — 호출 전후를 가로채 트랜잭션 시작/커밋, 로깅을 끼운다.
+
+```java
+UserService proxy = /* AOP가 감싼 프록시 */;
+```
+
+구조(원본과 같은 인터페이스를 구현하고 위임)는 거의 같다.
+**차이는 의도**다 — 무엇을 더하려는 것인지, 접근을 통제하려는 것인지.
 - **Decorator**는 "무엇을 더할까"(기능 확장), **Proxy**는 "접근을 어떻게 통제할까"(대리). 구조는 닮았지만 목적이 다르다.
 
 ## 4. 실무 직결 — Decorator(자바 IO) & Proxy(Spring AOP) ⭐

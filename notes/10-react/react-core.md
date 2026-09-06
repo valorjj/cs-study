@@ -26,39 +26,40 @@
 - VDOM 자체가 "빠름"을 보장하는 건 아니다. 핵심은 **최소한의 실제 DOM 변경으로 줄여주는 알고리즘**이라는 것.
 
 ## 3. 다이어그램 — Reconciliation 흐름
+```mermaid
+flowchart TB
+  S(["state 변경"])
+  V["새 VDOM 트리 생성<br/><i>JS 객체, 메모리 상</i>"]
+  D["<b>Diffing</b> — 이전 VDOM vs 새 VDOM<br/>· 같은 타입 → 속성만 비교<br/>· 다른 타입 → 서브트리 통째 교체<br/>· 리스트 → key로 항목 추적"]
+  P["변경분(patch)만 추출"]
+  C["실제 DOM에 최소 반영 (commit)"]
+  S --> V --> D --> P --> C
 ```
- state 변경
-     │
-     ▼
- 새 VDOM 트리 생성 (JS 객체, 메모리 상)
-     │
-     ▼
- ┌─────────────────────────┐
- │  Diffing (이전 VDOM vs 새 VDOM) │
- │   - 같은 타입 → 속성만 비교        │
- │   - 다른 타입 → 서브트리 통째 교체   │
- │   - 리스트 → key로 항목 추적       │
- └─────────────┬───────────┘
-               │ 변경분(patch)만 추출
-               ▼
-      실제 DOM에 최소 반영 (commit)
-```
+
+DOM 조작이 비싸기 때문에, **메모리에서 먼저 비교하고 실제 DOM은 최소한만
+건드린다.** VDOM 자체가 빠른 게 아니라 "불필요한 DOM 조작을 안 하는" 게 이득이다.
 
 ### key 없이 리스트 렌더링 시 문제
-```
-이전: [A, B, C]        추가 후: [X, A, B, C]
+이전: `[A, B, C]` → 추가 후: `[X, A, B, C]`
 
-key 없음 (인덱스로 비교)
- idx0: A → X   (내용 다름 → "수정"으로 오인 → DOM 통째로 갱신)
- idx1: B → A
- idx2: C → B
- idx3: (신규) → C
- → 사실은 "앞에 하나 추가"인데, React는 A,B,C 전부 값이 바뀐 걸로 착각
+**key 없음** (인덱스로 비교)
 
-key 있음 (고유 id로 비교)
- key=A, key=B, key=C 는 그대로! key=X만 새로 추가
- → 실제 DOM도 딱 X 하나만 새로 삽입
-```
+| 인덱스 | 이전 | 이후 | React의 판단 |
+|--------|------|------|--------------|
+| 0 | A | X | 내용 다름 → **"수정"으로 오인** → DOM 갱신 |
+| 1 | B | A | 수정 |
+| 2 | C | B | 수정 |
+| 3 | — | C | 신규 |
+
+사실은 "앞에 하나 추가"인데, React는 **A·B·C 전부 값이 바뀐 걸로 착각**한다.
+
+**key 있음** (고유 id로 비교)
+
+`key=A`, `key=B`, `key=C`는 **그대로**고 `key=X`만 새로 추가된다
+→ 실제 DOM도 딱 `X` 하나만 새로 삽입된다.
+
+그래서 `key={index}`는 key를 안 쓴 것과 거의 같다 — 순서가 바뀌는 리스트에서는
+반드시 **데이터의 고유 id**를 써야 한다.
 
 ## 4. key와 인덱스 key 안티패턴
 ```jsx
@@ -119,16 +120,33 @@ key 있음 (고유 id로 비교)
 > "리렌더 = 함수 컴포넌트가 다시 호출되어 새 VDOM을 만드는 것"이지, 실제 DOM이 바뀐다는 뜻은 아니다(diffing 결과 같으면 실제 DOM은 그대로).
 
 ## 3. 다이어그램 — 불필요한 리렌더 전파
+```mermaid
+flowchart TB
+  subgraph BEFORE["memo 없음 — App state 변경 시"]
+    direction TB
+    A1["&lt;App&gt; <b>리렌더</b>"]
+    H1["&lt;Header/&gt; <b>리렌더</b>"]
+    S1["&lt;Sidebar/&gt; <b>리렌더</b>"]
+    F1["&lt;Footer/&gt; <b>리렌더</b><br/><i>props 안 바뀌어도!</i>"]
+    A1 --> H1
+    A1 --> S1
+    A1 --> F1
+  end
+  subgraph AFTER["React.memo(Footer) 적용"]
+    direction TB
+    A2["&lt;App&gt; 리렌더"]
+    H2["&lt;Header/&gt; 리렌더"]
+    S2["&lt;Sidebar/&gt; 리렌더"]
+    F2["&lt;Footer/&gt; (memo)<br/>props 얕은 비교 → 동일하면 <b>스킵</b>"]
+    A2 --> H2
+    A2 --> S2
+    A2 --> F2
+  end
+  BEFORE --> AFTER
 ```
-<App>                     App state 변경
-  └ <Header/>              → App 리렌더
-  └ <Sidebar/>              → Header, Sidebar, Footer 전부 리렌더
-  └ <Footer/>                 (props 안 바뀌어도!)
 
-React.memo(Footer) 적용 시
-  └ <Footer/> (memo)       → props 얕은 비교(shallow compare) 후
-                              동일하면 리렌더 스킵
-```
+부모가 리렌더되면 **자식은 props가 그대로여도 기본적으로 리렌더된다.**
+`React.memo`는 그 전파를 얕은 비교로 끊는다.
 
 ## 4. 방지 도구 3종
 ```jsx
@@ -175,16 +193,17 @@ function Parent() {
 - 그래서 `React.memo` 자식에 넘기는 콜백/객체는 `useCallback`/`useMemo`로 참조를 고정해야 실제 효과가 있다 — **둘은 항상 짝을 이뤄야 의미가 있다.**
 
 ### 언제 써야 하나 vs 언제 과최적화인가
-```
-비싼 계산(수백~수천 개 정렬/필터/변환)          → useMemo 확실히 유용
-무거운 자식 트리(리스트 수백 개, 차트 등)         → React.memo 확실히 유용
-memo 자식에게 넘기는 콜백/객체                  → useCallback/useMemo 필수(짝)
-────────────────────────────────────────────
-숫자 몇 개 더하기, 문자열 concat               → useMemo 오히려 손해
-        (비교 비용 > 재계산 비용)
-가벼운 컴포넌트(자식 없는 <span>{text}</span>)  → React.memo 오히려 손해
-        (props 비교 비용 > 그냥 다시 그리는 비용)
-```
+| 상황 | 판단 |
+|------|------|
+| 비싼 계산 (수백~수천 개 정렬/필터/변환) | **`useMemo` 확실히 유용** |
+| 무거운 자식 트리 (리스트 수백 개, 차트 등) | **`React.memo` 확실히 유용** |
+| memo 자식에게 넘기는 콜백/객체 | **`useCallback`/`useMemo` 필수** (짝으로) |
+| 숫자 몇 개 더하기, 문자열 concat | `useMemo` **오히려 손해** — 비교 비용 > 재계산 비용 |
+| 가벼운 컴포넌트 (`<span>{text}</span>`) | `React.memo` **오히려 손해** — props 비교 비용 > 다시 그리는 비용 |
+
+`React.memo`를 걸어도 **콜백이나 객체를 매 렌더마다 새로 만들어 넘기면
+얕은 비교가 항상 실패**해서 아무 효과가 없다. 그래서 memo와
+`useCallback`/`useMemo`는 짝으로 쓴다.
 - **판단 기준**: "이 계산/렌더가 실제로 눈에 띄게 느린가?"를 먼저 프로파일러(React DevTools Profiler)로 확인하고 적용. 습관적으로 모든 컴포넌트에 `memo`를 감싸면 오히려 매 렌더마다 얕은 비교 비용만 추가되고, 코드 가독성도 떨어진다.
 - 실무에서 흔한 함정: `useMemo(() => x + y, [x, y])` 처럼 **덧셈 수준의 연산**을 메모이제이션 — 재계산 비용보다 캐시 비교/유지 비용이 더 크다.
 
@@ -248,17 +267,27 @@ useEffect(() => {
   return () => clearInterval(id);   // cleanup: 다음 effect 실행 전 & unmount 시
 }, [/* 의존성 배열 */]);
 ```
+| 의존성 배열 | 언제 실행되나 |
+|-------------|---------------|
+| `[]` | mount 시 **1번만** (`componentDidMount` 유사) |
+| `[a, b]` | mount 시 + `a` 또는 `b` 변경 시마다 |
+| 생략 (없음) | **매 렌더마다** |
+```mermaid
+sequenceDiagram
+  participant R as 렌더
+  participant E as effect
+  Note over R: 렌더1 (a=1)
+  R->>E: effect 실행 → cleanup 등록
+  Note over R: state 변경, a=2
+  Note over R: 렌더2 (a=2)
+  E->>E: <b>이전 cleanup 먼저 실행</b>
+  R->>E: 새 effect 실행
+  Note over R: unmount
+  E->>E: 마지막 cleanup 실행
 ```
-의존성 배열 []          → mount 시 1번만 실행 (componentDidMount 유사)
-의존성 배열 [a, b]       → mount 시 + a 또는 b 변경 시마다 실행
-의존성 배열 없음(생략)    → 매 렌더마다 실행
-```
-```
-렌더1 (a=1) → effect 실행 → (cleanup 등록)
-      state 변경, a=2
-렌더2 (a=2) → 이전 cleanup 먼저 실행 → 새 effect 실행
-unmount    → 마지막 cleanup 실행
-```
+
+**cleanup이 새 effect보다 먼저** 돈다는 순서가 중요하다. 구독을 해제한 뒤에
+새로 구독하므로 중복 구독이 생기지 않는다.
 
 ## 4. useEffect 심화
 
@@ -323,13 +352,21 @@ useEffect(() => {
   return () => { cancelled = true; }; // cleanup에서 "무효" 표시
 }, [userId]);
 ```
+```mermaid
+sequenceDiagram
+  participant C as 컴포넌트
+  participant S1 as 요청 userId=1 (3초)
+  participant S2 as 요청 userId=2 (1초)
+  C->>S1: 요청 시작
+  Note over C: userId=2로 변경<br/>cleanup 실행 → cancelled = true
+  C->>S2: 요청 시작
+  S2->>C: 응답 도착 → setUser(user2) ✅
+  S1->>C: 응답 늦게 도착
+  Note over C: cancelled = true 라 <b>무시됨</b> ✅
 ```
-userId=1 요청 시작 ─────────────────┐(느림, 3초)
-userId=2로 변경 → cleanup 실행(cancelled=true) → userId=2 요청 시작 ──┐(빠름, 1초)
-                                                                    ▼
-                                                       userId=2 응답 도착 → setUser(user2) ✅
-userId=1 응답 늦게 도착 ─────────────────────────────────────────────▶ cancelled=true라 무시됨 ✅
-```
+
+느린 첫 요청이 나중에 도착해 **최신 결과를 덮어쓰는 것**이 race condition이다.
+cleanup에서 플래그를 세우면, 늦게 온 응답이 자기가 이미 무효임을 알 수 있다.
 - fetch는 요청 순서대로 응답이 오지 않을 수 있다(네트워크 지연 역전). cleanup에서 `cancelled = true`를 세팅해두고, 응답 처리 직전에 체크하면 **오래된 요청의 결과가 최신 상태를 덮어쓰는 버그**를 막는다.
 - 더 정교하게는 `AbortController`로 실제 네트워크 요청 자체를 취소(불필요한 트래픽까지 방지)하는 것이 낫다.
 
@@ -514,12 +551,17 @@ function UncontrolledInput() {
 | 원칙 | **가능하면 로컬로** (colocation) | 여러 먼 컴포넌트가 같이 봐야 할 때만 |
 
 ## 3. Prop Drilling 문제
+```mermaid
+flowchart TB
+  A["&lt;App user={user}&gt;"]
+  L["&lt;Layout user={user}&gt;<br/><i>user 안 씀 — 그냥 전달만</i>"]
+  S["&lt;Sidebar user={user}&gt;<br/><i>user 안 씀 — 그냥 전달만</i>"]
+  P["&lt;Profile user={user}/&gt;<br/><b>여기서 실제 사용</b>"]
+  A --> L --> S --> P
 ```
-<App user={user}>
-  └ <Layout user={user}>              ← user 안 씀, 그냥 전달만
-      └ <Sidebar user={user}>          ← user 안 씀, 그냥 전달만
-          └ <Profile user={user}/>     ← 여기서 실제 사용
-```
+
+중간 컴포넌트들이 **쓰지도 않는 prop의 타입과 이름에 묶인다.** `user`의 모양이
+바뀌면 관계없는 `Layout`·`Sidebar`도 같이 고쳐야 한다.
 - 중간 컴포넌트(`Layout`, `Sidebar`)는 `user`를 쓰지도 않으면서 **props로 계속 받아 넘기기만** 함.
 - 문제점: 리팩터링 시 중간 컴포넌트 전부 시그니처 변경 필요, 불필요한 리렌더 전파 가능성, 코드 가독성 저하.
 
@@ -576,14 +618,26 @@ function App() {
 - `Provider`를 감싼 컴포넌트가 다른 이유로 리렌더되면(`App`에 다른 state가 있어도) `value`가 매번 새로 생성되면서, **user 값 자체는 안 바뀌었는데도 모든 구독 컴포넌트가 리렌더**된다.
 
 ### 리렌더 함정 ② — Context 하나에 자주 바뀌는 값 + 안 바뀌는 값을 같이 넣음
-```
-❌ 하나의 AppContext = { user, theme, notifications(매초 갱신) }
-   → notifications가 1초마다 바뀜 → theme만 읽는 컴포넌트까지 매초 리렌더
+**❌ 하나의 Context에 성질이 다른 값을 같이 넣음**
 
-✅ Context 분리
-   UserContext(거의 안 바뀜) / ThemeContext(거의 안 바뀜) / NotificationContext(자주 바뀜)
-   → 각 구독자는 자신이 실제 구독한 Context가 바뀔 때만 리렌더
+```js
+const AppContext = { user, theme, notifications /* 매초 갱신 */ }
 ```
+
+`notifications`가 1초마다 바뀜 → **`theme`만 읽는 컴포넌트까지 매초 리렌더**.
+
+**✅ Context 분리**
+
+```mermaid
+flowchart TB
+  UC["UserContext<br/><i>거의 안 바뀜</i>"] --> UCons["user 구독자"]
+  TC["ThemeContext<br/><i>거의 안 바뀜</i>"] --> TCons["theme 구독자"]
+  NC["NotificationContext<br/><i>자주 바뀜</i>"] --> NCons["notification 구독자<br/><i>이 쪽만 매초 리렌더</i>"]
+```
+
+각 구독자는 **자신이 실제 구독한 Context가 바뀔 때만** 리렌더된다.
+Context는 "값이 바뀌면 구독자 전부 리렌더"이므로, **변경 빈도가 다른 값은
+반드시 쪼갠다.**
 - Context는 **값 하나 단위로 구독**되기 때문에, 자주 바뀌는 값과 안 바뀌는 값을 한 Context에 묶으면 "안 바뀌는 값만 읽는 컴포넌트"까지 불필요하게 리렌더된다. **변경 빈도가 다른 값은 별도 Context로 분리**하는 것이 기본 대응책.
 - 더 큰 트리에서는 Context 자체가 selector를 지원하지 않으므로, "user 객체 중 name만 쓰는 컴포넌트"도 user 전체가 바뀌면 리렌더된다 — 이 지점이 Redux/Zustand(selector 지원)와의 근본적 차이.
 
@@ -644,16 +698,23 @@ function App() {
 
 ## 3. diffing 2대 휴리스틱
 
-```
-① 타입이 다르면 통째로 교체 (서브트리 비교 안 함)
-   <div><Counter/></div>  →  <span><Counter/></span>
-   div≠span → div 이하를 전부 버리고 span을 새로 마운트
-   (Counter의 state도 사라짐!)
+**① 타입이 다르면 통째로 교체** (서브트리 비교 안 함)
 
-② 같은 레벨의 리스트는 key로 동일성 판단
-   [<li key=a/> <li key=b/>]  →  [<li key=b/> <li key=a/>]
-   key로 "a와 b가 순서만 바뀌었다"고 인식 → 재생성 없이 이동만
+```jsx
+<div><Counter/></div>  →  <span><Counter/></span>
 ```
+
+`div ≠ span` → `div` 이하를 전부 버리고 `span`을 새로 마운트한다
+→ **`Counter`의 state도 사라진다.** 조건부 렌더링에서 래퍼 태그를 바꾸면
+자식 상태가 날아가는 이유다.
+
+**② 같은 레벨의 리스트는 key로 동일성 판단**
+
+```jsx
+[<li key="a"/>, <li key="b"/>]  →  [<li key="b"/>, <li key="a"/>]
+```
+
+key로 "a와 b가 **순서만** 바뀌었다"고 인식 → 재생성 없이 **이동만** 한다.
 - 휴리스틱 ①의 함의: 조건부 렌더링으로 **엘리먼트 타입이 바뀌면 그 아래 컴포넌트가 언마운트→재마운트**되어 내부 state가 초기화된다.
 
 ## 4. key — 왜 index가 위험한가
@@ -745,12 +806,13 @@ useEffect(() => { ... }, [count]);
 
 ## 4. cleanup 함수 — 언제 실행되나
 
-```
-마운트 → effect 실행
-                       ↓ (deps 바뀐 리렌더)
-       이전 effect의 cleanup 실행 → 새 effect 실행
-                       ↓
-언마운트 → 마지막 cleanup 실행
+```mermaid
+flowchart TB
+  M(["마운트"]) --> E1["effect 실행"]
+  E1 -- "deps 바뀐 리렌더" --> CL["이전 effect의 cleanup 실행"]
+  CL --> E2["새 effect 실행"]
+  E2 -- "deps 또 바뀜" --> CL
+  E2 -- "언마운트" --> LAST["마지막 cleanup 실행"]
 ```
 - cleanup은 "**다음 effect 실행 직전**"과 "**언마운트 시**"에 돈다. 이벤트 리스너 해제, 타이머 정리, 구독 취소, 진행 중 요청 취소(race condition 방지)에 필수.
 - cleanup을 빠뜨리면: 리스너/타이머 중복 등록, 언마운트된 컴포넌트에 setState → 메모리 누수·경고.

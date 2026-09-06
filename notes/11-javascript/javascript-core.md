@@ -26,38 +26,34 @@
 > JS 엔진은 **콜 스택 하나**로 동작하는 싱글 스레드지만, 브라우저/Node가 제공하는 **Web API(타이머, I/O, 네트워크)**에 비동기 작업을 위임하고, 완료된 콜백을 **큐**에 쌓았다가 **이벤트 루프**가 콜 스택이 빌 때마다 순서대로 꺼내 실행하는 방식으로 "동시성처럼 보이는" 처리를 한다.
 
 ## 3. 다이어그램 — 전체 구조
-```
-        Call Stack (싱글 스레드, 동기 코드 실행)
-     ┌─────────────────────────┐
-     │  현재 실행 중인 함수      │
-     └───────────┬─────────────┘
-                 │ 비동기 함수 호출 시 위임
-                 ▼
-     ┌─────────────────────────┐
-     │  Web APIs / Node APIs    │  setTimeout, fetch, fs.readFile 등
-     │  (브라우저/libuv가 처리)  │
-     └───────────┬─────────────┘
-                 │ 완료되면 콜백을 큐에 적재
-     ┌───────────▼─────────────┐      ┌───────────────────────┐
-     │ Microtask Queue          │      │ Task(Macrotask) Queue  │
-     │ Promise.then/catch/finally│     │ setTimeout, setInterval│
-     │ async/await, MutationObs │      │ setImmediate, I/O 콜백 │
-     └───────────┬─────────────┘      └───────────┬───────────┘
-                 │                                 │
-                 └──────────► Event Loop ◄─────────┘
-              "콜 스택이 비면, 마이크로태스크 큐를
-               '전부' 비운 후에야 매크로태스크 1개를 꺼낸다"
+```mermaid
+flowchart TB
+  CS["<b>Call Stack</b><br/>싱글 스레드 · 동기 코드 실행<br/><i>현재 실행 중인 함수</i>"]
+  API["<b>Web APIs / Node APIs</b><br/>setTimeout · fetch · fs.readFile 등<br/><i>브라우저 / libuv가 처리</i>"]
+  MICRO["<b>Microtask Queue</b><br/>Promise.then/catch/finally<br/>async/await · MutationObserver"]
+  MACRO["<b>Task (Macrotask) Queue</b><br/>setTimeout · setInterval<br/>setImmediate · I/O 콜백"]
+  EL{"<b>Event Loop</b>"}
+  CS -- "비동기 함수 호출 시 위임" --> API
+  API -- "완료되면 콜백을 큐에 적재" --> MICRO
+  API --> MACRO
+  MICRO --> EL
+  MACRO --> EL
+  EL -- "콜 스택이 비면" --> CS
 ```
 
+> 콜 스택이 비면, **마이크로태스크 큐를 '전부' 비운 후에야** 매크로태스크
+> **1개**를 꺼낸다.
+
+그래서 `Promise.then`은 `setTimeout(fn, 0)`보다 항상 먼저 실행되고,
+마이크로태스크 안에서 마이크로태스크를 무한히 만들면 매크로태스크는
+영원히 굶는다.
+
 ## 4. 이벤트 루프 동작 순서 (한 tick)
-```
-1. Call Stack의 동기 코드를 끝까지 실행
-2. Call Stack이 완전히 비면:
-   → Microtask Queue를 "큐가 빌 때까지" 전부 실행
-     (실행 중 새로 추가된 마이크로태스크도 이번 턴에 다 처리)
-3. Macrotask(Task) Queue에서 딱 1개만 꺼내 실행
-4. 다시 2번으로 (렌더링 등은 매크로태스크 사이사이에 발생)
-```
+1. **Call Stack**의 동기 코드를 끝까지 실행한다.
+2. Call Stack이 완전히 비면 → **Microtask Queue를 "큐가 빌 때까지" 전부** 실행한다.
+   (실행 중 새로 추가된 마이크로태스크도 **이번 턴에** 다 처리)
+3. **Macrotask Queue에서 딱 1개만** 꺼내 실행한다.
+4. 다시 2번으로 (렌더링 등은 매크로태스크 사이사이에 발생).
 
 ## 5. 코드 — setTimeout(0) vs Promise.then 순서
 ```javascript
@@ -126,7 +122,7 @@ console.log('4');                          // 동기
 > **렉시컬 스코프** = 함수의 스코프가 **호출 위치가 아니라 코드가 작성된 위치(정적)** 로 결정되는 방식.
 
 ## 3. 다이어그램 — 클로저 구조
-```
+```js
 function outer() {
     let count = 0;              // outer의 렉시컬 환경
     return function inner() {   // inner가 이 환경을 "배낭"에 담아 캡처
@@ -136,17 +132,26 @@ function outer() {
 }
 
 const counter = outer();   // outer() 실행 종료 → 스택 프레임은 pop
-                            // 하지만 count는 inner가 참조 중이라 GC 안 됨
+                           // 하지만 count는 inner가 참조 중이라 GC 안 됨
 counter();  // 1
 counter();  // 2  ← count가 계속 유지됨 (private 상태)
 ```
+```mermaid
+flowchart LR
+  subgraph CS["Call Stack — outer 실행 종료 후"]
+    direction TB
+    CALL["counter() 호출"]
+  end
+  subgraph HEAP["Heap — 클로저 환경, 계속 참조됨"]
+    direction TB
+    ENV["[[Environment]]<br/>count: 2"]
+  end
+  CALL -- "inner 함수" --> ENV
 ```
-Call Stack (outer 실행 종료 후)          Heap (클로저 환경, 계속 참조됨)
-┌───────────────┐                      ┌─────────────────┐
-│ counter() 호출 │──── inner 함수 ─────►│ [[Environment]]  │
-└───────────────┘                      │  count: 2        │
-                                        └─────────────────┘
-```
+
+`outer`의 스택 프레임은 사라졌는데 `count`는 살아 있다. **`inner`가
+`[[Environment]]`를 참조하고 있어서 GC 대상이 되지 않기 때문이다** — 클로저가
+메모리 누수의 원인이 될 수 있는 이유도 같다.
 
 ## 4. 활용 예 — 모듈 패턴 / private 변수
 ```javascript
@@ -239,10 +244,17 @@ Animal.prototype.speak = function () { return `${this.name} makes a sound`; };
 const dog = new Animal('Rex');
 dog.speak();   // "Rex makes a sound" — dog엔 speak 없음 → 프로토타입에서 발견
 ```
+```mermaid
+flowchart LR
+  D["dog<br/><i>{ name: 'Rex' }</i>"]
+  A["Animal.prototype<br/><i>{ speak: fn }</i>"]
+  O["Object.prototype<br/><i>{ toString, ... }</i>"]
+  N(["null"])
+  D -- "[[Prototype]]" --> A -- "[[Prototype]]" --> O --> N
 ```
-dog ──[[Prototype]]──► Animal.prototype ──[[Prototype]]──► Object.prototype ──► null
-{name:'Rex'}              {speak: fn}                         {toString, ...}
-```
+
+`dog.speak()`을 부르면 `dog` 자신에 없으므로 **체인을 따라 올라가** `Animal.prototype`
+에서 찾는다. `null`까지 못 찾으면 `undefined`다 — 이 탐색이 프로토타입 상속의 전부다.
 - `new Animal()`은 내부적으로: ① 빈 객체 생성 → ② 그 객체의 `[[Prototype]]`을 `Animal.prototype`으로 연결 → ③ `this`를 그 객체로 바인딩해 생성자 실행 → ④ 객체 반환.
 - ES6 `class`는 이 **프로토타입 기반 상속의 문법 설탕**일 뿐, 내부 동작은 동일.
 
@@ -601,14 +613,11 @@ import * as math from './math.js';   // 전체를 네임스페이스로
 > **매크로태스크(task)** = setTimeout/setInterval/I/O/이벤트 콜백. 이벤트 루프가 **한 턴에 하나씩** 꺼내 실행.
 > **마이크로태스크(microtask)** = Promise 콜백(.then/catch/finally), await 이후, queueMicrotask. 매크로태스크 하나가 끝날 때마다 **큐가 빌 때까지 전부** 실행.
 
-```
-[한 턴의 실행 순서]
 ① 콜 스택의 동기 코드 전부 실행
-② 콜 스택이 비면 → 마이크로태스크 큐를 "완전히 빌 때까지" 전부 실행
+② 콜 스택이 비면 → 마이크로태스크 큐를 **완전히 빌 때까지** 전부 실행
    (실행 중 새로 추가된 마이크로태스크도 이번에 다 처리)
 ③ (필요 시) 렌더링
-④ 매크로태스크 큐에서 딱 하나 꺼내 실행 → ②로 돌아감
-```
+④ 매크로태스크 큐에서 **딱 하나** 꺼내 실행 → ②로 돌아감
 
 ## 3. 실행 순서 예제
 

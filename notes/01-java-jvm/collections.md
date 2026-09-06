@@ -8,24 +8,29 @@
 
 ## 1. 비유 — 창고의 보관 방식
 
-```
-List  = 번호 붙은 선반(순서·중복 O)      → 순서가 의미 있는 목록
-Set   = 회원 명단(중복 X)                → "있냐 없냐"만 중요
-Map   = 사물함(열쇠 → 물건)              → 키로 값 꺼내기
-Queue = 줄서기/우선 진료                 → 처리 순서 관리
-```
+| 타입 | 창고의 보관 방식 | 언제 쓰나 |
+|------|------------------|-----------|
+| `List` | 번호 붙은 선반 (순서 O, 중복 O) | 순서가 의미 있는 목록 |
+| `Set` | 회원 명단 (중복 X) | "있냐 없냐"만 중요 |
+| `Map` | 사물함 (열쇠 → 물건) | 키로 값 꺼내기 |
+| `Queue` | 줄서기 / 우선 진료 | 처리 순서 관리 |
 
 ## 2. 계층 구조 (한눈에)
 
+```mermaid
+flowchart LR
+  IT["Iterable"] --> CO["Collection"]
+  CO --> L["<b>List</b><br/><i>순서 O, 중복 O</i>"]
+  CO --> S["<b>Set</b><br/><i>중복 X</i>"]
+  CO --> Q["<b>Queue</b><br/><i>처리 순서</i>"]
+  L --> LI["ArrayList · LinkedList"]
+  S --> SI["HashSet · LinkedHashSet · TreeSet"]
+  Q --> QI["ArrayDeque · PriorityQueue"]
+  M["<b>Map</b><br/><i>Collection 아님 — 별도 최상위</i>"] --> MI["HashMap · LinkedHashMap<br/>TreeMap · ConcurrentHashMap"]
 ```
-Iterable
- └ Collection
-    ├ List   → ArrayList, LinkedList              (순서 O, 중복 O)
-    ├ Set    → HashSet, LinkedHashSet, TreeSet    (중복 X)
-    └ Queue  → ArrayDeque, PriorityQueue          (처리 순서)
-Map (Collection 아님, 별도 최상위)
-    → HashMap, LinkedHashMap, TreeMap, ConcurrentHashMap   (키→값)
-```
+
+`Map`이 `Collection`을 상속하지 않는다는 게 포인트다. `Collection`은
+"원소의 모음"이고 `Map`은 "키→값 쌍의 모음"이라 `add(E)` 같은 계약이 맞지 않는다.
 
 ## 3. "언제 무엇" 결정표
 

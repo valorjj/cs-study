@@ -187,15 +187,15 @@ sequenceDiagram
 - 송신자는 ACK를 기다리지 않고도 rwnd 범위 안에서는 **여러 세그먼트를 미리 연속 전송**(sliding window) → 한 번 보내고 기다리는 stop-and-wait보다 훨씬 효율적.
 - `rwnd = 0`(Zero Window) → 송신 중단, 수신자가 버퍼 비우면 **Window Update**로 재개.
 ```text
-        ┌── 이미 보냄 ──┐┌── 보낼 수 있음 ──┐
-seq:    1   2   3   4   5   6   7   8   9  10
-       [A] [A] [S] [S] [ ] [ ] [ ] [ ]  .   .
-            ▲                       ▲
-            └─ ACK 대기             └─ window 끝 (rwnd)
-
-ACK(ack=3, rwnd=5) 도착 → 왼쪽 경계가 3으로 이동 → window가 오른쪽으로 슬라이드
-        A = ACK 완료   S = 전송 후 ACK 대기   [ ] = 아직 전송 안 함
+seq:    1    2    3    4    5    6    7    8    9   10
+      [ A ][ A ][ S ][ S ][ . ][ . ][ . ][ . ]  ?    ?
+        |<-- sent -->|<------- window ------->|
+        |            |                       |
+      left edge   unacked                 right edge (rwnd)
 ```
+
+- `A` = ACK 완료 · `S` = 전송 후 ACK 대기 · `.` = 창 안이지만 아직 전송 안 함
+- `ACK(ack=3, rwnd=5)` 도착 → **왼쪽 경계가 3으로 이동** → window가 오른쪽으로 슬라이드
 
 수신자가 **rwnd**(남은 버퍼 크기)를 ACK에 실어 보내고, 송신자는 그만큼만
 미확인 상태로 띄운다. `rwnd=0`이면 송신자는 멈춘다(zero window).

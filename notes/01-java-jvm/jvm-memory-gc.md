@@ -33,31 +33,26 @@
 > 구성 3파트: **Class Loader → Runtime Data Areas → Execution Engine**.
 
 ## 3. 다이어그램 — JVM 전체 흐름
-```
-   .java  --javac-->  .class (바이트코드)
-                          │
-             ┌────────────▼─────────────┐
-             │      1. Class Loader      │  로딩→링크(검증/준비/해석)→초기화
-             └────────────┬─────────────┘
-                          │ 클래스 정보 적재
-   ┌──────────────────────▼──────────────────────────┐
-   │           2. Runtime Data Areas (메모리)          │
-   │                                                   │
-   │  ┌─────── 공유 (모든 스레드) ───────┐              │
-   │  │  Heap          Method Area       │              │
-   │  │  (객체/인스턴스) (Metaspace:       │              │
-   │  │   ← GC 대상     클래스메타/static) │              │
-   │  └──────────────────────────────────┘              │
-   │  ┌─── 스레드별 (Thread 마다 1세트) ───┐             │
-   │  │  JVM Stack   PC Register   Native Stack │        │
-   │  │  (스택프레임)  (실행위치)    (JNI)        │        │
-   │  └────────────────────────────────────────┘        │
-   └──────────────────────┬────────────────────────────┘
-                          │
-             ┌────────────▼─────────────┐
-             │    3. Execution Engine    │
-             │  Interpreter + JIT + GC   │
-             └───────────────────────────┘
+```mermaid
+flowchart TB
+  SRC[".java"] -- javac --> BC[".class (바이트코드)"]
+  CL["<b>1. Class Loader</b><br/>로딩 → 링크(검증/준비/해석) → 초기화"]
+  subgraph RDA["2. Runtime Data Areas (메모리)"]
+    direction TB
+    subgraph SHARED["공유 — 모든 스레드"]
+      direction LR
+      HEAP["<b>Heap</b><br/>객체 · 인스턴스<br/><i>← GC 대상</i>"]
+      MA["<b>Method Area</b><br/>Metaspace:<br/>클래스 메타 · static"]
+    end
+    subgraph PER["스레드별 — Thread 마다 1세트"]
+      direction LR
+      ST["JVM Stack<br/><i>스택 프레임</i>"]
+      PC["PC Register<br/><i>실행 위치</i>"]
+      NS["Native Stack<br/><i>JNI</i>"]
+    end
+  end
+  EE["<b>3. Execution Engine</b><br/>Interpreter + JIT + GC"]
+  BC --> CL -- "클래스 정보 적재" --> RDA --> EE
 ```
 
 ## 4. Runtime Data Areas 상세 (= "메모리 구조")
@@ -96,14 +91,24 @@ public class Order {
     }
 }
 ```
+```mermaid
+flowchart LR
+  subgraph S["Stack — 이 스레드"]
+    direction TB
+    F["process()<br/>tax = 5<br/>c = <i>참조</i>"]
+  end
+  subgraph H["Heap — 공유"]
+    direction TB
+    O["Order{price}"]
+    CO["Coupon{...}"]
+  end
+  F -- "c" --> CO
+  X(["어딘가의 참조"]) --> O
 ```
-Stack (이 스레드)          Heap (공유)
-┌─────────────┐          ┌──────────────┐
-│ process()   │          │ Order{price} │◄── 어딘가의 참조
-│  tax = 5    │          │ Coupon{...}  │◄── c
-│  c ─────────┼─────────►└──────────────┘
-└─────────────┘
-```
+
+지역변수 `tax = 5`는 **값 자체가 스택에** 있고, `c`는 **Heap의 객체를 가리키는
+참조만** 스택에 있다. 그래서 스택 프레임이 사라져도 객체는 다른 참조가 남아
+있으면 살아 있다.
 > 규칙: **참조 변수는 Stack, 실제 객체는 Heap**. primitive 지역변수는 값 자체가 Stack.
 
 ## 6. 핵심 포인트 (자주 하는 실수)
@@ -150,14 +155,19 @@ Stack (이 스레드)          Heap (공유)
 - TLAB이 꽉 차면: ① 새 TLAB을 다시 할당받거나 ② (남은 공간이 애매하면) 공유 Eden 영역에서 직접 slow-path 할당(락 필요).
 - 큰 배열처럼 애초에 TLAB보다 큰 객체는 TLAB을 거치지 않고 바로 공유 Eden(또는 Old, "대형 객체 직행")에 할당될 수 있음.
 
+```mermaid
+flowchart TB
+  subgraph EDEN["Eden (공유)"]
+    direction LR
+    TA["<b>Thread-A TLAB</b><br/>new Obj1<br/>new Obj2"]
+    TB["<b>Thread-B TLAB</b><br/>new Obj3<br/>new Obj4"]
+    FREE["free ..."]
+  end
 ```
-Eden (공유)
-┌───────────────────────────────────────────┐
-│ [Thread-A TLAB] [Thread-B TLAB] [free ...] │
-│  new Obj1 ─┐      new Obj3 ─┐              │
-│  new Obj2 ◄┘      new Obj4 ◄┘              │
-└───────────────────────────────────────────┘
-```
+
+Eden은 모든 스레드가 공유하지만, 각 스레드는 **자기 몫의 TLAB 구간**을 먼저
+받아둔다. 그 안에서는 포인터만 밀면 되므로 **할당에 락이 필요 없다.** TLAB이
+없으면 `new` 하나마다 공유 Eden 포인터를 CAS로 다퉈야 한다.
 > TLAB은 **에스케이프 분석(T3) 실패로 Heap에 할당될 수밖에 없는 객체**들이 그나마 빠르게 할당되도록 하는 장치. 즉 "스칼라 치환/스택 할당"이 1차 방어선, TLAB은 2차(Heap 할당이 어차피 필요할 때 빠르게).
 
 </details>
@@ -187,18 +197,23 @@ Eden (공유)
 > 로딩은 **lazy(필요할 때)**, 초기화는 **처음 능동적으로 쓸 때 딱 한 번**.
 
 ## 2. 3단계 구조
+```mermaid
+flowchart TB
+  C[".class"]
+  L["<b>1. Loading</b><br/>바이트를 읽어 Method Area에 Class 객체 생성"]
+  subgraph LK["2. Linking"]
+    direction TB
+    V["① Verification<br/>바이트코드 검증 (타입 · 스택 위반 등)"]
+    P["② Preparation<br/>static 필드를 <b>기본값</b>으로 메모리 확보 (0 / null / false)"]
+    R["③ Resolution<br/>심볼릭 참조 'java/lang/String' → 실제 참조"]
+    V --> P --> R
+  end
+  I["<b>3. Initialization</b><br/>static <b>실제값</b> 대입 + static{} 실행"]
+  C --> L --> LK --> I
 ```
- .class
-   │
- 1.Loading         바이트를 읽어 Method Area에 Class 객체 생성
-   │
- 2.Linking
-   ① Verification  바이트코드 검증 (타입/스택 위반 등)
-   ② Preparation   static 필드 "기본값"으로 메모리 확보 (0/null/false)
-   ③ Resolution    심볼릭 참조("java/lang/String") → 실제 참조
-   │
- 3.Initialization  static 실제값 대입 + static{} 실행
-```
+
+Preparation과 Initialization의 차이가 시험에 자주 나온다. Preparation은
+`static int x = 5`를 **0으로** 만들고, 실제 `5`가 들어가는 건 Initialization이다.
 
 ## 3. 코드로 보는 Preparation vs Initialization
 ```java
@@ -211,13 +226,19 @@ public class Config {
 > Preparation 시점엔 `count`가 **10이 아니라 0**. 실제값 10은 Initialization에서 대입.
 
 ## 4. 부모 위임 모델 (Parent Delegation) ⭐
+```mermaid
+flowchart TB
+  B["<b>Bootstrap ClassLoader</b> (C++ 구현)<br/>java.base — String, Object 등 핵심 API"]
+  P["<b>Platform (Extension) ClassLoader</b><br/>확장 라이브러리"]
+  A["<b>Application (System) ClassLoader</b><br/>우리 앱 classpath"]
+  A -- "① 위임 ↑" --> P -- "② 위임 ↑" --> B
+  B -. "③ 못 찾으면 아래로 돌려줌" .-> P
+  P -.-> A
 ```
-   Bootstrap ClassLoader   (C++ 구현) — java.base: String, Object 등 핵심 API
-        │
-   Platform(Extension) ClassLoader — 확장 라이브러리
-        │
-   Application(System) ClassLoader — 우리 앱 classpath
-```
+
+**먼저 위로 위임하고, 부모가 못 찾을 때만 자기가 찾는다.** 그래서 앱이
+`java.lang.String`을 정의해도 Bootstrap이 로드한 진짜 `String`이 이긴다 —
+핵심 API를 덮어쓰는 공격을 구조적으로 막는다.
 동작: 요청 오면 **부모에게 먼저 위임 → 부모가 못 찾을 때만 자신이 로딩**.
 - **왜?** 핵심 API(`String`) 위조 방지(**보안**) + 클래스 중복 로딩 방지(**유일성**).
 - **클래스 동일성 = FQCN + 로더** 조합. 로더 다르면 같은 이름도 다른 클래스로 취급.
@@ -257,35 +278,67 @@ public class Config {
 
 ## 2. 핵심 원리 두 가지
 ### ① 도달성 (Reachability) — "누가 쓰레기인가"
+```mermaid
+flowchart LR
+  subgraph ROOTS["GC Roots"]
+    direction TB
+    R1["스택 지역변수"]
+    R2["static 필드"]
+    R3["..."]
+  end
+  subgraph HEAP["Heap"]
+    direction TB
+    A["ObjectA"] --> B["ObjectB"]
+    C["ObjectC"]
+    D["ObjectD"] <--> E["ObjectE"]
+  end
+  R1 --> A
+  R2 --> C
 ```
-[GC Roots]                 Heap
- ├ 스택 지역변수 ─► ObjectA ─► ObjectB   (도달 가능 = live)
- ├ static 필드 ──► ObjectC
- └ ...             ObjectD ─► ObjectE    (Root에서 도달 불가 = 쓰레기)
-                   (D↔E 서로 참조해도 Root 미연결이면 둘 다 수거)
-```
+
+`ObjectA·B·C`는 Root에서 **도달 가능 = live**다. `ObjectD ↔ ObjectE`는
+**서로를 참조하지만 Root와 연결되지 않았으므로 둘 다 수거**된다 — 참조 카운팅과
+달리 순환 참조가 누수가 되지 않는 이유다.
 - 참조 카운팅 아님 → **도달성 기반**. 그래서 **순환 참조도 정상 수거**.
 - GC Root: 스택 지역변수, static 필드, JNI 참조 등.
 
 ### ② 세대 가설 (Weak Generational Hypothesis)
 > "대부분 객체는 생성되자마자 곧 죽는다." → Heap을 세대로 분할.
-```
-┌──────────── Heap ─────────────────────┐
-│  Young Generation        Old Generation │
-│  ┌──────┬────┬────┐    ┌─────────────┐ │
-│  │ Eden │ S0 │ S1 │    │ Old(Tenured)│ │
-│  └──────┴────┴────┘    └─────────────┘ │
-│   새 객체   Survivor      오래 살아남은   │
-└─────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph HEAP["Heap"]
+    direction LR
+    subgraph YOUNG["Young Generation"]
+      direction LR
+      EDEN["<b>Eden</b><br/><i>새 객체</i>"]
+      S0["<b>S0</b><br/><i>Survivor</i>"]
+      S1["<b>S1</b><br/><i>Survivor</i>"]
+    end
+    subgraph OLD["Old Generation"]
+      direction LR
+      TEN["<b>Old (Tenured)</b><br/><i>오래 살아남은 객체</i>"]
+    end
+  end
 ```
 
+**약한 세대 가설:** 대부분의 객체는 만들어진 직후에 죽는다. 그래서 새 객체만
+모아둔 Young을 자주·짧게 훑고(Minor GC), 살아남은 소수만 Old로 넘긴다.
+
 ## 3. 객체의 일생 — Minor GC → 승격 → Major GC
-```
-1. new → Eden 생성
-2. Eden 꽉 참 → [Minor GC]: 생존자만 S0로 복사, Eden 비움
-3. 다음 Minor GC → S1로 복사(S0↔S1 왕복), age++
-4. age 임계치(기본 15) 초과 → Old로 [승격]
-5. Old 꽉 참 → [Major/Full GC] (느림, STW 김)
+1. `new` → **Eden**에 생성.
+2. Eden이 꽉 참 → **Minor GC**: 생존자만 `S0`로 복사, Eden 비움.
+3. 다음 Minor GC → `S1`로 복사(`S0 ↔ S1` 왕복), `age++`.
+4. `age`가 임계치(기본 15) 초과 → **Old로 승격**.
+5. Old가 꽉 참 → **Major / Full GC** (느리고 STW가 길다).
+
+```mermaid
+flowchart LR
+  N(["new"]) --> E["Eden"]
+  E -- "Minor GC — 생존자만" --> S0["S0"]
+  S0 -- "Minor GC, age++" --> S1["S1"]
+  S1 -- "Minor GC, age++" --> S0
+  S1 -- "age > 15 — 승격" --> O["Old (Tenured)"]
+  O -- "Old 꽉 참" --> F["<b>Major / Full GC</b><br/>느림 · STW 김"]
 ```
 - **Minor GC**: Young 청소. 자주·빠름·STW 짧음.
 - **Major GC**: Old 청소. 드물지만 느림·STW 김 → 성능 문제 주범.
@@ -358,12 +411,16 @@ GC가 도달성을 정확히 계산하려면 객체 그래프가 멈춰야 함 �
 
 일반적인 참조(`Object o = new Object()`)는 전부 **Strong Reference** — GC Root에서 도달 가능하면 절대 수거 안 됨. 그 외 3종류는 `java.lang.ref` 패키지가 제공.
 
-```
-강도:  Strong  >  Soft  >  Weak  >  Phantom
-       (안 지움)  (메모리   (다음 GC   (참조 불가,
-                  부족시     때 무조건   수거 "완료
-                  지움)      지움)      알림"용)
-```
+| 강도 | 타입 | 언제 수거되나 | 용도 |
+|------|------|---------------|------|
+| 1 (가장 강함) | `Strong` | **안 지움** (도달 가능하면 영원히) | 보통의 참조 |
+| 2 | `SoftReference` | **메모리 부족할 때** | 메모리에 민감한 캐시 |
+| 3 | `WeakReference` | **다음 GC 때 무조건** | `WeakHashMap`, 리스너 등록부 |
+| 4 (가장 약함) | `PhantomReference` | 이미 수거됨 (`get()`은 항상 `null`) | 수거 **완료 알림** / 자원 정리 |
+
+`Strong > Soft > Weak > Phantom` 순으로 약해진다. 캐시를 `Soft`로 잡으면
+OOM 대신 캐시가 먼저 비워지고, 리스너를 `Weak`로 잡으면 등록 해제를 잊어도
+누수가 되지 않는다.
 
 | 종류 | GC 동작 | 대표 용도 |
 |------|---------|-----------|
@@ -409,9 +466,9 @@ k = null;                 // 강한 참조 끊김 → 다음 GC 때 엔트리 �
 ## 10. GC 튜닝 — 힙 크기 & 컬렉터 선택 ⭐
 
 ### 힙 크기 플래그
-```
+```bash
 -Xms2g          # 초기 힙 크기
--Xmx2g          # 최대 힙 크기 (Xms=Xmx로 동일하게 두면 런타임 중 힙 리사이징 비용 제거 → 실무 권장)
+-Xmx2g          # 최대 힙 크기 (Xms=Xmx로 두면 런타임 중 힙 리사이징 비용 제거 → 실무 권장)
 -Xmn512m        # Young 영역 크기 (명시 안 하면 -XX:NewRatio로 비율 결정)
 -XX:MaxMetaspaceSize=256m   # Metaspace 상한 (안 걸면 사실상 무제한 → 누수 시 서버 전체 메모리 잠식)
 ```
@@ -419,11 +476,24 @@ k = null;                 // 강한 참조 끊김 → 다음 GC 때 엔트리 �
 - Young(`-Xmn`)을 너무 작게 두면 Minor GC가 잦아지고, 너무 크게 두면 Minor GC 1회당 스캔 비용·STW가 늘어남 → 트레이드오프.
 
 ### 처리량(Throughput) vs 지연(Latency) — 컬렉터 선택 기준
+```mermaid
+flowchart LR
+  T["<b>처리량 최우선</b><br/>배치 · 야간 정산<br/><i>총 작업량이 중요</i>"]
+  P["Parallel GC"]
+  G["G1 GC"]
+  Z["ZGC / Shenandoah"]
+  L["<b>지연 최우선</b><br/>API 서버 · 실시간 응답"]
+  T --- P --- G --- Z --- L
 ```
-처리량 최우선                              지연 최우선
-(배치, 야간 정산, 총 작업량이 중요)   ◄──────────►  (API 서버, 실시간 응답)
-   Parallel GC                    G1 GC              ZGC / Shenandoah
-```
+
+| 컬렉터 | 성격 | 전형적 STW |
+|--------|------|-----------|
+| **Parallel** | 처리량 최대, STW 길어도 무관 | 수백 ms ~ 초 |
+| **G1** | 균형 · 목표 정지시간 지정 가능 | 수십 ~ 수백 ms |
+| **ZGC / Shenandoah** | 지연 최소, 대용량 힙 | **1 ms 미만** |
+
+같은 하드웨어에서 지연을 줄이면 처리량이 깎인다. "무엇을 포기할 수 있는가"가
+컬렉터 선택 기준이다.
 | 상황 | 추천 컬렉터 | 이유 |
 |------|-------------|------|
 | 배치/대량 데이터 처리, STW 좀 길어도 총 처리량이 중요 | **Parallel GC** | STW 중엔 멀티스레드로 최대한 빨리 끝내고 앱에 CPU를 몰아줌 |
@@ -439,7 +509,7 @@ k = null;                 // 강한 참조 끊김 → 다음 GC 때 엔트리 �
 
 ## 11. JVM 관측 도구 — jps/jstat/jmap/jstack & Heap Dump 분석 ⭐
 
-```
+```bash
 jps -l                    # 실행 중인 JVM 프로세스 목록 + PID (ps aux | grep java 대체)
 jstat -gcutil <pid> 1s    # GC 영역별 사용률(%)과 GC 횟수/누적시간 실시간 관찰
 jmap -histo:live <pid>    # 살아있는 객체를 클래스별 개수·크기로 정렬 출력 (누수 후보 빠르게 확인)
@@ -456,15 +526,17 @@ jstack <pid>              # 모든 스레드의 스택트레이스 스냅샷 (�
 | `jstack` | 스레드 덤프 | 데드락, 응답 없음(hang), CPU 100% 원인 스레드 특정 |
 
 ### Heap Dump + OOM 분석 흐름
-```
-1. OOM 발생 시 자동 덤프 뜨게 설정:
+1. OOM 발생 시 자동 덤프가 뜨게 설정한다.
+
+   ```bash
    -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/path/heap.hprof
-2. .hprof 파일을 Eclipse MAT / VisualVM 등으로 로드
-3. "Leak Suspects" 리포트 or Histogram에서 retained size 큰 클래스 확인
-4. 해당 인스턴스 우클릭 → "Path to GC Roots" (excluding weak/soft refs)
-   → 어떤 static/ThreadLocal/리스너가 물고 있는지 역추적
-5. 원인 코드 수정 (9번 표의 패턴 중 하나로 좁혀짐이 보통)
-```
+   ```
+
+2. `.hprof` 파일을 **Eclipse MAT** / VisualVM 등으로 로드한다.
+3. **Leak Suspects** 리포트 또는 Histogram에서 **retained size**가 큰 클래스를 찾는다.
+4. 해당 인스턴스 우클릭 → **Path to GC Roots** (excluding weak/soft refs)
+   → 어떤 `static` / `ThreadLocal` / 리스너가 물고 있는지 역추적한다.
+5. 원인 코드를 수정한다 (보통 9번 표의 패턴 중 하나로 좁혀진다).
 > 🔴 자주 하는 실수: `jmap -dump`를 운영 서버에서 그냥 실행 — heap dump 생성 자체가 **STW를 유발**(전체 힙을 훑어야 함)하고 파일 크기 = 힙 크기라서, 대용량 힙이면 그 자체로 장애를 일으킬 수 있음. 가능하면 트래픽 빠진 시간대나 `-XX:+HeapDumpOnOutOfMemoryError`로 자동화.
 
 </details>
@@ -489,13 +561,23 @@ jstack <pid>              # 모든 스레드의 스택트레이스 스냅샷 (�
 > **JIT** = 런타임에 자주 실행되는 바이트코드를 **기계어로 컴파일해 code cache에 저장**, 이후 호출은 인터프리터 없이 기계어 직행. 미리(AOT)도 매번(순수 인터프리터)도 아닌 **딱 필요한 시점** 컴파일.
 
 ## 3. Hot Spot 감지
+```mermaid
+flowchart TB
+  C1["메서드 호출 카운터"]
+  C2["백엣지 카운터 (루프 횟수)"]
+  TH{"임계치 초과?"}
+  HOT["<b>hot spot</b> 판정"]
+  BG["백그라운드 스레드가 컴파일<br/><i>앱은 인터프리터로 계속 실행</i>"]
+  CC[("code cache에 기계어 저장")]
+  NEXT["다음 호출부터 기계어"]
+  C1 --> TH
+  C2 --> TH
+  TH -- YES --> HOT --> BG --> CC --> NEXT
+  TH -- NO --> C1
 ```
-┌ 메서드 호출 카운터
-└ 백엣지 카운터(루프 횟수)
-      │ 임계치 초과 → hot spot
-      ▼ 백그라운드 스레드가 컴파일 (앱은 인터프리터로 계속 실행)
-   code cache에 기계어 저장 → 다음 호출부터 기계어
-```
+
+컴파일이 **백그라운드에서** 일어나므로 앱이 멈추지 않는다. 그래서 JVM은
+기동 직후 느리고(인터프리터), 워밍업이 끝나면 빨라진다.
 - 실행 중 루프를 컴파일본으로 갈아타는 **OSR(On-Stack Replacement)** 도 존재.
 
 ## 4. C1 / C2 / Tiered ⭐
@@ -551,11 +633,11 @@ jstack <pid>              # 모든 스레드의 스택트레이스 스냅샷 (�
 **비유**: 회의실에서만 쓰고 버리는 메모는 굳이 회사 전체 문서 캐비닛(Heap)에 등록할 필요 없이, 그냥 회의실 화이트보드(스택/레지스터)에 적었다 지우면 됨. "이 메모가 회의실 밖으로 나갈 일이 있는가(탈출하는가)?"를 미리 분석하는 것이 escape analysis.
 
 ### 탈출 여부 3단계
-```
-NoEscape (탈출 없음)        → 스택 할당 후보 / 스칼라 치환 후보
-ArgEscape (메서드 인자로만 전달) → 인라이닝되면 NoEscape로 승격 가능
-GlobalEscape (필드 저장, 리턴, 다른 스레드 공유) → 반드시 Heap
-```
+| 단계 | 무엇이 탈출하나 | 최적화 가능성 |
+|------|-----------------|---------------|
+| **NoEscape** | 탈출 없음 (메서드 안에서만 삶) | **스택 할당 / 스칼라 치환 후보** |
+| **ArgEscape** | 메서드 인자로만 전달 | 인라이닝되면 **NoEscape로 승격** 가능 |
+| **GlobalEscape** | 필드 저장 · 리턴 · 다른 스레드 공유 | **반드시 Heap** |
 
 ### 스칼라 치환 (Scalar Replacement)
 - Escape analysis가 "이 객체는 탈출하지 않는다"고 판단하면, JIT(C2)는 **객체를 통째로 만들지 않고** 그 필드들을 **개별 지역 변수(스칼라)로 분해**해 레지스터/스택에 둔다.
@@ -569,15 +651,19 @@ void compute() {
 - 조건이 까다로움: 객체가 조건문 안에서 부분적으로 탈출하거나, 리플렉션/동기화(`synchronized(p)`) 대상이 되거나, JIT가 warm-up 전이면 스칼라 치환이 안 일어나고 평범하게 Heap(TLAB 경유)에 할당됨.
 
 ### TLAB과의 관계 — "1차/2차 방어선"
+```mermaid
+flowchart TB
+  N(["객체 생성"])
+  EA{"escape analysis<br/>NoEscape 인가?"}
+  SR["<b>1차 방어선</b> — 스칼라 치환<br/>Heap 할당 자체를 생략"]
+  HP["반드시 Heap 할당"]
+  TL["<b>2차 방어선</b> — TLAB에서 락 없이 빠르게 할당<br/><i>그나마 빠르게</i>"]
+  N --> EA
+  EA -- YES --> SR
+  EA -- NO --> HP --> TL
 ```
-객체 생성
-   │
-   ▼ escape analysis
-NoEscape? ──Yes──► 스칼라 치환 (Heap 할당 자체를 생략) — 1차 방어선
-   │No
-   ▼
-반드시 Heap 할당 ──► TLAB에서 락 없이 빠르게 할당 — 2차 방어선(그나마 빠르게)
-```
+
+가장 빠른 할당은 **할당하지 않는 것**이다. 그게 안 되면 최소한 락 없이 하게 만든다.
 > 즉, escape analysis+스칼라 치환이 "애초에 Heap에 안 만들기"라면, TLAB(T1 §9)은 "Heap에 만들 수밖에 없을 때 최대한 빠르게 만들기"다. 둘은 경쟁 관계가 아니라 **직렬 방어선**.
 
 </details>

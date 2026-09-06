@@ -76,11 +76,19 @@ public class OrderService {
 ## 6. 심화 — 순환 참조(Circular Dependency)
 **비유**: A가 완성되려면 B가 필요하고, B가 완성되려면 A가 필요함 — 서로 "네가 먼저 준비되면 나도 준비할게"라며 기다리는 교착 상태.
 
+```mermaid
+flowchart LR
+  O["OrderService<br/><i>생성자에 UserService 필요</i>"]
+  U["UserService<br/><i>생성자에 OrderService 필요</i>"]
+  O -- "필요" --> U
+  U -- "필요" --> O
 ```
-OrderService(생성자) 필요 → UserService
-UserService(생성자) 필요 → OrderService
-→ 누구도 먼저 완성될 수 없음 (BeanCurrentlyInCreationException)
-```
+
+누구도 **먼저 완성될 수 없다** → `BeanCurrentlyInCreationException`.
+
+생성자 주입은 객체가 만들어지는 시점에 의존성이 다 있어야 하므로 이 순환이
+**기동 시점에 즉시** 드러난다. 필드/세터 주입은 순환을 런타임까지 숨기므로
+"동작하다가 나중에 터지는" 쪽이 되고, 그래서 생성자 주입이 권장된다.
 
 - **생성자 주입 = 조기 발견 장치**: 빈 생성 = 의존성 100% 조립 완료를 의미하므로, 순환이 있으면 컨테이너 기동 시점에 바로 실패합니다. (Spring Boot 2.6+부터 `spring.main.allow-circular-references=false`가 기본값이라, 필드 주입이어도 순환참조는 기본적으로 막힙니다.)
 - **필드/setter 주입은 왜 "되는 것처럼" 보였나**: 빈 껍데기(아직 필드 미주입 상태)를 캐시에 먼저 등록해두고, 그 껍데기를 서로 주입한 뒤 나중에 필드를 채우는 3단계 캐시(singleton cache) 덕분에 순환이 "봉합"됐던 것 — 근본적으로 설계 문제가 있다는 신호를 늦게(런타임 NPE 등으로) 발견하게 만드는 것뿐, 해결이 아님.
@@ -139,10 +147,14 @@ public class OrderService {
 - 이건 JVM 동시성(JMM)·OS 동기화와 같은 문제 — 공유 객체의 가변 상태.
 
 ## 4. 생명주기
+```mermaid
+flowchart LR
+  A["인스턴스화"] --> B["의존성 주입"] --> C["@PostConstruct<br/><i>초기화 콜백</i>"]
+  C --> D(["사용"]) --> E["@PreDestroy<br/><i>소멸 콜백</i>"] --> F["소멸"]
 ```
-인스턴스화 → 의존성 주입 → @PostConstruct(초기화 콜백)
-  → (사용) → @PreDestroy(소멸 콜백) → 소멸
-```
+
+`@PostConstruct`는 **의존성 주입이 끝난 뒤**에 불린다. 그래서 생성자에서는
+아직 `null`인 의존성을 여기서는 안전하게 쓸 수 있다.
 
 ## 5. 예상 면접 질문
 **Q. "스프링 빈은 싱글톤인데 멀티스레드에서 안전한가요?"**
@@ -172,9 +184,18 @@ public class OrderService {
 
 ## 3. 동작 원리 — 프록시 ⭐
 스프링 AOP는 **프록시 기반**: 대상 빈을 감싼 **프록시 객체**를 만들어, 메서드 호출 전후에 부가기능(트랜잭션 등) 삽입.
+```mermaid
+flowchart LR
+  C(["호출자"]) --> P["<b>프록시</b>"]
+  P --> BEGIN["트랜잭션 시작"]
+  BEGIN --> M["실제 빈 메서드"]
+  M --> END["커밋 / 롤백"]
+  END --> R(["반환"])
 ```
-호출자 → [프록시] → (트랜잭션 시작) → 실제 빈 메서드 → (커밋/롤백) → 반환
-```
+
+부가기능은 **프록시가** 담당하고 실제 빈은 비즈니스 로직만 갖는다.
+그래서 프록시를 거치지 않는 호출 경로에서는 부가기능이 아예 동작하지 않는다
+(→ self-invocation 함정).
 - 인터페이스 있으면 **JDK 동적 프록시**, 없으면 **CGLIB**(상속 기반).
 
 ## 4. 핵심 포인트 — self-invocation 함정 ⭐⭐
@@ -224,14 +245,36 @@ public void a() { this.b(); }        // ❌ b()의 @Transactional 무시됨(내�
 ## 7. 심화 — Filter vs Interceptor vs AOP 실행 순서·용도 비교
 횡단 관심사를 처리하는 3가지 방법이 실행되는 "층"이 다릅니다.
 
+```mermaid
+flowchart TB
+  C(["Client"])
+  subgraph SC["서블릿 컨테이너 영역"]
+    direction TB
+    F["Filter"]
+    DS["DispatcherServlet"]
+  end
+  subgraph SPRING["스프링 컨텍스트 영역"]
+    direction TB
+    IPRE["Interceptor — preHandle"]
+    CTRL["Controller"]
+    IPOST["Interceptor — postHandle / afterCompletion"]
+  end
+  subgraph BEAN["빈 내부"]
+    direction TB
+    SVC["Service <i>(AOP 프록시 통과)</i>"]
+  end
+  C --> F --> DS --> IPRE --> CTRL --> SVC
+  SVC --> IPOST --> DS
+  DS --> F
+  F --> C
 ```
-[서블릿 컨테이너 영역]              [스프링 컨텍스트 영역]           [빈 내부]
-Client → Filter → DispatcherServlet → Interceptor(preHandle) → Controller
-                                                                   ↓
-                                                          Service (AOP 프록시 통과)
-                                                                   ↓
-Client ← Filter ← DispatcherServlet ← Interceptor(postHandle/afterCompletion) ← 응답
-```
+
+| | Filter | Interceptor | AOP |
+|---|---|---|---|
+| 소속 | 서블릿 컨테이너 | 스프링 MVC | 스프링 빈 |
+| 볼 수 있는 것 | `ServletRequest` | `HandlerMethod` (어느 컨트롤러인지) | 메서드 인자·반환값 |
+| 쓰는 곳 | 인코딩, 보안 필터, 로깅 | 인증·인가, 공통 모델 | 트랜잭션, 캐시, 로깅 |
+| 예외 처리 | `@ControllerAdvice` 밖 | 밖 | 안 |
 
 | 구분 | 실행 위치 | 스프링 컨텍스트 접근 | 대표 용도 |
 |------|-----------|----------------------|-----------|
@@ -335,7 +378,7 @@ public class AuditLogService {
 ## 8. 심화 — JPA N+1 문제와 해결 (3년차 단골 질문)
 **비유**: 게시글 목록 10개를 한 번의 쿼리로 가져왔는데, 화면에서 작성자 이름을 찍으려고 각 게시글마다 "작성자 조회" 쿼리가 **추가로 10번** 더 나감. 총 1(목록) + N(연관 엔티티) = **N+1 쿼리**.
 
-```
+```sql
 SELECT * FROM post;                     -- 1번
 SELECT * FROM member WHERE id = ?;      -- N번 (post마다 반복)
 ```
@@ -380,15 +423,21 @@ private Member member;
 모든 우편(요청)이 중앙 분류소(**DispatcherServlet**)로 먼저 옴 → 담당 부서(Controller)로 분배 → 처리 후 응답 포장.
 
 ## 2. 요청 처리 흐름 ⭐
-```
-Client
-  → DispatcherServlet (Front Controller: 모든 요청 진입점)
-  → HandlerMapping (URL→어느 Controller?)
-  → HandlerAdapter → Controller 메서드 실행
-  → (Service → Repository → DB)
-  → 반환: @ResponseBody면 HttpMessageConverter로 JSON 직렬화
-           (View면 ViewResolver → 렌더)
-  → 응답
+```mermaid
+flowchart TB
+  C(["Client"])
+  DS["<b>DispatcherServlet</b><br/><i>Front Controller — 모든 요청 진입점</i>"]
+  HM["HandlerMapping<br/><i>URL → 어느 Controller?</i>"]
+  HA["HandlerAdapter"]
+  CT["Controller 메서드 실행"]
+  BIZ["Service → Repository → DB"]
+  Q{"@ResponseBody?"}
+  JSON["HttpMessageConverter<br/>→ JSON 직렬화"]
+  VIEW["ViewResolver → 렌더"]
+  R(["응답"])
+  C --> DS --> HM --> HA --> CT --> BIZ --> Q
+  Q -- YES --> JSON --> R
+  Q -- "NO (View)" --> VIEW --> R
 ```
 
 ## 3. 핵심 포인트
@@ -442,12 +491,32 @@ Client
 | NOT_SUPPORTED | 기존 중단, 트랜잭션 없이 실행 | 없이 실행 | — | ❌ |
 
 ### REQUIRES_NEW vs NESTED — 자주 헷갈리는 핵심 ⭐
+| | `REQUIRES_NEW` | `NESTED` |
+|---|---|---|
+| 물리 트랜잭션 | **완전히 새 것** | 바깥과 **같은 것** |
+| 커넥션 | **2개 점유** | 1개 |
+| 구현 | 바깥 TX 중단(suspend) | 바깥 TX에 **savepoint** |
+| 안쪽 실패 시 | 안쪽만 롤백 | **savepoint까지만** 롤백 |
+| 바깥이 롤백하면 | 안쪽 커밋은 **살아남음** | 안쪽도 **함께 사라짐**(종속적) |
+
+```mermaid
+flowchart TB
+  subgraph RN["REQUIRES_NEW — 독립"]
+    direction TB
+    O1["바깥 TX"] -- "중단(suspend)" --> I1["새 물리 TX<br/>별도 커넥션 → 독립 커밋"]
+    I1 -. "바깥이 롤백해도 살아남음" .-> I1
+  end
+  subgraph NS["NESTED — 종속"]
+    direction TB
+    O2["바깥 TX"] --> SP["savepoint 설정"]
+    SP --> I2["안쪽 작업<br/>같은 커넥션"]
+    I2 -. "바깥이 롤백하면 함께 사라짐" .-> O2
+  end
 ```
-[REQUIRES_NEW] 바깥 TX ─(중단)─→ 완전히 새 물리 TX(별도 커넥션) → 독립 커밋
-               → 바깥이 롤백해도 안쪽 커밋은 살아남음, 커넥션 2개 점유
-[NESTED]       바깥 TX 안에 savepoint 설정 → 안쪽 실패 시 savepoint까지만 롤백
-               → 같은 커넥션, 바깥이 롤백하면 안쪽도 함께 사라짐(종속적)
-```
+
+`NESTED`는 JDBC savepoint에 의존하므로 **JPA에서는 잘 동작하지 않는다**
+(하이버네이트가 지원하지 않음). 실무에서 "별도로 커밋되게" 하려면
+`REQUIRES_NEW`를 쓴다.
 - **REQUIRES_NEW**: 완전히 독립. 바깥과 운명을 달리함(감사 로그처럼 무조건 남겨야 할 때). 대신 커넥션을 하나 더 쓴다.
 - **NESTED**: JDBC savepoint 기반. 바깥에 종속적이라 바깥이 롤백하면 같이 롤백되지만, 안쪽만의 실패는 savepoint로 국소 롤백 가능. DB/드라이버가 savepoint를 지원해야 하고, JPA(Hibernate)에서는 제약이 있어 실무에서 덜 쓰임.
 
@@ -510,12 +579,25 @@ public void notifyUser() { ... }
 - Spring Boot 2.0+는 인터페이스가 있어도 기본적으로 **CGLIB**를 씁니다(구체 타입 주입 시 캐스팅 문제를 피하려는 결정).
 
 ## 4. self-invocation은 왜 프록시를 무력화하나 ⭐⭐
+```mermaid
+flowchart TB
+  subgraph OK["정상 — 프록시를 거친다"]
+    direction LR
+    A["다른 빈 A"] --> PB["프록시 B"] --> EXTRA["부가기능 O"] --> RB["실제 B.method()"]
+  end
+  subgraph BAD["함정 — self-invocation"]
+    direction LR
+    RB2["실제 B.outer()"] -- "this.inner()" --> RB3["실제 B.inner()"]
+    RB2 -. "this = 프록시가 아니라 <b>진짜 대상 객체</b>" .-> RB3
+  end
+  OK --> BAD
 ```
-[정상] 다른 빈 A → (프록시 B) → 부가기능 O → 실제 B.method()
-[함정] 실제 B.outer() 안에서 this.inner() 호출
-        → this = 프록시가 아니라 "진짜 대상 객체"
-        → 프록시를 안 거침 → inner()의 @Transactional/@Async 무시
-```
+
+프록시를 안 거치므로 `inner()`의 `@Transactional` / `@Async` / `@Cacheable`이
+**전부 무시된다.** 컴파일도 통과하고 예외도 없어서 조용히 동작만 사라진다.
+
+해결: 메서드를 **다른 빈으로 분리**하거나, `AopContext.currentProxy()` 또는
+자기 자신을 주입받아 프록시를 통해 호출한다.
 - **원리**: 컨테이너가 주입해준 것은 "프록시"지만, 메서드 내부의 `this`는 **프록시가 감싸고 있는 진짜 대상 객체**입니다. 따라서 `this.inner()`(또는 그냥 `inner()`) 호출은 프록시를 완전히 우회합니다. 프록시는 "바깥에서 들어오는 첫 진입"만 가로챌 수 있습니다.
 - **무력화되는 대표 애노테이션**: `@Transactional`(트랜잭션 안 열림), `@Async`(별도 스레드로 안 감, 호출 스레드에서 동기 실행), `@Cacheable`(캐시 조회/저장 스킵), `@Retryable`(재시도 안 함).
 
@@ -595,15 +677,22 @@ public void updateName(Long id, String newName) {
 - 그래서 영속 상태 엔티티는 `save()`를 명시하지 않아도 값만 바꾸면 반영된다. (반대로 준영속/비영속 엔티티는 dirty checking 대상이 아님 → 안 바뀜.)
 
 ## 4. 엔티티 생명주기 4상태 ⭐
+```mermaid
+stateDiagram-v2
+  [*] --> transient
+  transient: 비영속 (transient)\nnew Member() — 영속성 컨텍스트와 무관
+  persistent: 영속 (persistent)\n1차 캐시 · dirty checking 대상
+  detached: 준영속 (detached)\n식별자는 있지만 컨텍스트 밖
+  removed: 삭제 (removed)\n커밋 시 DELETE
+  transient --> persistent: persist(m)
+  persistent --> detached: detach / clear / close
+  persistent --> removed: remove(m)
+  detached --> persistent: merge(m)
+  removed --> [*]: flush / commit
 ```
-new Member()          [비영속 transient]  ← 영속성 컨텍스트와 무관
-  │ persist(m)
-  ▼
-                      [영속 persistent]   ← 1차 캐시·dirty checking 대상
-  │ detach/clear/close    │ remove(m)
-  ▼                        ▼
-[준영속 detached]      [삭제 removed]      ← 커밋 시 DELETE
-```
+
+**영속 상태일 때만** 1차 캐시와 dirty checking이 동작한다. 그래서 준영속
+객체의 필드를 바꿔도 UPDATE가 나가지 않는다 — `merge()`로 다시 붙여야 한다.
 | 상태 | 의미 | dirty checking |
 |------|------|----------------|
 | **비영속(transient)** | `new`만 한 순수 객체, 컨텍스트 모름 | ❌ |
@@ -673,24 +762,48 @@ new Member()          [비영속 transient]  ← 영속성 컨텍스트와 무�
 ## 2. 핵심 구조 — SecurityFilterChain ⭐
 > Spring Security는 **서블릿 필터 체인**으로 동작한다. 요청이 DispatcherServlet에 닿기 전, `FilterChainProxy`가 여러 보안 필터를 순서대로 실행한다.
 
-```
-요청 → [Security Filter Chain]
-         ├ SecurityContextPersistenceFilter (SecurityContext 로드/저장)
-         ├ UsernamePasswordAuthenticationFilter (폼 로그인 인증 시도)
-         ├ (JWT 필터 등 커스텀)
-         ├ ExceptionTranslationFilter (인증/인가 예외 → 401/403)
-         └ FilterSecurityInterceptor/AuthorizationFilter (인가 결정)
-       → DispatcherServlet → Controller
+```mermaid
+flowchart TB
+  REQ(["요청"])
+  subgraph FC["Security Filter Chain"]
+    direction TB
+    F1["SecurityContextPersistenceFilter<br/><i>SecurityContext 로드 / 저장</i>"]
+    F2["UsernamePasswordAuthenticationFilter<br/><i>폼 로그인 인증 시도</i>"]
+    F3["(JWT 필터 등 커스텀)"]
+    F4["ExceptionTranslationFilter<br/><i>인증 / 인가 예외 → 401 / 403</i>"]
+    F5["AuthorizationFilter<br/><i>인가 결정</i>"]
+    F1 --> F2 --> F3 --> F4 --> F5
+  end
+  DS["DispatcherServlet"]
+  CT["Controller"]
+  REQ --> FC --> DS --> CT
 ```
 
+**순서가 의미를 만든다.** 커스텀 JWT 필터를 `UsernamePassword...` 앞뒤 어디에
+두느냐에 따라 인증 주체가 달라지고, `ExceptionTranslationFilter`보다 뒤에
+두면 인증 예외가 401로 변환되지 않는다.
+
 ## 3. 인증 흐름 (폼 로그인 기준) ⭐
-```
-① 로그인 요청 → UsernamePasswordAuthenticationFilter가 인증 토큰 생성
-② AuthenticationManager에 위임
-③ AuthenticationManager → AuthenticationProvider가 UserDetailsService로 사용자 조회
-④ PasswordEncoder로 비밀번호 검증(BCrypt 등)
-⑤ 성공 → Authentication 객체를 SecurityContext에 저장 → SecurityContextHolder
-⑥ 이후 요청은 SecurityContext에서 인증 정보를 꺼내 인가 판단
+```mermaid
+sequenceDiagram
+  autonumber
+  participant F as UsernamePasswordAuthenticationFilter
+  participant M as AuthenticationManager
+  participant P as AuthenticationProvider
+  participant U as UserDetailsService
+  participant E as PasswordEncoder
+  participant H as SecurityContextHolder
+  F->>F: 로그인 요청 → 인증 토큰 생성
+  F->>M: 위임
+  M->>P: 인증 시도
+  P->>U: 사용자 조회
+  U->>P: UserDetails
+  P->>E: 비밀번호 검증 (BCrypt 등)
+  E->>P: 일치
+  P->>M: Authentication (인증됨)
+  M->>F: Authentication
+  F->>H: SecurityContext에 저장
+  Note over H: 이후 요청은 SecurityContext에서<br/>인증 정보를 꺼내 인가 판단
 ```
 - **SecurityContextHolder**: 현재 인증 정보(Authentication)를 담는 곳. 기본은 `ThreadLocal` 저장 → 같은 스레드 내 어디서든 `SecurityContextHolder.getContext().getAuthentication()`으로 접근.
 - **인가**: URL 기반(`authorizeHttpRequests`)이나 메서드 기반(`@PreAuthorize("hasRole('ADMIN')")`)으로 권한 검사.

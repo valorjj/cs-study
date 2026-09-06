@@ -84,7 +84,9 @@ window.__draw = async (id, src, label, wantSheet) => {
 const args = process.argv.slice(2)
 const sheetAt = args.indexOf('--sheet')
 const sheetPath = sheetAt === -1 ? null : args[sheetAt + 1]
-const filter = args.filter((a, i) => !a.startsWith('--') && i !== sheetAt + 1)[0] ?? ''
+// Guard the -1 case: without --sheet, `sheetAt + 1` is 0 and would drop argv[0].
+const sheetValueAt = sheetAt === -1 ? -1 : sheetAt + 1
+const filter = args.filter((a, i) => !a.startsWith('--') && i !== sheetValueAt)[0] ?? ''
 
 /** Every ```mermaid fence in the notes, with enough context to find it again. */
 function collect() {

@@ -8,29 +8,41 @@
 
 ## 1. 비유 — 줄서기와 우선 진료
 
-```
-Queue (FIFO)      = 매표소 줄        → 먼저 온 사람 먼저 (offer 뒤로, poll 앞에서)
-Stack (LIFO)      = 접시 쌓기        → 마지막에 올린 접시 먼저 (push/pop 한쪽 끝)
-Deque             = 양쪽 문 있는 줄  → 앞/뒤 모두 넣고 뺄 수 있음 (스택+큐 둘 다)
-PriorityQueue     = 응급실 우선 진료 → 순서 무관, "우선순위 최상"부터
-```
+| 타입 | 비유 | 꺼내는 순서 |
+|------|------|-------------|
+| `Queue` (FIFO) | 매표소 줄 | 먼저 온 사람 먼저 (`offer` 뒤로, `poll` 앞에서) |
+| `Stack` (LIFO) | 접시 쌓기 | 마지막에 올린 접시 먼저 (`push`/`pop` 한쪽 끝) |
+| `Deque` | 양쪽 문 있는 줄 | 앞/뒤 **모두** 넣고 뺄 수 있음 (스택 + 큐 둘 다) |
+| `PriorityQueue` | 응급실 우선 진료 | 순서 무관, **우선순위 최상**부터 |
 
 ## 2. 개념 정의 (1줄)
 > **Deque**(double-ended queue) = 양끝에서 넣고 뺄 수 있는 자료구조. 자바에선 **`ArrayDeque`**가 스택·큐의 표준 구현이고, 우선순위가 필요하면 **`PriorityQueue`**(이진 힙).
 
 ## 3. 다이어그램
 
-```
-ArrayDeque (원형 배열):   [ _ ][ B ][ C ][ D ][ _ ]
-                            head↑         ↑tail   → 양끝 O(1), 배열이라 캐시 친화적
+**ArrayDeque** — 원형 배열
 
-PriorityQueue (binary heap, 배열 표현):
-                 (2)
-                /   \
-             (5)     (8)     offer/poll = O(log n),  peek(최소) = O(1)
-            /  \
-         (9)   (7)
+```text
+ [ _ ][ B ][ C ][ D ][ _ ]
+       head↑         ↑tail
 ```
+
+양끝 `O(1)`, 배열이라 **캐시 친화적**이다. 그래서 Java에서 스택이 필요하면
+`Stack` 클래스가 아니라 `ArrayDeque`를 쓴다(`Stack`은 레거시 + 전 메서드 동기화).
+
+**PriorityQueue** — binary heap (배열 표현)
+
+```mermaid
+flowchart TB
+  A["2"] --> B["5"]
+  A --> C["8"]
+  B --> D["9"]
+  B --> E["7"]
+```
+
+`offer`/`poll` = `O(log n)`, `peek`(최소) = **`O(1)`**.
+부모가 자식보다 작다는 조건만 지키므로 **전체가 정렬된 것은 아니다** —
+순회하면 정렬 순서로 나오지 않는다.
 
 ## 4. 핵심 비교표
 
