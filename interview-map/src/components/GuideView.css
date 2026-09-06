@@ -1,22 +1,36 @@
 .guide {
-  max-width: 760px;
+  /* 760px at the new body size measured 50 Korean characters a line; 700 brings
+     it onto the note view's 46. */
+  max-width: 700px;
   margin: 0 auto;
   padding: 32px 20px 80px;
   box-sizing: border-box;
   color: var(--text);
-  font-family: system-ui, sans-serif;
-  line-height: 1.6;
+  font-family: var(--sans);
+  /* Was 14px/1.6 in a 760px column — 59 Korean characters a line, the same two
+     defects the note view had. 16.5px brings it to ~44. */
+  font-size: 16.5px;
+  line-height: 1.75;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
+.guide p { margin: 0 0 16px; }
+.guide p:last-child { margin-bottom: 0; }
 
 .guide h1 {
-  font-size: 22px;
-  margin: 0 0 12px;
+  font-size: 29px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.022em;
+  color: var(--text-strong);
+  margin: 0 0 14px;
 }
 
 .guide-lead {
   color: var(--text-dim);
-  font-size: 15px;
-  margin: 0 0 32px;
+  font-size: 18px;
+  line-height: 1.6;
+  margin: 0 0 36px;
 }
 
 .guide section {
@@ -30,19 +44,18 @@
 }
 
 .guide h2 {
-  font-size: 17px;
-  margin: 0 0 10px;
-}
-
-.guide p {
-  font-size: 14px;
-  margin: 0 0 14px;
+  /* was 17px against 14px body — a 1.2x ratio reads as bold text, not a heading */
+  font-size: 21px;
+  font-weight: 650;
+  line-height: 1.32;
+  letter-spacing: -0.018em;
+  color: var(--text-strong);
+  margin: 0 0 12px;
 }
 
 .guide ul {
-  font-size: 14px;
   padding-left: 20px;
-  margin: 0;
+  margin: 0 0 16px;
 }
 
 .guide li {
@@ -67,8 +80,10 @@
   background: var(--bg-elev);
 }
 
-/* 전역 h1,h2 { color: var(--text-h) } 가 다크모드에서 안 보여서 가독 색으로 덮는다. */
-.guide h1, .guide h2 { color: var(--text); }
+/* The global h1,h2 { color: var(--text-h) } is keyed to the OS colour-scheme,
+   not the app theme, so it has to be overridden — with the same token the note
+   headings use. */
+.guide h1, .guide h2 { color: var(--text-strong); }
 
 .guide details.deep {
   border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));

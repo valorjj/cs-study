@@ -239,6 +239,31 @@
   text-align: center;
 }
 
+/* ---- compact variant --------------------------------------------------- */
+/* Quiz, drill and review answers are short markdown inside a card that already
+   has its own width. They want the same element styling as a note — headings,
+   lists, tables, code, folds — but not the centred measure column, which has
+   nothing to centre inside a 640px card. Block flow, one step down in size. */
+.prose.prose-compact {
+  display: block;
+  font-size: 15.5px;
+  line-height: 1.75;
+}
+.prose-compact p { margin: 0 0 14px; }
+.prose-compact :is(ul, ol) { margin: 0 0 14px; }
+.prose-compact li { margin: 0 0 6px; }
+.prose-compact h1, .prose-compact h2 { font-size: 18px; margin: 20px 0 8px; }
+.prose-compact h3 { font-size: 16.5px; margin: 16px 0 6px; }
+.prose-compact h4, .prose-compact h5, .prose-compact h6 { font-size: 15.5px; margin: 14px 0 6px; }
+.prose-compact table { font-size: 14.5px; margin-bottom: 16px; }
+.prose-compact pre { margin-bottom: 16px; padding: 12px 14px; font-size: 12.5px; }
+.prose-compact blockquote { margin-bottom: 16px; padding-left: 14px; }
+.prose-compact details { margin-bottom: 16px; }
+.prose-compact summary { font-size: 15px; padding: 10px 36px 10px 13px; }
+.prose-compact .prose-table-scroll { margin-bottom: 16px; }
+/* No gutters to break out into here, so a wide block just fills the card. */
+.prose-compact > .prose-wide { max-width: 100%; }
+
 /* Tighter on small screens, where 40em is already the whole width. */
 @media (max-width: 768px) {
   .prose { font-size: 16px; line-height: 1.75; }

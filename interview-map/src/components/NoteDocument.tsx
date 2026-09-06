@@ -9,7 +9,6 @@ import { domainColor } from '../styles/theme'
 import { NodeIcon } from './NodeIcon'
 import type { LoadedNote } from '../hooks/useNote'
 import type { GraphNode } from '../graph/types'
-import '../styles/prose.css'
 import './NoteDocument.css'
 
 const rehypePlugins = [rehypeRaw, rehypeFoldQA, rehypeSlug]

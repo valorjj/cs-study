@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import Markdown from 'react-markdown'
 import { remarkPlugins } from '../lib/markdownPlugins'
+import { markdownComponents } from '../lib/markdownComponents'
 import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuCircleCheck } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
@@ -107,8 +108,8 @@ export function ReviewView({ nodes }: { nodes: GraphNode[] }) {
         <p className="review-q">{card.question}</p>
 
         {revealed ? (
-          <div className="review-a">
-            <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{card.answer}</Markdown>
+          <div className="prose prose-compact review-a">
+            <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]} components={markdownComponents}>{card.answer}</Markdown>
           </div>
         ) : (
           <button className="review-reveal" onClick={() => setRevealed(true)}>답 보기</button>

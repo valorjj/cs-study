@@ -21,7 +21,7 @@
 .drill-stepnum { margin-left: 6px; font-size: 12px; color: var(--text-dim); }
 
 .drill-q { font-size: 16px; font-weight: 600; line-height: 1.5; margin: 6px 0 14px; }
-.drill-a { font-size: 14px; line-height: 1.65; }
+.drill-a { /* typography comes from .prose.prose-compact */ }
 .drill-a :first-child { margin-top: 0; }
 
 .drill-reveal { align-self: flex-start; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: 8px; cursor: pointer; border: 1px solid var(--c, var(--accent)); background: transparent; color: var(--text); }

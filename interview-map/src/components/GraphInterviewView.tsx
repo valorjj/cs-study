@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Markdown from 'react-markdown'
 import { remarkPlugins } from '../lib/markdownPlugins'
+import { markdownComponents } from '../lib/markdownComponents'
 import rehypeRaw from 'rehype-raw'
 import graphData from '../graph/graph.json'
 import type { GraphData, GraphNode } from '../graph/types'
@@ -267,9 +268,9 @@ export function GraphInterviewView({ nodes }: { nodes: GraphNode[] }) {
                   <div className="gi-score">채점 <b>{scored.score}</b> / 5</div>
                   <p className="gi-fb">{scored.feedback}</p>
                   {scored.score <= 2 && ladder.attempts >= 1 && (
-                    <div className="gi-coach">
+                    <div className="prose prose-compact gi-coach">
                       <p className="gi-dim">모범답안:</p>
-                      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{qa?.reference ?? ''}</Markdown>
+                      <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]} components={markdownComponents}>{qa?.reference ?? ''}</Markdown>
                     </div>
                   )}
                   <div className="gi-actions">

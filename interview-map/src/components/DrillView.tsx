@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import Markdown from 'react-markdown'
 import { remarkPlugins } from '../lib/markdownPlugins'
+import { markdownComponents } from '../lib/markdownComponents'
 import rehypeRaw from 'rehype-raw'
 import { LuArrowRight, LuShuffle, LuShield } from 'react-icons/lu'
 import { useGraphStore } from '../store/graphStore'
@@ -206,9 +207,9 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
                       <ul className="drill-missing">{scored.missing_keywords.map((k, i) => <li key={i}>{k}</li>)}</ul>
                     )}
                     {scored.score <= 2 ? (
-                      <div className="drill-a">
+                      <div className="prose prose-compact drill-a">
                         <p className="drill-dim">모범답안:</p>
-                        <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
+                        <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]} components={markdownComponents}>{cur.a}</Markdown>
                         <div className="drill-assess">
                           <button className="drill-miss" onClick={retry}>다시 답변</button>
                           <button className="drill-got" onClick={advanceAfterScore}>다음으로</button>
@@ -234,8 +235,8 @@ export function DrillView({ nodes }: { nodes: GraphNode[] }) {
             ) : (
               <>
                 {revealed ? (
-                  <div className="drill-a">
-                    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]}>{cur.a}</Markdown>
+                  <div className="prose prose-compact drill-a">
+                    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={[rehypeRaw]} components={markdownComponents}>{cur.a}</Markdown>
                   </div>
                 ) : (
                   <button className="drill-reveal" onClick={() => setRevealed(true)}>답 보기</button>
