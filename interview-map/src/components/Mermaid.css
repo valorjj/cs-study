@@ -5,8 +5,35 @@
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg-elev) 35%, var(--bg));
 }
-.mmd-svg { display: flex; justify-content: center; overflow-x: auto; }
-.mmd-svg svg { max-width: 100%; height: auto; }
+/* A diagram wider than the column keeps its size and scrolls here, rather than
+   shrinking its own labels to fit. The component sets the svg width — see
+   lib/mermaidFit.ts — and marks this box when it actually overflows. */
+.mmd-svg {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+.mmd-svg svg { height: auto; flex: none; }
+
+/* Centring a box that overflows would hide its left edge, so scrollable
+   diagrams start from the left instead. */
+.mmd-svg[data-overflowing='true'] { justify-content: flex-start; }
+
+/* Edge fade: without it a horizontally scrollable figure looks merely cropped. */
+.mmd[data-state='ok'] { position: relative; }
+.mmd:has(.mmd-svg[data-overflowing='true'])::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  width: 44px;
+  border-radius: 0 11px 11px 0;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--bg));
+}
 
 /* Mermaid renders labels into a foreignObject div, which inherits the browser's
    default line breaking — and Korean has no spaces to break on, so a label

@@ -21,7 +21,7 @@
      font-size is. 680px measures 46 Korean characters at the prose size —
      Korean reads comfortably at 40–45. */
   --reading-measure: 680px;
-  --reading-measure-wide: 950px;
+  --reading-measure-wide: 1020px;
 
   font: 18px/145% var(--sans);
   letter-spacing: 0.18px;

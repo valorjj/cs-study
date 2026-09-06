@@ -36,7 +36,18 @@
 인터뷰 모듈은 추가로:
 - "예상 질문 3~5개" + "답변 구조 템플릿" 포함
 - 학습 목표를 "X 질문에 5분간 답할 수 있게" 형태로 명시
-- 사용자는 영어로 질문하지만 **한국어 설명을 더 잘 흡수** (한국어 설명 + 영어 코드)
+
+---
+
+## Language rule
+
+Korean is for **what the reader sees**. English is for everything else.
+
+| Korean | English |
+|--------|---------|
+| `notes/**/*.md` — the app renders these | chat answers, commit messages |
+| UI strings in components (버튼·라벨) | `docs/**` specs and worklogs |
+| `GuideView` copy | code comments, test names |
 
 ---
 
@@ -79,10 +90,10 @@ System.out.print(sb);
 cs-study/
 ├── CLAUDE.md                ← 이 파일
 ├── STUDY_PLAN.md            ← 12주 알고리즘 일정
-├── Template.java            ← 새 문제 시작 템플릿
-├── 01-data-structures/      ← 알고리즘 풀이 코드 (각 폴더가 IntelliJ source root)
-│   ├── stack_queue/
-│   ├── hash/
+├── 01-data-structures/      ← **IntelliJ source root** (알고리즘 풀이 코드)
+│   ├── Template.java        ← 새 문제 시작 템플릿 (default package)
+│   ├── stack_queue/         ← = package stack_queue
+│   ├── hash/                ← = package hash
 │   └── ...
 ├── notes/                   ← 인터뷰 개념 노트 (markdown)
 │   ├── 01-java-jvm/
@@ -101,9 +112,23 @@ cs-study/
 - 폴더명은 **언더스코어** 사용 (Java 패키지 호환). 하이픈/숫자시작 금지
 
 ### 패키지 선언
-- 각 카테고리 폴더(`hash`, `stack_queue` 등)가 **IntelliJ source root**로 마킹됨
-- 파일 상단의 `package` 선언은 폴더명만 사용 (예: `package hash;`)
+- **`01-data-structures/` 하나만 IntelliJ source root**로 마킹 (카테고리 폴더 각각이 아니다)
+- 따라서 각 카테고리 폴더가 곧 패키지 → `hash/BOJ_1620.java` 는 `package hash;`
 - BOJ 제출용 코드는 패키지 선언 제거하고 `public class Main`으로 변환
+
+### IntelliJ가 `.java` 를 인식하지 못할 때
+`.idea/` 는 gitignore 대상이라 클론·재설정 시 날아간다. 확인 순서:
+
+| 파일 | 있어야 하는 것 |
+|------|----------------|
+| `.idea/cs-study.iml` | `<module type="JAVA_MODULE">` (`WEB_MODULE` 이면 Java 인덱싱이 안 붙는다) |
+| 동일 | `<sourceFolder url="file://$MODULE_DIR$/01-data-structures" />` |
+| `.idea/misc.xml` | `<component name="ProjectRootManager" ... languageLevel="JDK_11" project-jdk-name="ms-17" project-jdk-type="JavaSDK">` |
+
+- 로컬에 JDK 11은 없다 (`ms-17` = Microsoft OpenJDK 17). **SDK 17 + language level 11** 로 두면
+  Java 11에 없는 API를 쓸 때 IDE가 잡아준다.
+- 컴파일 출력은 `out/` (gitignore 됨)
+- IntelliJ가 켜진 상태에서 `.idea/*` 를 직접 고쳤으면 `File → Reload Project from Disk`
 
 ---
 
@@ -133,5 +158,5 @@ cs-study/
 - "Run successfully" 같은 의미 없는 확인 (실제로 동작 검증한 게 아님)
 - 사용자 코드의 모든 줄 무비판 칭찬 (버그가 있으면 명확히 지적)
 - BOJ 외부 사이트 URL 임의 생성 (실재하지 않을 수 있음)
-- 영어로만 답변 (사용자가 한국어 설명을 더 잘 흡수)
+- 렌더링되는 페이지 콘텐츠(`notes/`, UI 문자열)를 영어로 쓰기 — 독자는 한국어 사용자
 - **회사 기밀·개인 이력·프로젝트 상세를 이 공개 repo에 커밋**

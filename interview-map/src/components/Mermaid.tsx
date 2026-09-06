@@ -1,6 +1,7 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useGraphStore } from '../store/graphStore'
 import { mermaidThemeVariables } from '../lib/mermaidTheme'
+import { fitWidth } from '../lib/mermaidFit'
 import './Mermaid.css'
 
 // mermaid is ~700KB gzipped — an unacceptable cost on the home screen or the
@@ -25,6 +26,7 @@ export function Mermaid({ chart, caption }: { chart: string; caption?: string })
   // and reuses it as an SVG element id, so two diagrams sharing it would clash.
   const baseId = useId().replace(/:/g, '')
   const renderSeq = useRef(0)
+  const holderRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const seq = ++renderSeq.current
@@ -42,13 +44,17 @@ export function Mermaid({ chart, caption }: { chart: string; caption?: string })
           // nothing, so keep it.
           securityLevel: 'strict',
           flowchart: {
-            curve: 'basis', htmlLabels: true, padding: 12, useMaxWidth: true,
+            curve: 'basis', htmlLabels: true, padding: 12,
             // Mermaid wraps labels at 200px by default, which chops these
             // Korean labels into two or three lines.
             wrappingWidth: 340, nodeSpacing: 45, rankSpacing: 55,
+            // useMaxWidth would scale the whole SVG — labels included — down to
+            // the column. We take the natural size and size it ourselves, so a
+            // wide diagram scrolls instead of becoming unreadable. See fitWidth.
+            useMaxWidth: false,
           },
-          sequence: { useMaxWidth: true, actorMargin: 40, boxMargin: 8 },
-          state: { useMaxWidth: true },
+          sequence: { useMaxWidth: false, actorMargin: 40, boxMargin: 8 },
+          state: { useMaxWidth: false },
         })
         const { svg } = await mermaid.render(`m-${baseId}-${seq}`, chart)
         if (!cancelled && seq === renderSeq.current) setState({ kind: 'ok', svg })
@@ -60,6 +66,31 @@ export function Mermaid({ chart, caption }: { chart: string; caption?: string })
 
     return () => { cancelled = true }
   }, [chart, themeId, baseId])
+
+  const fit = useCallback(() => {
+    const holder = holderRef.current
+    const svg = holder?.querySelector('svg')
+    if (!holder || !svg) return
+    const viewBox = svg.getAttribute('viewBox')?.split(/\s+/).map(Number)
+    const natural = viewBox?.[2]
+    if (!natural) return
+    const width = fitWidth(natural, holder.clientWidth)
+    svg.style.width = `${width}px`
+    svg.style.maxWidth = 'none'
+    svg.style.height = 'auto'
+    // Tells the CSS whether to show the "scroll me" edge fade.
+    holder.dataset.overflowing = String(width > holder.clientWidth + 1)
+  }, [])
+
+  useLayoutEffect(() => {
+    if (state.kind !== 'ok') return
+    fit()
+    const holder = holderRef.current
+    if (!holder || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(fit)
+    ro.observe(holder)
+    return () => ro.disconnect()
+  }, [state, fit])
 
   // A diagram that fails to parse must never leave a hole in the note: fall
   // back to the source so the information is still there to read.
@@ -80,7 +111,7 @@ export function Mermaid({ chart, caption }: { chart: string; caption?: string })
         ? <div className="mmd-skeleton" aria-label="다이어그램 불러오는 중" />
         // mermaid output is generated from repo-authored note markdown and
         // sanitised by mermaid's own strict security level before it gets here.
-        : <div className="mmd-svg" dangerouslySetInnerHTML={{ __html: state.svg }} />}
+        : <div className="mmd-svg" ref={holderRef} dangerouslySetInnerHTML={{ __html: state.svg }} />}
       {caption && <figcaption>{caption}</figcaption>}
     </figure>
   )
