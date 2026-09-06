@@ -1,23 +1,17 @@
 import { useEffect } from 'react'
 import { useGraphStore } from '../store/graphStore'
-import { applyTheme, DEFAULT_THEME } from '../styles/themes'
+import { applyTheme, THEME_KEY } from '../styles/themes'
 
-const KEY = 'interview-map.theme.v1'
 export const VIEW_KEY = 'interview-map.viewMode.v1'
 
+// Apply + persist only. Hydration belongs to the store (readSavedTheme), which
+// reads localStorage synchronously at creation — doing it here in an effect
+// raced with this persist effect and lost the theme on every reload.
 export function useThemeEffect(): void {
   const themeId = useGraphStore((s) => s.themeId)
-  const setTheme = useGraphStore((s) => s.setTheme)
-  useEffect(() => {
-    const saved = localStorage.getItem(KEY)
-    if (saved) setTheme(saved)
-    else applyTheme(DEFAULT_THEME)
-    // hydrate once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
   useEffect(() => {
     applyTheme(themeId)
-    try { localStorage.setItem(KEY, themeId) } catch { /* ignore */ }
+    try { localStorage.setItem(THEME_KEY, themeId) } catch { /* ignore */ }
   }, [themeId])
 }
 

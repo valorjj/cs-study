@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_THEME } from '../styles/themes'
+import { readSavedTheme } from '../styles/themes'
 import { review, type SrsState } from '../lib/srs'
 import { type QuizSettings, QUIZSETTINGS_KEY, readQuizSettings } from '../lib/quizSettings'
 
@@ -115,7 +115,9 @@ export const useGraphStore = create<GraphState>((set) => ({
   focusRequestId: null,
   requestFocus: (id) => set({ focusRequestId: id, selectedId: id }),
   clearFocusRequest: () => set({ focusRequestId: null }),
-  themeId: DEFAULT_THEME,
+  // Synchronous, like PROGRESS_KEY above — see readSavedTheme's note on the
+  // hydrate/persist race this avoids.
+  themeId: readSavedTheme(),
   setTheme: (id) => set({ themeId: id }),
   viewMode: 'home',
   setViewMode: (m) => set({ viewMode: m }),

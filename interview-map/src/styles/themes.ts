@@ -35,6 +35,31 @@ export const THEMES: Theme[] = [
 ]
 export const DEFAULT_THEME = 'midnight'
 
+export const THEME_KEY = 'interview-map.theme.v1'
+
+/**
+ * The saved theme, read synchronously so the store's initial state already has
+ * it and the first render is correct.
+ *
+ * Hydrating this in an effect instead was a bug: useThemeEffect's persist
+ * effect fires in the same commit as its hydrate effect, still holding the
+ * store's pre-hydration default, and wrote that default back over the saved
+ * value. StrictMode's second effect pass then read the clobbered value — so a
+ * chosen theme was lost on every reload. graphStore already loads progress this
+ * way for exactly this reason.
+ *
+ * An unknown id (a removed theme, a hand-edited value) degrades to the default
+ * rather than leaving the app with no palette applied.
+ */
+export function readSavedTheme(): string {
+  try {
+    const saved = localStorage.getItem(THEME_KEY)
+    return saved && THEMES.some((t) => t.id === saved) ? saved : DEFAULT_THEME
+  } catch {
+    return DEFAULT_THEME
+  }
+}
+
 const VAR: Record<keyof ThemeTokens, string> = {
   bg:'--bg', bgPanel:'--bg-panel', bgElev:'--bg-elev', text:'--text', textDim:'--text-dim',
   textStrong:'--text-strong', border:'--border', borderStrong:'--border-strong', edge:'--edge',
