@@ -41,7 +41,12 @@ export function Mermaid({ chart, caption }: { chart: string; caption?: string })
           // default 'strict' already blocks inline styles/scripts and costs us
           // nothing, so keep it.
           securityLevel: 'strict',
-          flowchart: { curve: 'basis', htmlLabels: true, padding: 12, useMaxWidth: true },
+          flowchart: {
+            curve: 'basis', htmlLabels: true, padding: 12, useMaxWidth: true,
+            // Mermaid wraps labels at 200px by default, which chops these
+            // Korean labels into two or three lines.
+            wrappingWidth: 340, nodeSpacing: 45, rankSpacing: 55,
+          },
           sequence: { useMaxWidth: true, actorMargin: 40, boxMargin: 8 },
           state: { useMaxWidth: true },
         })

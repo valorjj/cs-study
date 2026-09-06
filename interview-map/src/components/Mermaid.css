@@ -8,6 +8,15 @@
 .mmd-svg { display: flex; justify-content: center; overflow-x: auto; }
 .mmd-svg svg { max-width: 100%; height: auto; }
 
+/* Mermaid renders labels into a foreignObject div, which inherits the browser's
+   default line breaking — and Korean has no spaces to break on, so a label
+   splits mid-word ("환형 대 / 기 제거"). keep-all restricts breaks to spaces. */
+.mmd-svg :is(.nodeLabel, .edgeLabel, .cluster-label, .titleText, .actor, .messageText, .stateLabel) {
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.mmd-svg foreignObject div { word-break: keep-all; }
+
 /* Hold the space while the chunk loads so opening a note doesn't jolt. */
 .mmd-skeleton {
   height: 180px;

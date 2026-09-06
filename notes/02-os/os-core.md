@@ -32,18 +32,25 @@
 > **스레드** = 프로세스 내 실행 흐름의 단위. CPU 스케줄링의 단위.
 
 ## 3. 다이어그램 — 메모리 공유 경계
+```mermaid
+flowchart LR
+  subgraph PA["Process A — 스레드 3개"]
+    direction TB
+    SA["Code · Data · Heap<br/><b>스레드끼리 공유</b>"]
+    SA --> A1["Thread 1<br/>Stack · 레지스터 · PC"]
+    SA --> A2["Thread 2<br/>Stack · 레지스터 · PC"]
+    SA --> A3["Thread 3<br/>Stack · 레지스터 · PC"]
+  end
+  subgraph PB["Process B — 완전히 독립"]
+    direction TB
+    SB["Code · Data · Heap<br/><b>별도 주소 공간</b>"]
+    SB --> B1["Thread 1<br/>Stack · 레지스터 · PC"]
+  end
+  PA x-. "직접 접근 불가 — IPC 필요" .-x PB
 ```
-┌──────────── Process A ────────────┐   ┌──── Process B ────┐
-│  Code | Data | Heap  (공유)        │   │  (완전히 독립)     │
-│  ┌─────────┬─────────┬─────────┐   │   │                    │
-│  │Thread 1 │Thread 2 │Thread 3 │   │   │   Thread 1         │
-│  │ Stack   │ Stack   │ Stack   │   │   │   Stack            │
-│  │ 레지스터 │ 레지스터 │ 레지스터 │   │   │                    │
-│  └─────────┴─────────┴─────────┘   │   │                    │
-└────────────────────────────────────┘   └────────────────────┘
-    스레드끼리 Code/Data/Heap 공유          프로세스는 서로 격리
-    → Stack·레지스터·PC만 스레드별
-```
+
+- 스레드끼리 **Code/Data/Heap 공유** → `Stack`·레지스터·PC만 스레드별.
+- 프로세스는 **서로 격리** → 통신하려면 IPC가 필요하다.
 > Java의 "Heap은 공유, Stack은 스레드별"(JVM T1)이 바로 이 그림. JVM 스레드 = OS 스레드에 매핑.
 
 ## 4. 비교표
@@ -78,21 +85,16 @@
 
 ## 7. 프로세스 상태 다이어그램
 
-```
-        생성됨              스케줄러가 선택
-  ┌──▶ [ New ] ──────▶ [ Ready ] ──────────▶ [ Running ]
-  │                        ▲                    │  │
-  │                        │   타임슬라이스 만료/  │  │
-  │                        └── 선점(preempt) ────┘  │
-  │                                                  │ I/O·이벤트 대기
-  │                                                  ▼
-  │                                            [ Waiting ]
-  │                                                  │
-  │              I/O 완료 등                          │
-  │              ◄──────────────────────────────────┘
-  │                        │
-  │                        ▼
-  └──────────────────  [ Terminated ] ◄── Running에서 종료
+```mermaid
+stateDiagram-v2
+  [*] --> New: 생성됨
+  New --> Ready: 승인 admit
+  Ready --> Running: 스케줄러가 선택 dispatch
+  Running --> Ready: 타임슬라이스 만료 · 선점 preempt
+  Running --> Waiting: I/O · 이벤트 대기
+  Waiting --> Ready: I/O 완료 등
+  Running --> Terminated: 종료 exit
+  Terminated --> [*]
 ```
 - **New**: 프로세스 생성 중(PCB 할당). **Ready**: CPU만 배정되면 바로 실행 가능(준비 큐 대기). **Running**: CPU 점유 중. **Waiting(Blocked)**: I/O 등 이벤트 대기 중(CPU 못 씀). **Terminated**: 실행 종료, 자원 회수 대기.
 - 헷갈리는 포인트: **Ready→Running**은 스케줄러의 선택, **Running→Ready**는 선점(타임아웃 등), **Running→Waiting**은 자발적(I/O 요청) — 이 방향은 스케줄러가 아니라 프로세스 자신이 유발.
@@ -205,18 +207,21 @@
 > **페이징** = 가상 주소 공간을 고정 크기 **페이지**로, 물리 메모리를 **프레임**으로 나눠 매핑.
 
 ## 3. 다이어그램 — 주소 변환
-```
- 가상 주소 (프로세스가 보는 주소)
-      │  [ 페이지 번호 | 오프셋 ]
-      ▼
- ┌─────────────┐   TLB(캐시) 히트 시 초고속
- │ Page Table  │◄──── TLB (최근 변환 캐시)
- │ (페이지→프레임)│
- └──────┬──────┘
-        ▼
- 물리 주소 [ 프레임 번호 | 오프셋 ] → RAM
-        │
-        └─ 페이지가 RAM에 없음 → Page Fault → 디스크에서 로드
+```mermaid
+flowchart TB
+  VA["가상 주소<br/>페이지 번호 + 오프셋"]
+  TLB{"TLB 조회<br/>최근 변환 캐시"}
+  PT["Page Table<br/>페이지 → 프레임"]
+  PF["Page Fault<br/>디스크에서 로드"]
+  PA["물리 주소<br/>프레임 번호 + 오프셋"]
+  RAM[("RAM")]
+  VA --> TLB
+  TLB -- "히트 — 초고속" --> PA
+  TLB -- 미스 --> PT
+  PT -- "유효 비트 1" --> PA
+  PT -- "페이지가 RAM에 없음" --> PF
+  PF -- "적재 후 재시도" --> PT
+  PA --> RAM
 ```
 
 ## 4. 핵심 메커니즘
@@ -248,20 +253,18 @@
 
 ### Clock 알고리즘 (Second-Chance)
 LRU를 정확히 구현하는 대신, 저렴하게 근사하는 방법.
+```mermaid
+flowchart LR
+  P1["P1<br/>ref=1"] --> P2["P2 ← 바늘(hand)<br/>ref=0"]
+  P2 --> P3["P3<br/>ref=1"]
+  P3 --> P4["P4<br/>ref=0"]
+  P4 --> P1
 ```
-        ┌───┐
-     ┌─▶│ P1│ref=1
-     │  └───┘
-     │   ▼
-   ┌───┐   ┌───┐
-   │P4 │   │P2 │ref=0  ◄── 시계 바늘(hand)이 여기 있으면:
-   │ref│   │ref│         ref=0 → 이 페이지를 교체(victim)
-   │=0 │   │=0 │         ref=1 → 0으로 낮추고 다음 칸으로(한 번의 기회 부여)
-   └───┘   └───┘
-     ▲   ┌───┐
-     └───│ P3│ref=1
-         └───┘
-```
+
+바늘이 가리키는 페이지를 보고:
+
+- `ref=0` → **이 페이지를 교체**(victim)한다.
+- `ref=1` → **0으로 낮추고** 다음 칸으로 넘어간다 (한 번의 기회 부여).
 - 각 페이지에 **참조 비트(reference bit)** 1개. 접근하면 OS/하드웨어가 1로 세팅.
 - 교체 필요 시 시계 바늘이 프레임을 순회: `ref=0`이면 즉시 교체, `ref=1`이면 **0으로 내리고(2nd chance) 다음으로 넘어감**.
 - 전체 스캔·정밀한 순서 추적 없이 "최근에 안 쓰인 것 같은" 페이지를 찾아 LRU를 값싸게 근사 → 대부분 실제 OS(Linux 등)가 이 계열 사용.
@@ -324,11 +327,20 @@ LRU를 정확히 구현하는 대신, 저렴하게 근사하는 방법.
 
 ## 4. 데드락(Deadlock) — 4가지 필요조건 ⭐
 네 개가 **동시에** 성립해야 데드락 발생 (하나만 깨도 예방):
-```
-1. 상호 배제 (Mutual Exclusion)  — 자원을 한 번에 하나만
-2. 점유와 대기 (Hold and Wait)   — 자원 쥔 채 다른 자원 대기
-3. 비선점 (No Preemption)        — 강제로 뺏을 수 없음
-4. 환형 대기 (Circular Wait)     — A→B→C→A 원형으로 대기
+1. **상호 배제 (Mutual Exclusion)** — 자원을 한 번에 하나만 쓸 수 있다.
+2. **점유와 대기 (Hold and Wait)** — 자원을 쥔 채로 다른 자원을 기다린다.
+3. **비선점 (No Preemption)** — 강제로 빼앗을 수 없다.
+4. **환형 대기 (Circular Wait)** — 대기 관계가 원을 이룬다.
+
+네 조건이 **동시에** 성립할 때만 데드락이 된다. 하나라도 깨면 예방된다.
+그중 실무에서 깨기 가장 쉬운 것이 환형 대기다 — **락 획득 순서를 전역에서
+하나로 통일**하면 원이 만들어지지 않는다.
+
+```mermaid
+flowchart LR
+  A["스레드 A<br/>락1 보유"] -- "락2 대기" --> B["스레드 B<br/>락2 보유"]
+  B -- "락3 대기" --> C["스레드 C<br/>락3 보유"]
+  C -- "락1 대기" --> A
 ```
 비유: 사거리에서 네 차가 서로 앞차 꼬리를 막고 아무도 못 감.
 
@@ -348,21 +360,41 @@ LRU를 정확히 구현하는 대신, 저렴하게 근사하는 방법.
 ### 비유 — 빵집 진열대
 생산자(제빵사)는 빵을 만들어 진열대(버퍼)에 놓고, 소비자(손님)는 진열대에서 빵을 꺼내 감. 진열대 **자리 수가 제한**돼 있고, **빵이 없으면 손님은 기다려야** 함 — 이 두 제약을 세마포어 두 개로 표현한다.
 
-```
+```text
 세마포어 empty = N   // 버퍼의 "빈 자리" 개수 (처음엔 N개 다 빔)
 세마포어 full  = 0   // 버퍼의 "채워진 자리" 개수 (처음엔 0개)
 뮤텍스   mutex = 1   // 버퍼 자체를 건드리는 동안의 상호배제
-
-Producer:                          Consumer:
-loop {                             loop {
-  item = produce()                   wait(full)    // 꺼낼 빵 있을 때까지 대기
-  wait(empty)   // 빈 자리 있을 때까지 대기          wait(mutex)
-  wait(mutex)                         item = buffer에서 꺼냄
-  buffer에 item 삽입                   signal(mutex)
-  signal(mutex)                       signal(empty) // 빈 자리 하나 늘어남
-  signal(full)  // 채워진 자리 하나 늘어남           consume(item)
-}                                 }
 ```
+
+**Producer**
+
+```text
+loop {
+  item = produce()
+  wait(empty)          // 빈 자리 있을 때까지 대기
+  wait(mutex)
+  buffer에 item 삽입
+  signal(mutex)
+  signal(full)         // 채워진 자리 하나 늘어남
+}
+```
+
+**Consumer**
+
+```text
+loop {
+  wait(full)           // 꺼낼 빵 있을 때까지 대기
+  wait(mutex)
+  item = buffer에서 꺼냄
+  signal(mutex)
+  signal(empty)        // 빈 자리 하나 늘어남
+  consume(item)
+}
+```
+
+순서가 핵심이다. `wait(mutex)`를 `wait(empty)`보다 **먼저** 걸면, 버퍼가 꽉 찬
+상태에서 producer가 mutex를 쥔 채 `empty`를 기다리고 consumer는 그 mutex를
+얻지 못해 데드락이 된다.
 - `empty`/`full`은 **카운팅 세마포어**로 "자원 개수"(빈 자리/찬 자리)를 표현 — 세마포어의 전형적 용도.
 - `mutex`는 버퍼 자료구조 자체를 동시에 두 스레드가 건드리지 않게 하는 **이진 세마포어**(뮤텍스 역할).
 - 순서가 중요: `wait(empty)` → `wait(mutex)` 순으로 잡아야 함. 반대로 하면 mutex를 쥔 채 empty를 기다리다 소비자도 mutex를 못 얻어 **데드락**.
@@ -498,23 +530,22 @@ loop {                             loop {
 | **Starvation** | 일부만 진행 못 함 | 우선순위·스케줄 편향 | Aging, 공정(fair) 락 |
 
 ## 4. 운영 중 진단 흐름 (JVM & DB)
-```
-증상: 특정 API 무응답 / 스레드 풀 고갈 / TPS 급락, CPU는 낮음
-   │
-   ▼  ① JVM 스레드 데드락 의심
-jstack <pid>  또는  jcmd <pid> Thread.print
-   └─▶ "Found one Java-level deadlock:" 섹션 확인
-       - 어떤 스레드가 어떤 모니터/락을 hold하고 무엇을 wait하는지 원형 확인
-       - BLOCKED 상태 스레드가 서로의 락을 물고 있으면 데드락 확정
-   │
-   ▼  ② DB 데드락 의심 (스레드는 대기 중, 커넥션 풀 고갈)
-MySQL:  SHOW ENGINE INNODB STATUS → LATEST DETECTED DEADLOCK
-PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
-   └─▶ 어느 두 트랜잭션이 어떤 인덱스/행 락을 반대 순서로 잡았는지 확인
-   │
-   ▼  ③ 회복 & 근본 대책
-즉시: 데드락 희생자 롤백/재시도, 락 타임아웃, 문제 스레드 덤프 확보
-근본: 락(또는 갱신 대상) 획득 순서 전역 통일 → 환형 대기 제거
+```mermaid
+flowchart TB
+  S["증상: 특정 API 무응답 / 스레드 풀 고갈 / TPS 급락<br/><b>CPU는 낮음</b>"]
+  J1["① JVM 스레드 데드락 의심<br/><code>jstack pid</code> · <code>jcmd pid Thread.print</code>"]
+  J2["'Found one Java-level deadlock:' 섹션 확인<br/>어떤 스레드가 어떤 모니터/락을 hold하고 무엇을 wait하는지<br/>BLOCKED 스레드가 서로의 락을 물고 있으면 확정"]
+  D1["② DB 데드락 의심<br/>스레드는 대기 중, 커넥션 풀 고갈"]
+  D2["MySQL: SHOW ENGINE INNODB STATUS → LATEST DETECTED DEADLOCK<br/>PostgreSQL: 로그의 'deadlock detected' + pg_locks / pg_stat_activity"]
+  D3["어느 두 트랜잭션이 어떤 인덱스/행 락을<br/>반대 순서로 잡았는지 확인"]
+  R1["③ 즉시 조치<br/>희생자 롤백·재시도 · 락 타임아웃 · 스레드 덤프 확보"]
+  R2["③ 근본 대책<br/><b>락 획득 순서 전역 통일 → 환형 대기 제거</b>"]
+  S --> J1 --> J2
+  J2 -- "JVM 쪽이 아니면" --> D1
+  D1 --> D2 --> D3
+  J2 --> R1
+  D3 --> R1
+  R1 --> R2
 ```
 
 ## 5. 데드락 처리 4전략 요약 (O4 심화)
@@ -562,21 +593,20 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 > **조건 변수(Condition Variable)** = "특정 조건이 될 때까지 락을 놓고 잠들었다가, 다른 스레드가 깨워주면 다시 락을 잡고 재개"하는 대기 큐. Java의 `wait()/notify()`, `Condition.await()/signal()`.
 
 ## 3. 스핀락 vs 뮤텍스 판단 기준
+```mermaid
+flowchart TB
+  Q1{"임계구역 대기 예상 시간이 짧은가?<br/>(락 보유 시간 &lt; 컨텍스트 스위치 비용)"}
+  Q2{"멀티코어에서 대기하는가?"}
+  SPIN["<b>스핀락</b><br/>스위치 없이 즉시 진입 · 커널 진입 회피"]
+  MUTEX["<b>뮤텍스</b> (블로킹)<br/>대기 중 CPU 반납 → 다른 일 수행<br/>스위치 비용은 있지만 CPU 낭비 없음<br/>긴 임계구역 · 단일코어의 정답"]
+  Q1 -- YES --> Q2
+  Q1 -- NO --> MUTEX
+  Q2 -- YES --> SPIN
+  Q2 -- "NO (단일코어)" --> MUTEX
 ```
-        임계구역 대기 예상 시간이 짧다? (락 보유 시간 < 컨텍스트 스위치 비용)
-                    │
-          ┌─────────┴──────────┐
-         YES                    NO
-          │                      │
-   멀티코어에서 대기?         뮤텍스(블로킹)
-          │                  - 대기 중 CPU 반납 → 다른 일 수행
-   스핀락 유리                - 스위치 비용은 있지만 CPU 낭비 없음
-   - 스위치 없이 즉시 진입     - 긴 임계구역/단일코어의 정답
-   - 커널 진입 회피
-   ※ 단일코어에서 스핀락은
-     최악(락 가진 스레드가
-     선점됐는데 CPU를 계속 태움)
-```
+
+> 단일코어에서 스핀락은 **최악**이다 — 락을 가진 스레드가 선점됐는데
+> 기다리는 쪽이 CPU를 계속 태워서, 락을 놓아줄 스레드가 실행될 기회를 빼앗는다.
 
 ## 4. 비교표 — 4가지 동기화 도구 (선택 기준 중심)
 | 도구 | 대기 방식 | 소유 | 언제 쓰나 |
@@ -635,20 +665,21 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 > **워킹셋(Working Set)** = 프로세스가 특정 시점에 활발히 참조하는 페이지 집합. 이 집합이 물리 프레임에 다 못 들어가면 폴트가 폭증(Thrashing).
 
 ## 3. 다이어그램 — 2단계 주소 변환 + TLB
-```
- 가상 주소:  [ P1(상위) | P2(하위) | offset ]
-                 │          │         │
-   ┌─────────────┘          │         └────────────┐
-   ▼                        ▼                       │
- ① TLB 조회 (가상페이지 전체로) ─ 히트! ──▶ 프레임 번호 즉시 획득 ─┐
-   │ 미스                                                        │
-   ▼                                                            │
- ② CR3(페이지 테이블 base)                                       │
-   → P1로 1단계 테이블 인덱싱 → 2단계 테이블 주소                 │
-   → P2로 2단계 테이블 인덱싱 → 프레임 번호  (메모리 접근 2번!)   │
-   │  └─ 유효 비트 0 이면 → Page Fault → 디스크 로드/교체         │
-   │                                                            ▼
-   └─▶ 얻은 변환을 TLB에 저장 ──────────────▶  물리 주소 [ 프레임 | offset ] → RAM
+```mermaid
+flowchart TB
+  VA["가상 주소<br/>P1 상위 + P2 하위 + offset"]
+  TLB{"① TLB 조회<br/>가상 페이지 전체로"}
+  L1["② CR3 = 페이지 테이블 base<br/>P1로 1단계 테이블 인덱싱<br/>→ 2단계 테이블 주소"]
+  L2["P2로 2단계 테이블 인덱싱<br/>→ 프레임 번호<br/><b>메모리 접근 2번</b>"]
+  PF["유효 비트 0<br/>→ Page Fault → 디스크 로드/교체"]
+  FILL["얻은 변환을 TLB에 저장"]
+  PA["물리 주소<br/>프레임 + offset → RAM"]
+  VA --> TLB
+  TLB -- "히트 — 프레임 번호 즉시 획득" --> PA
+  TLB -- 미스 --> L1 --> L2
+  L2 -- "유효" --> FILL --> PA
+  L2 --> PF
+  PF -- "적재 후 재시도" --> L1
 ```
 > 다단계는 메모리를 아끼는 대신 변환마다 메모리를 여러 번 읽는다(4레벨이면 최대 4번). 그래서 **TLB 히트율이 성능의 핵심** — 히트하면 이 다단계 walk를 통째로 건너뛴다.
 
@@ -662,17 +693,14 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 | **워킹셋 관리** | Thrashing 방지 | 워킹셋 추정 오버헤드 |
 
 ## 5. Thrashing (스래싱) — 판단과 해결
-```
- 다중 프로그래밍 정도(동시 프로세스 수) ↑
-   │
-   ▼
- 각 프로세스 몫의 프레임 < 워킹셋
-   │
-   ▼
- 페이지 폴트 폭증 → 디스크 I/O 대기 → CPU는 놀고 스와핑만 반복
-   │
-   ▼
- CPU 이용률 급락 (그래프가 어느 지점에서 급격히 꺾임)
+```mermaid
+flowchart TB
+  A["다중 프로그래밍 정도<br/>(동시 프로세스 수) ↑"]
+  B["각 프로세스 몫의 프레임 &lt; 워킹셋"]
+  C["페이지 폴트 폭증<br/>→ 디스크 I/O 대기"]
+  D["CPU는 놀고 스와핑만 반복"]
+  E["<b>CPU 이용률 급락</b><br/>어느 지점에서 그래프가 급격히 꺾인다"]
+  A --> B --> C --> D --> E
 ```
 - **증상**: CPU 사용률은 낮은데 디스크 I/O(스왑) 사용률이 극도로 높음. `vmstat`의 `si`/`so`(swap-in/out)가 지속적으로 큼.
 - **원인**: 물리 메모리 대비 동시에 돌리는 프로세스/작업의 워킹셋 총합이 초과.
@@ -723,18 +751,26 @@ PostgreSQL: 로그의 "deadlock detected" + pg_locks / pg_stat_activity
 
 > 실제 동작: fork 시 **페이지 테이블만 복사**하고, 부모·자식의 모든 페이지를 **read-only로 표시해 물리 프레임을 공유**한다. 어느 쪽이든 페이지에 **write를 시도하면 protection fault(page fault)** 가 발생 → 커널이 그 페이지 **하나만** 복사해 쓰는 쪽에 read-write로 넘겨준다. 안 건드린 페이지는 계속 공유.
 
+```mermaid
+flowchart TB
+  subgraph BEFORE["fork 직후 — 아무도 안 씀"]
+    direction LR
+    PP1["부모 페이지테이블"] --> F1[("물리 프레임 P<br/><b>read-only 공유</b>")]
+    CP1["자식 페이지테이블"] --> F1
+  end
+  subgraph AFTER["자식이 그 페이지에 write"]
+    direction LR
+    PP2["부모 페이지테이블"] --> F2[("프레임 P<br/>그대로")]
+    CP2["자식 페이지테이블"] --> F3[("새 프레임 P'<br/><b>read-write</b>")]
+  end
+  BEFORE --> AFTER
 ```
-fork 직후 (아무도 안 씀):
-  부모 페이지테이블 ─┐
-                    ├─▶ [물리 프레임 P]  (read-only 공유)
-  자식 페이지테이블 ─┘
 
-자식이 그 페이지에 write:
-  ① write 시도 → CPU가 read-only 위반 감지 → page fault(트랩)
-  ② 커널이 프레임 P를 새 프레임 P'로 복사
-  ③ 자식 페이지테이블만 P'(read-write)로 갱신, 부모는 P 유지
-  부모 ─▶ [P]        자식 ─▶ [P']   ← 이제 갈라짐(그 페이지만!)
-```
+1. write 시도 → CPU가 **read-only 위반** 감지 → page fault(트랩).
+2. 커널이 프레임 `P`를 새 프레임 `P'`로 **복사**.
+3. **자식** 페이지테이블만 `P'`(read-write)로 갱신, 부모는 `P` 유지.
+
+갈라지는 것은 **그 페이지 하나뿐**이다. 나머지는 계속 공유된다.
 
 ### 2-3. 실무 직결 — Redis RDB 스냅샷 (`db-redis`와 크로스링크) ⭐
 Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB 데이터를 디스크에 스냅샷(RDB) 뜨는가? → **fork + CoW**.
@@ -763,23 +799,35 @@ Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB
 ### 3-2. 전통 read()+write() 경로 — 복사 4번, 컨텍스트 스위치 4번 ⭐
 `read(file)` 후 `write(socket)`로 파일을 그대로 전송할 때:
 
+```mermaid
+flowchart LR
+  DISK[("디스크")]
+  PC["커널 page cache"]
+  USER["user 버퍼"]
+  SOCK["커널 socket 버퍼"]
+  NIC[("NIC")]
+  DISK -- "① DMA<br/><i>read syscall: user→kernel</i>" --> PC
+  PC -- "② <b>CPU 복사</b><br/><i>read 리턴: kernel→user</i>" --> USER
+  USER -- "③ <b>CPU 복사</b><br/><i>write syscall: user→kernel</i>" --> SOCK
+  SOCK -- "④ DMA<br/><i>write 리턴: kernel→user</i>" --> NIC
 ```
-① 디스크 ──DMA──▶ 커널 page cache        (read syscall: user→kernel 전환)
-② page cache ──CPU 복사──▶ user 버퍼      (read 리턴: kernel→user 전환)
-③ user 버퍼 ──CPU 복사──▶ 커널 socket 버퍼 (write syscall: user→kernel 전환)
-④ socket 버퍼 ──DMA──▶ NIC(네트워크 카드)  (write 리턴: kernel→user 전환)
 
-→ 데이터 복사 4회 (그중 ②③은 CPU가 직접, 순수 낭비) + 컨텍스트 스위치 4회
-  데이터를 user 공간에서 건드리지도 않는데 ②③을 위해 굳이 올렸다 내림
-```
+데이터 복사 **4회**(그중 ②③은 CPU가 직접 하는 **순수 낭비**) + 컨텍스트 스위치
+**4회**. 데이터를 user 공간에서 건드리지도 않는데 ②③을 위해 굳이 올렸다 내린다.
 
 ### 3-3. sendfile() — user 공간을 건너뛴다
+```mermaid
+flowchart LR
+  DISK[("디스크")]
+  PC["커널 page cache"]
+  SOCK["커널 socket 버퍼"]
+  NIC[("NIC")]
+  DISK -- "① DMA" --> PC
+  PC -- "② 커널 내부 복사<br/><i>user 공간 안 거침</i>" --> SOCK
+  SOCK -- "③ DMA" --> NIC
 ```
-① 디스크 ──DMA──▶ 커널 page cache
-② page cache ──▶ socket 버퍼   (커널 내부에서 처리, user 공간 안 거침)
-③ socket 버퍼 ──DMA──▶ NIC
-→ sendfile 한 번(컨텍스트 스위치 2회). CPU 복사 ②만 남음
-```
+
+`sendfile` **한 번**(컨텍스트 스위치 2회). CPU 복사는 ②만 남는다.
 - 더 나아가 **scatter-gather DMA**(하드웨어 지원) + `sendfile`이면 ② CPU 복사도 사라진다 → page cache에서 NIC로 **DMA가 직접** 긁어감. 이게 진짜 "CPU 복사 0회"의 zero-copy.
 - **mmap + write**: 파일을 user 주소 공간에 매핑하면 page cache를 user가 직접 가리켜 ② 복사가 사라진다(대신 write 시 socket 버퍼로의 복사는 남음). 데이터를 조금 손봐야 할 때 쓰는 절충안.
 
@@ -853,17 +901,21 @@ Redis는 단일 스레드인데 어떻게 "요청을 계속 받으면서" 수 GB
 ## 3. Dirty Page가 디스크로 내려가는 시점 — Write-back
 dirty page는 다음 계기에 커널의 flusher 스레드가 디스크로 내린다(write-back):
 
-```
-write() ──▶ [page cache] dirty page  (메모리에만 최신, 리턴됨)
-                  │
-      다음 중 하나로 flush(write-back):
-      ① 주기적: dirty가 된 지 일정 시간 경과(dirty_expire)
-      ② 압박: dirty 페이지 비율이 임계치 초과(dirty_ratio)
-      ③ 명시적: fsync/fdatasync/sync 호출
-      ④ 메모리 회수 필요 시
-                  │
-                  ▼
-             [디스크]  ← 이제서야 실제 반영
+```mermaid
+flowchart TB
+  W["write()"]
+  DP["page cache의 <b>dirty page</b><br/>메모리에만 최신 · 호출은 이미 리턴됨"]
+  T{"flush(write-back) 트리거"}
+  T1["① 주기적<br/>dirty가 된 지 일정 시간 경과 (dirty_expire)"]
+  T2["② 압박<br/>dirty 페이지 비율이 임계치 초과 (dirty_ratio)"]
+  T3["③ 명시적<br/>fsync / fdatasync / sync 호출"]
+  T4["④ 메모리 회수가 필요할 때"]
+  DISK[("디스크<br/><b>이제서야 실제 반영</b>")]
+  W --> DP --> T
+  T --> T1 --> DISK
+  T --> T2 --> DISK
+  T --> T3 --> DISK
+  T --> T4 --> DISK
 ```
 
 - **Write-back vs Write-through**: write-back = 일단 캐시만 갱신 후 나중에 디스크(기본값, 빠름·위험). write-through = write마다 디스크까지 즉시 반영(느림·안전). 범용 파일 시스템은 write-back.
