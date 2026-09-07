@@ -5,3 +5,4 @@ dist/
 .superpowers/
 .idea/
 supabase/.temp/
+out/
